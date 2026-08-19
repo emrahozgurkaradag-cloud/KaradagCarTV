@@ -1,0 +1,2614 @@
+﻿===== MAINACTIVITY =====
+package com.karadaglabs.cartv
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.karadaglabs.cartv.ui.theme.KaradagCarTVTheme
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+
+data class CarContent(
+    val id: Int,
+    val title: String,
+    val type: String,
+    val streamUrl: String,
+    val imageUrl: String?,
+    val description: String?
+)
+
+data class LicenseFeatures(
+    val liveTv: Boolean = false,
+    val radio: Boolean = false,
+    val video: Boolean = false,
+    val iptv: Boolean = false,
+    val youtube: Boolean = false,
+    val youtubeKids: Boolean = false,
+    val googleSearch: Boolean = false
+)
+
+data class MenuItem(
+    val title: String,
+    val subtitle: String,
+    val type: String
+)
+
+class MainActivity : ComponentActivity() {
+
+    private val apiBaseUrl = "https://api.karadaglabs.com"
+
+    private val deviceUuid = "CAR-TEST-001"
+    private val licenseKey = "KDG-TEST-2026-001"
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setContent {
+            KaradagCarTVTheme {
+                CarTvApp()
+            }
+        }
+    }
+
+    @Composable
+    private fun CarTvApp() {
+
+        var loading by remember {
+            mutableStateOf(true)
+        }
+
+        var licensed by remember {
+            mutableStateOf(false)
+        }
+
+        var errorMessage by remember {
+            mutableStateOf("")
+        }
+
+        var customerName by remember {
+            mutableStateOf("")
+        }
+
+        var deviceName by remember {
+            mutableStateOf("")
+        }
+
+        var contents by remember {
+            mutableStateOf(emptyList<CarContent>())
+        }
+
+        var features by remember {
+            mutableStateOf(LicenseFeatures())
+        }
+
+        var selectedType by remember {
+            mutableStateOf<String?>(null)
+        }
+
+        LaunchedEffect(Unit) {
+            loadData(
+                onLoading = {
+                    loading = it
+                },
+
+                onLicenseSuccess = {
+                        customer,
+                        device,
+                        licenseFeatures ->
+
+                    licensed = true
+                    customerName = customer
+                    deviceName = device
+                    features = licenseFeatures
+                },
+
+                onContentsLoaded = {
+                    contents = it
+                },
+
+                onError = {
+                    errorMessage = it
+                    licensed = false
+                }
+            )
+        }
+
+        when {
+
+            loading -> {
+                LoadingScreen()
+            }
+
+            !licensed -> {
+                LicenseErrorScreen(
+                    message = errorMessage.ifBlank {
+                        "Lisans doÄŸrulanamadÄ±."
+                    },
+
+                    onRetry = {
+                        loading = true
+                        errorMessage = ""
+
+                        loadData(
+                            onLoading = {
+                                loading = it
+                            },
+
+                            onLicenseSuccess = {
+                                    customer,
+                                    device,
+                                    licenseFeatures ->
+
+                                licensed = true
+                                customerName = customer
+                                deviceName = device
+                                features = licenseFeatures
+                            },
+
+                            onContentsLoaded = {
+                                contents = it
+                            },
+
+                            onError = {
+                                errorMessage = it
+                            }
+                        )
+                    }
+                )
+            }
+
+            selectedType != null -> {
+
+                ContentListScreen(
+                    title = when (selectedType) {
+
+                        "tv" -> "CanlÄ± TV"
+
+                        "radio" -> "CanlÄ± Radyo"
+
+                        "video" -> "Videolar"
+
+                        else -> "Ä°Ã§erikler"
+                    },
+
+                    contents = contents.filter {
+                        it.type == selectedType
+                    },
+
+                    onBack = {
+                        selectedType = null
+                    }
+                )
+            }
+
+            else -> {
+
+                HomeScreen(
+                    customerName = customerName,
+                    deviceName = deviceName,
+                    contents = contents,
+                    features = features,
+
+                    onCategoryClick = {
+                        selectedType = it
+                    }
+                )
+            }
+        }
+    }
+
+    private fun loadData(
+        onLoading: (Boolean) -> Unit,
+        onLicenseSuccess: (
+            String,
+            String,
+            LicenseFeatures
+        ) -> Unit,
+        onContentsLoaded: (
+            List<CarContent>
+        ) -> Unit,
+        onError: (
+            String
+        ) -> Unit
+    ) {
+
+        Thread {
+
+            try {
+
+                onLoading(true)
+
+                val licenseResponse = postJson(
+                    url = "$apiBaseUrl/api/license/validate",
+
+                    body = JSONObject().apply {
+
+                        put(
+                            "device_uuid",
+                            deviceUuid
+                        )
+
+                        put(
+                            "license_key",
+                            licenseKey
+                        )
+                    }
+                )
+
+                if (
+                    !licenseResponse.optBoolean(
+                        "licensed",
+                        false
+                    )
+                ) {
+
+                    throw IllegalStateException(
+                        licenseResponse.optString(
+                            "message",
+                            "Lisans geÃ§ersiz."
+                        )
+                    )
+                }
+
+                val customerName =
+                    licenseResponse
+                        .optJSONObject("customer")
+                        ?.optString("name")
+                        .orEmpty()
+
+                val deviceName =
+                    licenseResponse
+                        .optJSONObject("device")
+                        ?.optString("name")
+                        .orEmpty()
+
+                val featuresObject =
+                    licenseResponse
+                        .optJSONObject("license")
+                        ?.optJSONObject("features")
+
+                val licenseFeatures =
+                    LicenseFeatures(
+
+                        liveTv =
+                            featuresObject?.optBoolean(
+                                "live_tv",
+                                false
+                            ) ?: false,
+
+                        radio =
+                            featuresObject?.optBoolean(
+                                "radio",
+                                false
+                            ) ?: false,
+
+                        video =
+                            featuresObject?.optBoolean(
+                                "video",
+                                false
+                            ) ?: false,
+
+                        iptv =
+                            featuresObject?.optBoolean(
+                                "iptv",
+                                false
+                            ) ?: false,
+
+                        youtube =
+                            featuresObject?.optBoolean(
+                                "youtube",
+                                false
+                            ) ?: false,
+
+                        youtubeKids =
+                            featuresObject?.optBoolean(
+                                "youtube_kids",
+                                false
+                            ) ?: false,
+
+                        googleSearch =
+                            featuresObject?.optBoolean(
+                                "google_search",
+                                false
+                            ) ?: false
+                    )
+
+                onLicenseSuccess(
+                    customerName,
+                    deviceName,
+                    licenseFeatures
+                )
+
+                val contentResponse = postJson(
+                    url = "$apiBaseUrl/api/content",
+
+                    body = JSONObject().apply {
+
+                        put(
+                            "device_uuid",
+                            deviceUuid
+                        )
+
+                        put(
+                            "license_key",
+                            licenseKey
+                        )
+                    }
+                )
+
+                val contentArray =
+                    contentResponse
+                        .optJSONArray("contents")
+
+                val contentList =
+                    mutableListOf<CarContent>()
+
+                if (contentArray != null) {
+
+                    for (
+                    index in
+                    0 until contentArray.length()
+                    ) {
+
+                        val item =
+                            contentArray
+                                .getJSONObject(index)
+
+                        contentList.add(
+                            CarContent(
+
+                                id =
+                                    item.optInt("id"),
+
+                                title =
+                                    item.optString(
+                                        "title"
+                                    ),
+
+                                type =
+                                    item.optString(
+                                        "type"
+                                    ),
+
+                                streamUrl =
+                                    item.optString(
+                                        "stream_url"
+                                    ),
+
+                                imageUrl =
+                                    item.optString(
+                                        "image_url"
+                                    ).ifBlank {
+                                        null
+                                    },
+
+                                description =
+                                    item.optString(
+                                        "description"
+                                    ).ifBlank {
+                                        null
+                                    }
+                            )
+                        )
+                    }
+                }
+
+                runOnUiThread {
+
+                    onContentsLoaded(
+                        contentList
+                    )
+
+                    onLoading(false)
+                }
+
+            } catch (
+                exception: Exception
+            ) {
+
+                runOnUiThread {
+
+                    onError(
+                        exception.message
+                            ?: "Sunucuya baÄŸlanÄ±rken hata oluÅŸtu."
+                    )
+
+                    onLoading(false)
+                }
+            }
+
+        }.start()
+    }
+
+    private fun postJson(
+        url: String,
+        body: JSONObject
+    ): JSONObject {
+
+        val connection =
+            URL(url)
+                .openConnection() as HttpURLConnection
+
+        try {
+
+            connection.requestMethod =
+                "POST"
+
+            connection.connectTimeout =
+                10_000
+
+            connection.readTimeout =
+                10_000
+
+            connection.doOutput =
+                true
+
+            connection.setRequestProperty(
+                "Content-Type",
+                "application/json"
+            )
+
+            connection.setRequestProperty(
+                "Accept",
+                "application/json"
+            )
+
+            connection.outputStream.use { output ->
+
+                output.write(
+                    body.toString()
+                        .toByteArray(
+                            Charsets.UTF_8
+                        )
+                )
+            }
+
+            val responseCode =
+                connection.responseCode
+
+            val responseText =
+                if (
+                    responseCode in 200..299
+                ) {
+
+                    connection.inputStream
+                        .bufferedReader()
+                        .use {
+                            it.readText()
+                        }
+
+                } else {
+
+                    connection.errorStream
+                        ?.bufferedReader()
+                        ?.use {
+                            it.readText()
+                        }
+                        ?: ""
+                }
+
+            if (
+                responseCode !in 200..299
+            ) {
+
+                throw IllegalStateException(
+
+                    try {
+
+                        JSONObject(
+                            responseText
+                        ).optString(
+                            "message",
+                            "API hatasÄ±: $responseCode"
+                        )
+
+                    } catch (
+                        _: Exception
+                    ) {
+
+                        "API hatasÄ±: $responseCode"
+                    }
+                )
+            }
+
+            return JSONObject(
+                responseText
+            )
+
+        } finally {
+
+            connection.disconnect()
+        }
+    }
+
+    @Composable
+    private fun LoadingScreen() {
+
+        Column(
+            modifier =
+                Modifier.fillMaxSize(),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+
+            verticalArrangement =
+                Arrangement.Center
+        ) {
+
+            Text(
+                text =
+                    "KARADAG CAR TV",
+
+                style =
+                    MaterialTheme
+                        .typography
+                        .headlineLarge
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(24.dp)
+            )
+
+            CircularProgressIndicator()
+
+            Spacer(
+                modifier =
+                    Modifier.height(16.dp)
+            )
+
+            Text(
+                text =
+                    "Lisans ve iÃ§erikler kontrol ediliyor..."
+            )
+        }
+    }
+
+    @Composable
+    private fun LicenseErrorScreen(
+        message: String,
+        onRetry: () -> Unit
+    ) {
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+
+            verticalArrangement =
+                Arrangement.Center
+        ) {
+
+            Text(
+                text =
+                    "KARADAG CAR TV",
+
+                style =
+                    MaterialTheme
+                        .typography
+                        .headlineLarge
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(20.dp)
+            )
+
+            Text(
+                text =
+                    "Lisans doÄŸrulanamadÄ±.",
+
+                style =
+                    MaterialTheme
+                        .typography
+                        .headlineMedium
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(12.dp)
+            )
+
+            Text(
+                text =
+                    message
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(24.dp)
+            )
+
+            Button(
+                onClick = onRetry
+            ) {
+
+                Text(
+                    text =
+                        "Tekrar Dene"
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun HomeScreen(
+        customerName: String,
+        deviceName: String,
+        contents: List<CarContent>,
+        features: LicenseFeatures,
+        onCategoryClick: (String) -> Unit
+    ) {
+
+        val context =
+            LocalContext.current
+
+        val menuItems =
+            buildList {
+
+                if (features.liveTv) {
+
+                    add(
+                        MenuItem(
+                            title =
+                                "ğŸ“º CanlÄ± TV",
+
+                            subtitle =
+                                "${contents.count {
+                                    it.type == "tv"
+                                }} iÃ§erik",
+
+                            type =
+                                "tv"
+                        )
+                    )
+                }
+
+                if (features.radio) {
+
+                    add(
+                        MenuItem(
+                            title =
+                                "ğŸ“» CanlÄ± Radyo",
+
+                            subtitle =
+                                "${contents.count {
+                                    it.type == "radio"
+                                }} iÃ§erik",
+
+                            type =
+                                "radio"
+                        )
+                    )
+                }
+
+                if (features.iptv) {
+
+                    add(
+                        MenuItem(
+                            title =
+                                "ğŸ“¡ IPTV",
+
+                            subtitle =
+                                "IPTV KanallarÄ±",
+
+                            type =
+                                "iptv"
+                        )
+                    )
+                }
+
+                if (features.video) {
+
+                    add(
+                        MenuItem(
+                            title =
+                                "ğŸ¬ Videolar",
+
+                            subtitle =
+                                "${contents.count {
+                                    it.type == "video"
+                                }} iÃ§erik",
+
+                            type =
+                                "video"
+                        )
+                    )
+                }
+
+                if (features.youtube) {
+
+                    add(
+                        MenuItem(
+                            title =
+                                "â–¶ YouTube",
+
+                            subtitle =
+                                "YouTube",
+
+                            type =
+                                "youtube"
+                        )
+                    )
+                }
+
+                if (features.youtubeKids) {
+
+                    add(
+                        MenuItem(
+                            title =
+                                "ğŸ§’ YouTube Kids",
+
+                            subtitle =
+                                "Ã‡ocuk",
+
+                            type =
+                                "youtube_kids"
+                        )
+                    )
+                }
+
+                if (features.googleSearch) {
+
+                    add(
+                        MenuItem(
+                            title =
+                                "ğŸ” Google Arama",
+
+                            subtitle =
+                                "Web",
+
+                            type =
+                                "google"
+                        )
+                    )
+                }
+            }
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+        ) {
+
+            Text(
+                text =
+                    "KARADAG CAR TV",
+
+                style =
+                    MaterialTheme
+                        .typography
+                        .headlineLarge
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.height(4.dp)
+            )
+
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth(),
+
+                horizontalArrangement =
+                    Arrangement.SpaceBetween
+            ) {
+
+                Text(
+                    text =
+                        customerName
+                )
+
+                Text(
+                    text =
+                        deviceName
+                )
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.height(20.dp)
+            )
+
+            LazyVerticalGrid(
+
+                columns =
+                    GridCells.Adaptive(
+                        minSize = 230.dp
+                    ),
+
+                modifier =
+                    Modifier.fillMaxSize(),
+
+                contentPadding =
+                    PaddingValues(
+                        bottom = 20.dp
+                    ),
+
+                horizontalArrangement =
+                    Arrangement.spacedBy(14.dp),
+
+                verticalArrangement =
+                    Arrangement.spacedBy(14.dp)
+            ) {
+
+                gridItems(
+                    items =
+                        menuItems
+                ) { item ->
+
+                    MenuCard(
+                        item =
+                            item,
+
+                        onClick = {
+
+                            when (item.type) {
+
+                                "tv",
+                                "radio",
+                                "video" -> {
+
+                                    onCategoryClick(
+                                        item.type
+                                    )
+                                }
+
+                                "iptv" -> {
+
+                                    context.startActivity(
+                                        Intent(
+                                            context,
+                                            IptvActivity::class.java
+                                        )
+                                    )
+                                }
+
+                                "youtube" -> {
+
+                                    context.startActivity(
+                                        Intent(
+                                            context,
+                                            YouTubeActivity::class.java
+                                        )
+                                    )
+                                }
+
+                                "youtube_kids" -> {
+
+                                    context.startActivity(
+                                        Intent(
+                                            context,
+                                            YouTubeActivity::class.java
+                                        ).apply {
+
+                                            putExtra(
+                                                "youtube_mode",
+                                                "kids"
+                                            )
+                                        }
+                                    )
+                                }
+
+                                "google" -> {
+
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(
+                                                "https://www.google.com/"
+                                            )
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun MenuCard(
+        item: MenuItem,
+        onClick: () -> Unit
+    ) {
+
+        Card(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        onClick()
+                    }
+        ) {
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp)
+            ) {
+
+                Text(
+                    text =
+                        item.title,
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .titleLarge
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(6.dp)
+                )
+
+                Text(
+                    text =
+                        item.subtitle,
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .bodyMedium
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun ContentListScreen(
+        title: String,
+        contents: List<CarContent>,
+        onBack: () -> Unit
+    ) {
+
+        val context =
+            LocalContext.current
+
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+        ) {
+
+            Row(
+                modifier =
+                    Modifier.fillMaxWidth(),
+
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Button(
+                    onClick =
+                        onBack
+                ) {
+
+                    Text(
+                        text =
+                            "â† Geri"
+                    )
+                }
+
+                Spacer(
+                    modifier =
+                        Modifier.weight(1f)
+                )
+
+                Text(
+                    text =
+                        title,
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .headlineMedium
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.weight(1f)
+                )
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.height(16.dp)
+            )
+
+            if (contents.isEmpty()) {
+
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize(),
+
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Text(
+                        text =
+                            "Bu kategoride iÃ§erik bulunamadÄ±."
+                    )
+                }
+
+            } else {
+
+                LazyColumn(
+                    modifier =
+                        Modifier.fillMaxSize(),
+
+                    verticalArrangement =
+                        Arrangement.spacedBy(
+                            12.dp
+                        )
+                ) {
+
+                    lazyItems(
+                        items =
+                            contents
+                    ) { content ->
+
+                        Card(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+
+                                        context.startActivity(
+                                            Intent(
+                                                context,
+                                                PlayerActivity::class.java
+                                            ).apply {
+
+                                                putExtra(
+                                                    PlayerActivity.EXTRA_STREAM_URL,
+                                                    content.streamUrl
+                                                )
+
+                                                putExtra(
+                                                    PlayerActivity.EXTRA_TITLE,
+                                                    content.title
+                                                )
+
+                                                putExtra(
+                                                    PlayerActivity.EXTRA_MEDIA_TYPE,
+                                                    content.type
+                                                )
+                                            }
+                                        )
+                                    }
+                        ) {
+
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp)
+                            ) {
+
+                                Text(
+                                    text =
+                                        content.title,
+
+                                    style =
+                                        MaterialTheme
+                                            .typography
+                                            .titleLarge
+                                )
+
+                                Spacer(
+                                    modifier =
+                                        Modifier.height(6.dp)
+                                )
+
+                                content.description
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                    ?.let {
+
+                                        Text(
+                                            text =
+                                                it
+                                        )
+                                    }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+===== IPTVACTIVITY =====
+package com.karadaglabs.cartv
+
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Bundle
+import android.util.LruCache
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import com.karadaglabs.cartv.ui.theme.KaradagCarTVTheme
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
+
+data class IptvChannel(
+    val id: Int,
+    val name: String,
+    val streamUrl: String,
+    val logoUrl: String?,
+    val category: String?
+)
+
+class IptvActivity : ComponentActivity() {
+
+    private val apiBaseUrl = "https://api.karadaglabs.com"
+
+    private val deviceUuid = "CAR-TEST-001"
+    private val licenseKey = "KDG-TEST-2026-001"
+
+    private val logoCache =
+        object : LruCache<String, Bitmap>(30) {}
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    finish()
+                }
+            }
+        )
+
+        setContent {
+            KaradagCarTVTheme {
+                IptvScreen()
+            }
+        }
+    }
+
+    @Composable
+    private fun IptvScreen() {
+
+        var loading by remember {
+            mutableStateOf(true)
+        }
+
+        var errorMessage by remember {
+            mutableStateOf("")
+        }
+
+        var channels by remember {
+            mutableStateOf(
+                emptyList<IptvChannel>()
+            )
+        }
+
+        var selectedCategory by remember {
+            mutableStateOf<String?>(null)
+        }
+
+        var searchText by remember {
+            mutableStateOf("")
+        }
+
+        LaunchedEffect(Unit) {
+
+            loadIptv(
+                onSuccess = { loadedChannels ->
+                    channels = loadedChannels
+                    loading = false
+                },
+                onError = { message ->
+                    errorMessage = message
+                    loading = false
+                }
+            )
+        }
+
+        when {
+
+            loading -> {
+                LoadingScreen()
+            }
+
+            errorMessage.isNotBlank() -> {
+                ErrorScreen(
+                    message = errorMessage
+                )
+            }
+
+            else -> {
+
+                val categories =
+                    buildCategoryList(channels)
+
+                val normalizedSearch =
+                    searchText.trim()
+
+                val filteredChannels =
+                    channels.filter { channel ->
+
+                        val matchesCategory =
+                            selectedCategory == null ||
+                                    channelBelongsToCategory(
+                                        channel.category,
+                                        selectedCategory
+                                    )
+
+                        val matchesSearch =
+                            normalizedSearch.isBlank() ||
+                                    channel.name.contains(
+                                        normalizedSearch,
+                                        ignoreCase = true
+                                    )
+
+                        matchesCategory && matchesSearch
+                    }
+
+                IptvLandscapeLayout(
+                    channels = filteredChannels,
+                    totalChannelCount = channels.size,
+                    categories = categories,
+                    selectedCategory = selectedCategory,
+                    searchText = searchText,
+                    onSearchChanged = {
+                        searchText = it
+                    },
+                    onCategoryChanged = {
+                        selectedCategory = it
+                    },
+                    onBack = {
+                        finish()
+                    },
+                    onChannelClick = {
+                        openPlayer(it)
+                    }
+                )
+            }
+        }
+    }
+
+    private fun loadIptv(
+        onSuccess: (List<IptvChannel>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        Thread {
+            try {
+
+                val response = postJson(
+                    url = "$apiBaseUrl/api/iptv",
+                    body = JSONObject().apply {
+                        put("device_uuid", deviceUuid)
+                        put("license_key", licenseKey)
+                    }
+                )
+
+                if (!response.optBoolean("licensed", false)) {
+                    throw IllegalStateException(
+                        response.optString(
+                            "message",
+                            "IPTV eriÅŸimi yok."
+                        )
+                    )
+                }
+
+                val channelArray =
+                    response.optJSONArray("channels")
+
+                val loadedChannels =
+                    mutableListOf<IptvChannel>()
+
+                if (channelArray != null) {
+
+                    for (index in 0 until channelArray.length()) {
+
+                        val item =
+                            channelArray.getJSONObject(index)
+
+                        loadedChannels.add(
+                            IptvChannel(
+                                id = item.optInt("id"),
+
+                                name = item.optString("name"),
+
+                                streamUrl = item.optString(
+                                    "stream_url"
+                                ),
+
+                                logoUrl = item
+                                    .optString("logo_url")
+                                    .ifBlank {
+                                        null
+                                    },
+
+                                category = item
+                                    .optString("category")
+                                    .ifBlank {
+                                        null
+                                    }
+                            )
+                        )
+                    }
+                }
+
+                runOnUiThread {
+                    onSuccess(loadedChannels)
+                }
+
+            } catch (exception: Exception) {
+
+                runOnUiThread {
+                    onError(
+                        exception.message
+                            ?: "IPTV verileri alÄ±namadÄ±."
+                    )
+                }
+            }
+        }.start()
+    }
+
+    private fun postJson(
+        url: String,
+        body: JSONObject
+    ): JSONObject {
+
+        val connection =
+            URL(url).openConnection() as HttpURLConnection
+
+        try {
+
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 10_000
+            connection.readTimeout = 15_000
+            connection.doOutput = true
+
+            connection.setRequestProperty(
+                "Content-Type",
+                "application/json"
+            )
+
+            connection.setRequestProperty(
+                "Accept",
+                "application/json"
+            )
+
+            connection.outputStream.use { output ->
+                output.write(
+                    body.toString()
+                        .toByteArray(
+                            Charsets.UTF_8
+                        )
+                )
+            }
+
+            val responseCode =
+                connection.responseCode
+
+            val responseText =
+                if (responseCode in 200..299) {
+                    connection.inputStream
+                        .bufferedReader()
+                        .use {
+                            it.readText()
+                        }
+                } else {
+                    connection.errorStream
+                        ?.bufferedReader()
+                        ?.use {
+                            it.readText()
+                        }
+                        ?: ""
+                }
+
+            if (responseCode !in 200..299) {
+
+                throw IllegalStateException(
+                    try {
+                        JSONObject(responseText)
+                            .optString(
+                                "message",
+                                "IPTV API hatasÄ±: $responseCode"
+                            )
+                    } catch (_: Exception) {
+                        "IPTV API hatasÄ±: $responseCode"
+                    }
+                )
+            }
+
+            return JSONObject(responseText)
+
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    @Composable
+    private fun LoadingScreen() {
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        MaterialTheme
+                            .colorScheme
+                            .background
+                    ),
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Column(
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+
+                CircularProgressIndicator()
+
+                Spacer(
+                    modifier = Modifier.height(14.dp)
+                )
+
+                Text(
+                    text =
+                        "IPTV kanallarÄ± yÃ¼kleniyor..."
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun ErrorScreen(
+        message: String
+    ) {
+
+        Box(
+            modifier =
+                Modifier.fillMaxSize(),
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            Column(
+                horizontalAlignment =
+                    Alignment.CenterHorizontally
+            ) {
+
+                Text(
+                    text =
+                        "IPTV yÃ¼klenemedi.",
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .headlineMedium,
+
+                    fontWeight =
+                        FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(10.dp)
+                )
+
+                Text(
+                    text = message
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun IptvLandscapeLayout(
+        channels: List<IptvChannel>,
+        totalChannelCount: Int,
+        categories: List<String>,
+        selectedCategory: String?,
+        searchText: String,
+        onSearchChanged: (String) -> Unit,
+        onCategoryChanged: (String?) -> Unit,
+        onBack: () -> Unit,
+        onChannelClick: (IptvChannel) -> Unit
+    ) {
+
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+        ) {
+
+            CategoryPanel(
+                categories = categories,
+                selectedCategory = selectedCategory,
+                onCategoryChanged = onCategoryChanged,
+                onBack = onBack
+            )
+
+            Spacer(
+                modifier =
+                    Modifier.width(12.dp)
+            )
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .weight(1f)
+            ) {
+
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth(),
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Column(
+                        modifier =
+                            Modifier.weight(1f)
+                    ) {
+
+                        Text(
+                            text = "IPTV",
+
+                            style =
+                                MaterialTheme
+                                    .typography
+                                    .headlineLarge,
+
+                            fontWeight =
+                                FontWeight.Bold
+                        )
+
+                        Text(
+                            text =
+                                if (selectedCategory == null) {
+                                    "$totalChannelCount kanal"
+                                } else {
+                                    "${channels.size} kanal"
+                                }
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = searchText,
+                        onValueChange = onSearchChanged,
+                        modifier =
+                            Modifier.width(360.dp),
+                        singleLine = true,
+                        label = {
+                            Text("Kanal ara")
+                        },
+                        placeholder = {
+                            Text("TRT, ATV, NTV...")
+                        }
+                    )
+                }
+
+                Spacer(
+                    modifier =
+                        Modifier.height(12.dp)
+                )
+
+                if (channels.isEmpty()) {
+
+                    Box(
+                        modifier =
+                            Modifier.fillMaxSize(),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+
+                        Text(
+                            text =
+                                if (searchText.isNotBlank()) {
+                                    "AramanÄ±zla eÅŸleÅŸen kanal bulunamadÄ±."
+                                } else {
+                                    "Bu kategoride kanal bulunamadÄ±."
+                                }
+                        )
+                    }
+
+                } else {
+
+                    LazyVerticalGrid(
+
+                        columns =
+                            GridCells.Adaptive(
+                                minSize = 250.dp
+                            ),
+
+                        modifier =
+                            Modifier.fillMaxSize(),
+
+                        horizontalArrangement =
+                            Arrangement.spacedBy(10.dp),
+
+                        verticalArrangement =
+                            Arrangement.spacedBy(10.dp)
+                    ) {
+
+                        gridItems(
+                            items = channels
+                        ) { channel ->
+
+                            ChannelCard(
+                                channel = channel,
+                                onClick = {
+                                    onChannelClick(channel)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun CategoryPanel(
+        categories: List<String>,
+        selectedCategory: String?,
+        onCategoryChanged: (String?) -> Unit,
+        onBack: () -> Unit
+    ) {
+
+        Surface(
+            modifier =
+                Modifier
+                    .width(190.dp)
+                    .fillMaxHeight(),
+
+            shape =
+                RoundedCornerShape(16.dp),
+
+            tonalElevation = 3.dp
+        ) {
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(12.dp)
+            ) {
+
+                Text(
+                    text = "Kategoriler",
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .titleMedium,
+
+                    fontWeight =
+                        FontWeight.Bold
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(10.dp)
+                )
+
+                SmallMenuButton(
+                    text = "â† Geri",
+                    selected = false,
+                    onClick = onBack
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(6.dp)
+                )
+
+                SmallMenuButton(
+                    text = "TÃ¼mÃ¼",
+                    selected = selectedCategory == null,
+                    onClick = {
+                        onCategoryChanged(null)
+                    }
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.height(6.dp)
+                )
+
+                LazyColumn(
+                    modifier =
+                        Modifier.fillMaxSize(),
+
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp)
+                ) {
+
+                    lazyItems(
+                        items = categories
+                    ) { category ->
+
+                        SmallMenuButton(
+                            text =
+                                categoryDisplayName(
+                                    category
+                                ),
+
+                            selected =
+                                selectedCategory
+                                    ?.equals(
+                                        category,
+                                        ignoreCase = true
+                                    ) == true,
+
+                            onClick = {
+                                onCategoryChanged(category)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun SmallMenuButton(
+        text: String,
+        selected: Boolean,
+        onClick: () -> Unit
+    ) {
+
+        Surface(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        onClick()
+                    },
+
+            shape =
+                RoundedCornerShape(10.dp),
+
+            color =
+                if (selected) {
+                    MaterialTheme
+                        .colorScheme
+                        .primaryContainer
+                } else {
+                    MaterialTheme
+                        .colorScheme
+                        .surface
+                }
+        ) {
+
+            Text(
+                text = text,
+
+                modifier =
+                    Modifier.padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
+
+                style =
+                    MaterialTheme
+                        .typography
+                        .bodyMedium,
+
+                fontWeight =
+                    if (selected) {
+                        FontWeight.Bold
+                    } else {
+                        FontWeight.Normal
+                    }
+            )
+        }
+    }
+
+    @Composable
+    private fun ChannelCard(
+        channel: IptvChannel,
+        onClick: () -> Unit
+    ) {
+
+        Card(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        onClick()
+                    }
+        ) {
+
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                ChannelLogo(
+                    logoUrl =
+                        channel.logoUrl,
+
+                    modifier =
+                        Modifier.size(64.dp)
+                )
+
+                Spacer(
+                    modifier =
+                        Modifier.width(12.dp)
+                )
+
+                Column(
+                    modifier =
+                        Modifier.weight(1f)
+                ) {
+
+                    Text(
+                        text = channel.name,
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .titleMedium,
+
+                        fontWeight =
+                            FontWeight.SemiBold,
+
+                        maxLines = 2
+                    )
+
+                    Spacer(
+                        modifier =
+                            Modifier.height(4.dp)
+                    )
+
+                    Text(
+                        text =
+                            categoryDisplayName(
+                                channel.category
+                                    ?: "General"
+                            ),
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .bodySmall
+                    )
+                }
+
+                Text(
+                    text = "â–¶",
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .headlineSmall,
+
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .primary
+                )
+            }
+        }
+    }
+
+    @Composable
+    private fun ChannelLogo(
+        logoUrl: String?,
+        modifier: Modifier
+    ) {
+
+        var bitmap by remember(logoUrl) {
+            mutableStateOf<Bitmap?>(null)
+        }
+
+        LaunchedEffect(logoUrl) {
+
+            if (logoUrl.isNullOrBlank()) {
+                bitmap = null
+                return@LaunchedEffect
+            }
+
+            val cached =
+                logoCache.get(logoUrl)
+
+            if (cached != null) {
+                bitmap = cached
+                return@LaunchedEffect
+            }
+
+            bitmap = loadLogo(logoUrl)
+        }
+
+        Box(
+            modifier =
+                modifier
+                    .clip(
+                        RoundedCornerShape(10.dp)
+                    )
+                    .background(
+                        MaterialTheme
+                            .colorScheme
+                            .surfaceVariant
+                    ),
+
+            contentAlignment =
+                Alignment.Center
+        ) {
+
+            val image = bitmap
+
+            if (image != null) {
+
+                Image(
+                    bitmap =
+                        image.asImageBitmap(),
+
+                    contentDescription = null,
+
+                    modifier =
+                        Modifier.fillMaxSize(),
+
+                    contentScale =
+                        ContentScale.Fit
+                )
+
+            } else {
+
+                Text(
+                    text = "TV",
+
+                    style =
+                        MaterialTheme
+                            .typography
+                            .labelLarge
+                )
+            }
+        }
+    }
+
+    private fun loadLogo(
+        urlString: String
+    ): Bitmap? {
+
+        return try {
+
+            val connection =
+                URL(urlString)
+                    .openConnection() as HttpURLConnection
+
+            connection.connectTimeout = 5000
+            connection.readTimeout = 5000
+
+            connection.setRequestProperty(
+                "User-Agent",
+                "KaradagCarTV/1.0"
+            )
+
+            connection.doInput = true
+            connection.connect()
+
+            val bitmap =
+                connection.inputStream.use {
+                    BitmapFactory.decodeStream(it)
+                }
+
+            connection.disconnect()
+
+            if (bitmap != null) {
+                logoCache.put(
+                    urlString,
+                    bitmap
+                )
+            }
+
+            bitmap
+
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun buildCategoryList(
+        channels: List<IptvChannel>
+    ): List<String> {
+
+        val parts =
+            channels
+                .flatMap { channel ->
+
+                    channel.category
+                        ?.split(";")
+                        ?: emptyList()
+                }
+                .map {
+                    it.trim()
+                }
+                .filter {
+                    it.isNotBlank()
+                }
+                .distinct()
+
+        val preferredOrder =
+            listOf(
+                "News",
+                "Sports",
+                "Kids",
+                "Music",
+                "Movies",
+                "Entertainment",
+                "General",
+                "Business",
+                "Documentary",
+                "Education",
+                "Culture",
+                "Travel",
+                "Lifestyle",
+                "Religious",
+                "Animation",
+                "Series",
+                "Undefined"
+            )
+
+        return parts.sortedWith(
+            compareBy(
+                { value ->
+
+                    val index =
+                        preferredOrder.indexOfFirst {
+                            it.equals(
+                                value,
+                                ignoreCase = true
+                            )
+                        }
+
+                    if (index == -1) {
+                        999
+                    } else {
+                        index
+                    }
+                },
+
+                {
+                    it.lowercase(
+                        Locale.getDefault()
+                    )
+                }
+            )
+        )
+    }
+
+    private fun channelBelongsToCategory(
+        rawCategory: String?,
+        selectedCategory: String?
+    ): Boolean {
+
+        if (selectedCategory.isNullOrBlank()) {
+            return true
+        }
+
+        return rawCategory
+            ?.split(";")
+            ?.any {
+                it.trim().equals(
+                    selectedCategory,
+                    ignoreCase = true
+                )
+            } == true
+    }
+
+    private fun categoryDisplayName(
+        category: String
+    ): String {
+
+        return when (
+            category.trim()
+                .lowercase(
+                    Locale.getDefault()
+                )
+        ) {
+
+            "news" ->
+                "Haber"
+
+            "sports" ->
+                "Spor"
+
+            "kids" ->
+                "Ã‡ocuk"
+
+            "music" ->
+                "MÃ¼zik"
+
+            "movies" ->
+                "Film"
+
+            "entertainment" ->
+                "EÄŸlence"
+
+            "business" ->
+                "Ä°ÅŸ DÃ¼nyasÄ±"
+
+            "documentary" ->
+                "Belgesel"
+
+            "education" ->
+                "EÄŸitim"
+
+            "culture" ->
+                "KÃ¼ltÃ¼r"
+
+            "travel" ->
+                "Seyahat"
+
+            "lifestyle" ->
+                "YaÅŸam"
+
+            "religious" ->
+                "Dini"
+
+            "animation" ->
+                "Animasyon"
+
+            "series" ->
+                "Dizi"
+
+            "general" ->
+                "Genel"
+
+            "undefined" ->
+                "DiÄŸer"
+
+            else ->
+                category
+        }
+    }
+
+    private fun openPlayer(
+        channel: IptvChannel
+    ) {
+
+        val intent =
+            android.content.Intent(
+                this,
+                PlayerActivity::class.java
+            ).apply {
+
+                putExtra(
+                    PlayerActivity.EXTRA_STREAM_URL,
+                    channel.streamUrl
+                )
+
+                putExtra(
+                    PlayerActivity.EXTRA_TITLE,
+                    channel.name
+                )
+
+                putExtra(
+                    PlayerActivity.EXTRA_MEDIA_TYPE,
+                    "iptv"
+                )
+            }
+
+        startActivity(intent)
+    }
+}
+===== PLAYERACTIVITY =====
+package com.karadaglabs.cartv
+
+import android.os.Bundle
+import android.view.View
+import android.widget.Button
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+
+class PlayerActivity : ComponentActivity() {
+
+    private var player: ExoPlayer? = null
+
+    private lateinit var playerView: PlayerView
+    private lateinit var titleText: TextView
+    private lateinit var errorText: TextView
+    private lateinit var retryButton: Button
+    private lateinit var backButton: ImageButton
+    private lateinit var errorContainer: LinearLayout
+
+    private var streamUrl = ""
+    private var title = ""
+    private var mediaType = ""
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setContentView(R.layout.activity_player)
+
+        playerView = findViewById(R.id.playerView)
+        titleText = findViewById(R.id.titleText)
+        errorText = findViewById(R.id.errorText)
+        retryButton = findViewById(R.id.retryButton)
+        backButton = findViewById(R.id.backButton)
+        errorContainer = findViewById(R.id.errorContainer)
+
+        streamUrl = intent
+            .getStringExtra(EXTRA_STREAM_URL)
+            .orEmpty()
+
+        title = intent
+            .getStringExtra(EXTRA_TITLE)
+            .orEmpty()
+
+        mediaType = intent
+            .getStringExtra(EXTRA_MEDIA_TYPE)
+            .orEmpty()
+
+        titleText.text = title.ifBlank {
+            "Karadag Car TV"
+        }
+
+        backButton.setOnClickListener {
+            finish()
+        }
+
+        retryButton.setOnClickListener {
+            hideError()
+            initializePlayer()
+        }
+
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    finish()
+                }
+            }
+        )
+
+        if (streamUrl.isBlank()) {
+            showError("YayÄ±n adresi bulunamadÄ±.")
+        } else {
+            initializePlayer()
+        }
+    }
+
+    private fun initializePlayer() {
+        releasePlayer()
+
+        player = ExoPlayer.Builder(this)
+            .build()
+            .also { exoPlayer ->
+
+                playerView.player = exoPlayer
+
+                exoPlayer.addListener(
+                    object : Player.Listener {
+
+                        override fun onPlaybackStateChanged(
+                            playbackState: Int
+                        ) {
+                            when (playbackState) {
+
+                                Player.STATE_BUFFERING -> {
+                                    hideError()
+                                }
+
+                                Player.STATE_READY -> {
+                                    hideError()
+                                }
+
+                                Player.STATE_ENDED -> {
+                                    if (mediaType == "video") {
+                                        exoPlayer.seekTo(0)
+                                        exoPlayer.play()
+                                    }
+                                }
+                            }
+                        }
+
+                        override fun onPlayerError(
+                            error: PlaybackException
+                        ) {
+                            showError(
+                                "YayÄ±n oynatÄ±lamadÄ±.\n\n" +
+                                        error.errorCodeName
+                            )
+                        }
+                    }
+                )
+
+                exoPlayer.setMediaItem(
+                    MediaItem.fromUri(streamUrl)
+                )
+
+                exoPlayer.prepare()
+                exoPlayer.playWhenReady = true
+            }
+
+        playerView.setControllerVisibilityListener(
+            PlayerView.ControllerVisibilityListener { visibility ->
+
+                val visible =
+                    visibility == View.VISIBLE
+
+                backButton.visibility =
+                    if (visible) {
+                        View.VISIBLE
+                    } else {
+                        View.GONE
+                    }
+
+                titleText.visibility =
+                    if (visible) {
+                        View.VISIBLE
+                    } else {
+                        View.GONE
+                    }
+            }
+        )
+    }
+
+    private fun showError(message: String) {
+        errorContainer.visibility = View.VISIBLE
+        errorText.text = message
+        retryButton.visibility = View.VISIBLE
+    }
+
+    private fun hideError() {
+        errorContainer.visibility = View.GONE
+    }
+
+    override fun onStop() {
+        super.onStop()
+        releasePlayer()
+    }
+
+    override fun onDestroy() {
+        releasePlayer()
+        super.onDestroy()
+    }
+
+    private fun releasePlayer() {
+        player?.release()
+        player = null
+
+        if (::playerView.isInitialized) {
+            playerView.player = null
+        }
+    }
+
+    companion object {
+        const val EXTRA_STREAM_URL = "stream_url"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_MEDIA_TYPE = "media_type"
+    }
+}
+===== MANIFEST =====
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Karadag Car TV"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.KaradagCarTV"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="Karadag Car TV"
+            android:theme="@style/Theme.KaradagCarTV"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".YouTubeActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
+            android:name=".IptvActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize"
+            android:windowSoftInputMode="adjustResize" />
+
+    </application>
+
+</manifest>
+===== GRADLE =====
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+}
+
+android {
+    namespace = "com.karadaglabs.cartv"
+
+    compileSdk {
+        version = release(37)
+    }
+
+    defaultConfig {
+        applicationId = "com.karadaglabs.cartv"
+        minSdk = 29
+        targetSdk = 37
+        versionCode = 1
+        versionName = "1.0"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            optimization {
+                enable = false
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        compose = true
+    }
+}
+
+dependencies {
+    implementation(platform(libs.androidx.compose.bom))
+
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.activity.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.constraintlayout)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+
+    // Android Media3 / ExoPlayer
+    implementation("androidx.media3:media3-exoplayer:1.10.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
+    implementation("androidx.media3:media3-ui:1.10.1")
+    implementation(libs.material)
+
+    testImplementation(libs.junit)
+
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.junit)
+
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+}
