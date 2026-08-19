@@ -16,8 +16,10 @@
         android:usesCleartextTraffic="true">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".RegistrationActivity"
             android:exported="true"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize"
             android:label="Karadag Car TV"
             android:theme="@style/Theme.KaradagCarTV"
             android:windowSoftInputMode="adjustResize">
@@ -28,6 +30,15 @@
             </intent-filter>
 
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize"
+            android:label="Karadag Car TV"
+            android:theme="@style/Theme.KaradagCarTV"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".PlayerActivity"
