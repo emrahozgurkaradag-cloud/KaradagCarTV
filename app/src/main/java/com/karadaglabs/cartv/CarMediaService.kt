@@ -28,6 +28,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
+data class ProjectionListItem(
+    val id: String,
+    val title: String,
+    val logoUrl: String? = null
+)
+
 @UnstableApi
 class CarMediaService : MediaLibraryService() {
 
@@ -182,7 +188,7 @@ class CarMediaService : MediaLibraryService() {
         projectionInstance =
             this
 
-        if (projectionRequested) {
+        if (pendingProjectionMediaId != null) {
 
             startProjectionPlayback(
                 pendingProjectionMediaId
@@ -1544,18 +1550,98 @@ class CarMediaService : MediaLibraryService() {
      */
 
     private fun menuChannels():
-            List<Pair<String, String>> {
+            List<ProjectionListItem> {
 
         return loadCachedLiveTv().map { channel ->
 
-            channel.mediaId to
-                    channel.name
+            ProjectionListItem(
+                id = channel.mediaId,
+                title = channel.name,
+                logoUrl = channel.logoUrl
+            )
+        }
+    }
+
+    private fun menuRadios():
+            List<ProjectionListItem> {
+
+        return radios.map { radio ->
+
+            ProjectionListItem(
+                id = radio.id,
+                title = radio.name
+            )
+        }
+    }
+
+    private fun prefetchLibrary(
+        onDone: (() -> Unit)?
+    ) {
+
+        executor.submit {
+
+            loadLiveTvFromApiWithCacheFallback()
+
+            mainHandler.post {
+
+                onDone?.invoke()
+            }
+        }
+    }
+
+    private fun startProjectionRadio(
+        radioId: String
+    ) {
+
+        val radio =
+            radios.firstOrNull { station ->
+
+                station.id ==
+                        radioId
+            }
+                ?: return
+
+        mainHandler.post {
+
+            val mediaItem =
+                createRadioMediaItem(
+                    radio
+                )
+
+            player.setMediaItem(
+                mediaItem
+            )
+
+            player.prepare()
+
+            player.playWhenReady =
+                true
+
+            Log.d(
+                TAG,
+                "Projection radio ${radio.name} " +
+                        radio.url
+            )
+
+            CarVideoPlayerHolder.logPlayback(
+                "radio-started"
+            )
         }
     }
 
     private fun startProjectionPlayback(
         mediaId: String?
     ) {
+
+        if (mediaId.isNullOrBlank()) {
+
+            Log.d(
+                TAG,
+                "Projection playback skipped; no channel selected"
+            )
+
+            return
+        }
 
         executor.submit {
 
@@ -1717,14 +1803,21 @@ class CarMediaService : MediaLibraryService() {
             mediaId: String? = null
         ) {
 
+            if (mediaId.isNullOrBlank()) {
+
+                Log.d(
+                    TAG,
+                    "Projection channel requires explicit selection"
+                )
+
+                return
+            }
+
             projectionRequested =
                 true
 
-            if (mediaId != null) {
-
-                pendingProjectionMediaId =
-                    mediaId
-            }
+            pendingProjectionMediaId =
+                mediaId
 
             val instance =
                 projectionInstance
@@ -1741,15 +1834,63 @@ class CarMediaService : MediaLibraryService() {
 
             instance.startProjectionPlayback(
                 mediaId
-                    ?: pendingProjectionMediaId
+            )
+        }
+
+        fun playProjectionRadio(
+            radioId: String
+        ) {
+
+            val instance =
+                projectionInstance
+
+            if (instance == null) {
+
+                Log.d(
+                    TAG,
+                    "CarMediaService not ready; radio playback pending"
+                )
+
+                return
+            }
+
+            instance.startProjectionRadio(
+                radioId
+            )
+        }
+
+        fun prefetchProjectionLibrary(
+            onDone: (() -> Unit)? = null
+        ) {
+
+            val instance =
+                projectionInstance
+
+            if (instance == null) {
+
+                onDone?.invoke()
+
+                return
+            }
+
+            instance.prefetchLibrary(
+                onDone
             )
         }
 
         fun projectionChannels():
-            List<Pair<String, String>> {
+            List<ProjectionListItem> {
 
             return projectionInstance
                 ?.menuChannels()
+                ?: emptyList()
+        }
+
+        fun projectionRadios():
+            List<ProjectionListItem> {
+
+            return projectionInstance
+                ?.menuRadios()
                 ?: emptyList()
         }
     }
