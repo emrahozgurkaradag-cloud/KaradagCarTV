@@ -1,5 +1,6 @@
 package com.karadaglabs.cartv
 
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.os.Handler
@@ -20,7 +21,6 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -51,6 +51,7 @@ class PlayerActivity : ComponentActivity() {
 
     private var isReleased = false
     private var isInitializing = false
+    private var playerListener: Player.Listener? = null
 
     private val handler =
         Handler(Looper.getMainLooper())
@@ -449,48 +450,53 @@ class PlayerActivity : ComponentActivity() {
         isInitializing =
             true
 
-        releasePlayer()
+        detachPhonePlayback(
+            pauseIfNoCar = false
+        )
 
         isReleased =
             false
 
         hideError()
 
-        /*
-         * Radyo için önceki stabil değerler.
-         *
-         * Testte 3 dakika boyunca kesintisiz
-         * çalıştığı için bunları değiştirmiyoruz.
-         */
-        val loadControl =
-            if (isRadio) {
+        try {
 
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        30_000,
-                        90_000,
-                        3_000,
-                        10_000
-                    )
-                    .setPrioritizeTimeOverSizeThresholds(
-                        true
-                    )
-                    .build()
+            startService(
+                Intent(
+                    this,
+                    CarMediaService::class.java
+                )
+            )
 
-            } else {
+        } catch (exception: Exception) {
 
-                DefaultLoadControl.Builder()
-                    .setBufferDurationsMs(
-                        15_000,
-                        50_000,
-                        2_500,
-                        5_000
-                    )
-                    .setPrioritizeTimeOverSizeThresholds(
-                        true
-                    )
-                    .build()
-            }
+            isInitializing =
+                false
+
+            showError(
+                "Oynatıcı servisi başlatılamadı."
+            )
+
+            return
+        }
+
+        val sharedPlayer =
+            CarVideoPlayerHolder.getPlayer()
+
+        if (sharedPlayer == null) {
+
+            isInitializing =
+                false
+
+            handler.postDelayed(
+                {
+                    initializePlayer()
+                },
+                150L
+            )
+
+            return
+        }
 
         val httpDataSourceFactory =
             DefaultHttpDataSource.Factory()
@@ -559,31 +565,27 @@ class PlayerActivity : ComponentActivity() {
                 )
                 .build()
 
+        val exoPlayer =
+            sharedPlayer
+
         player =
-            ExoPlayer.Builder(this)
-                .setLoadControl(
-                    loadControl
-                )
-                .build()
-                .also { exoPlayer ->
+            exoPlayer
 
-                    /*
-                     * Radyo audio-only.
-                     */
-                    if (!isRadio) {
+        if (!isRadio) {
 
-                        playerView.player =
-                            exoPlayer
-                    }
+            CarVideoPlayerHolder.setPhonePlayerView(
+                playerView
+            )
+        }
 
-                    exoPlayer.setAudioAttributes(
-                        audioAttributes,
-                        true
-                    )
+        exoPlayer.setAudioAttributes(
+            audioAttributes,
+            true
+        )
 
-                    exoPlayer.addListener(
+        val listener =
 
-                        object : Player.Listener {
+            object : Player.Listener {
 
                             override fun
                                     onPlaybackStateChanged(
@@ -670,18 +672,23 @@ class PlayerActivity : ComponentActivity() {
                                     )
                                 }
                             }
-                        }
-                    )
+            }
 
-                    exoPlayer.setMediaSource(
-                        mediaSource
-                    )
+        playerListener =
+            listener
 
-                    exoPlayer.prepare()
+        exoPlayer.addListener(
+            listener
+        )
 
-                    exoPlayer.playWhenReady =
-                        true
-                }
+        exoPlayer.setMediaSource(
+            mediaSource
+        )
+
+        exoPlayer.prepare()
+
+        exoPlayer.playWhenReady =
+            true
     }
 
     private fun createMediaSource(
@@ -814,13 +821,29 @@ class PlayerActivity : ComponentActivity() {
 
         super.onStart()
 
+        isReleased =
+            false
+
         if (
-            player != null &&
-            !isReleased
+            streamUrl.isNotBlank() &&
+            player == null
+        ) {
+
+            initializePlayer()
+
+        } else if (
+            player != null
         ) {
 
             player?.playWhenReady =
                 true
+
+            if (!isRadio) {
+
+                CarVideoPlayerHolder.setPhonePlayerView(
+                    playerView
+                )
+            }
         }
     }
 
@@ -828,7 +851,15 @@ class PlayerActivity : ComponentActivity() {
 
         super.onStop()
 
-        releasePlayer()
+        isReleased =
+            true
+
+        isInitializing =
+            false
+
+        detachPhonePlayback(
+            pauseIfNoCar = true
+        )
     }
 
     override fun onDestroy() {
@@ -837,34 +868,47 @@ class PlayerActivity : ComponentActivity() {
             hideControlsRunnable
         )
 
-        releasePlayer()
+        detachPhonePlayback(
+            pauseIfNoCar = true
+        )
 
         super.onDestroy()
     }
 
-    private fun releasePlayer() {
+    private fun detachPhonePlayback(
+        pauseIfNoCar: Boolean
+    ) {
 
-        isReleased =
-            true
+        playerListener?.let { listener ->
 
-        isInitializing =
-            false
+            player?.removeListener(
+                listener
+            )
+        }
 
-        player?.playWhenReady =
-            false
-
-        player?.stop()
-
-        player?.release()
-
-        player = null
+        playerListener =
+            null
 
         if (
             ::playerView.isInitialized
         ) {
 
-            playerView.player =
-                null
+            CarVideoPlayerHolder.clearPhonePlayerView(
+                playerView
+            )
+        }
+
+        player =
+            null
+
+        if (
+            pauseIfNoCar &&
+            !CarVideoPlayerHolder.hasCarPlayerView()
+        ) {
+
+            CarVideoPlayerHolder.getPlayer()
+                ?.playWhenReady =
+                false
         }
     }
 

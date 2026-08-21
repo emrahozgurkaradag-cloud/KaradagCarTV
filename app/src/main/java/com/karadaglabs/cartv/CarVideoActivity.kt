@@ -3,9 +3,6 @@ package com.karadaglabs.cartv
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
-import android.view.ContextThemeWrapper
-import android.view.LayoutInflater
-import android.view.ViewGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import com.google.android.apps.auto.sdk.CarActivity
@@ -46,30 +43,25 @@ class CarVideoActivity : CarActivity() {
             )
         }
 
-        val view = LayoutInflater.from(
-            ContextThemeWrapper(
-                this,
-                R.style.Theme_KaradagCarTV
-            )
-        ).inflate(
-            R.layout.car_video_player,
-            null,
-            false
-        ) as PlayerView
-
-        view.layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
+        setContentView(
+            R.layout.car_video_player
         )
+
+        val view =
+            findViewById(
+                R.id.carPlayerView
+            ) as PlayerView
 
         playerView = view
 
-        setContentView(view)
-
-        bindExistingPlayer()
+        CarVideoPlayerHolder.setCarPlayerView(
+            view
+        )
 
         view.post {
-            bindExistingPlayer()
+            CarVideoPlayerHolder.setCarPlayerView(
+                view
+            )
         }
 
         try {
@@ -93,7 +85,11 @@ class CarVideoActivity : CarActivity() {
 
         Log.d(TAG, "CAR VIDEO ACTIVITY STARTED")
 
-        bindExistingPlayer()
+        playerView?.let { view ->
+            CarVideoPlayerHolder.setCarPlayerView(
+                view
+            )
+        }
     }
 
     override fun onResume() {
@@ -101,7 +97,11 @@ class CarVideoActivity : CarActivity() {
 
         Log.d(TAG, "CAR VIDEO ACTIVITY RESUMED")
 
-        bindExistingPlayer()
+        playerView?.let { view ->
+            CarVideoPlayerHolder.setCarPlayerView(
+                view
+            )
+        }
     }
 
     override fun onPause() {
@@ -114,27 +114,13 @@ class CarVideoActivity : CarActivity() {
         Log.d(TAG, "CAR VIDEO ACTIVITY DESTROYED")
 
         playerView?.let { view ->
-            view.player = null
-            CarVideoPlayerHolder.clearPlayerView(view)
+            CarVideoPlayerHolder.clearCarPlayerView(
+                view
+            )
         }
 
         playerView = null
 
         super.onDestroy()
-    }
-
-    private fun bindExistingPlayer() {
-        val view = playerView ?: return
-
-        val exoPlayer = CarVideoPlayerHolder.getPlayer()
-
-        view.player = exoPlayer
-
-        CarVideoPlayerHolder.setPlayerView(view)
-
-        Log.d(
-            TAG,
-            "PlayerView.player assigned=${view.player != null}"
-        )
     }
 }

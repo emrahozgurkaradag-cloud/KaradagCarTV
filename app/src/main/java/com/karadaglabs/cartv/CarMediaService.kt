@@ -5,6 +5,9 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.SurfaceHolder
+import android.view.SurfaceView
+import android.view.TextureView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -1573,9 +1576,12 @@ class CarMediaService : MediaLibraryService() {
 }
 
 /**
- * CarMediaService ExoPlayer'ını CarVideoActivity PlayerView'ına
- * bağlar. Ses MediaLibrarySession üzerinden çalışmaya devam eder;
- * görüntü aauto CarActivity yüzeyindeki PlayerView'a gider.
+ * Tek gerçek playback: CarMediaService ExoPlayer.
+ *
+ * Video surface aynı anda yalnızca bir yere bağlanır.
+ * Android Auto CarVideoActivity varsa projection SurfaceView
+ * önceliklidir; yoksa telefon PlayerActivity PlayerView kullanılır.
+ * Ses MediaLibrarySession üzerinden çalışmaya devam eder.
  */
 @UnstableApi
 object CarVideoPlayerHolder {
@@ -1592,11 +1598,22 @@ object CarVideoPlayerHolder {
     private var player: ExoPlayer? = null
 
     @Volatile
-    private var playerView: PlayerView? = null
+    private var carPlayerView: PlayerView? = null
+
+    @Volatile
+    private var phonePlayerView: PlayerView? = null
+
+    private var carSurfaceCallback:
+        SurfaceHolder.Callback? = null
 
     fun getPlayer(): ExoPlayer? {
 
         return player
+    }
+
+    fun hasCarPlayerView(): Boolean {
+
+        return carPlayerView != null
     }
 
     fun setPlayer(
@@ -1608,29 +1625,98 @@ object CarVideoPlayerHolder {
         bindOnMainThread()
     }
 
+    fun setCarPlayerView(
+        playerView: PlayerView?
+    ) {
+
+        runOnMainThread {
+
+            unhookCarSurfaceCallback()
+
+            carPlayerView =
+                playerView
+
+            hookCarSurfaceCallback(
+                playerView
+            )
+
+            bindLocked()
+        }
+    }
+
+    fun setPhonePlayerView(
+        playerView: PlayerView?
+    ) {
+
+        runOnMainThread {
+
+            phonePlayerView =
+                playerView
+
+            bindLocked()
+        }
+    }
+
     fun setPlayerView(
         playerView: PlayerView?
     ) {
 
-        this.playerView = playerView
-
-        bindOnMainThread()
+        setCarPlayerView(
+            playerView
+        )
     }
 
     fun clearPlayerView(
         playerView: PlayerView
     ) {
 
+        clearCarPlayerView(
+            playerView
+        )
+    }
+
+    fun clearCarPlayerView(
+        playerView: PlayerView
+    ) {
+
         runOnMainThread {
 
             if (
-                this.playerView ===
+                carPlayerView ===
                     playerView
             ) {
 
-                playerView.player = null
+                unhookCarSurfaceCallback()
 
-                this.playerView = null
+                playerView.player =
+                    null
+
+                carPlayerView =
+                    null
+
+                bindLocked()
+            }
+        }
+    }
+
+    fun clearPhonePlayerView(
+        playerView: PlayerView
+    ) {
+
+        runOnMainThread {
+
+            if (
+                phonePlayerView ===
+                    playerView
+            ) {
+
+                playerView.player =
+                    null
+
+                phonePlayerView =
+                    null
+
+                bindLocked()
             }
         }
     }
@@ -1639,9 +1725,22 @@ object CarVideoPlayerHolder {
 
         runOnMainThread {
 
-            playerView?.player = null
+            unhookCarSurfaceCallback()
 
-            player = null
+            carPlayerView?.player =
+                null
+
+            phonePlayerView?.player =
+                null
+
+            carPlayerView =
+                null
+
+            phonePlayerView =
+                null
+
+            player =
+                null
         }
     }
 
@@ -1649,53 +1748,294 @@ object CarVideoPlayerHolder {
 
         runOnMainThread {
 
-            val view =
-                playerView
+            bindLocked()
+        }
+    }
 
-            val exoPlayer =
-                player
+    private fun bindLocked() {
 
-            if (view == null) {
+        val exoPlayer =
+            player
 
-                Log.d(
-                    TAG,
-                    "PlayerView not ready yet"
-                )
+        val carView =
+            carPlayerView
 
-                return@runOnMainThread
-            }
+        val phoneView =
+            phonePlayerView
 
-            /*
-             * DHU'da sesin gelip görüntünün gelmemesi,
-             * PlayerView.player atamasının atlanması veya
-             * video track'in surface yokken kapanmasıyla olur.
-             * Aynı ExoPlayer örneğini açıkça bağla.
-             */
-            if (view.player !== exoPlayer) {
+        val targetView =
+            carView ?: phoneView
 
-                view.player = exoPlayer
-            }
+        if (
+            phoneView != null &&
+            phoneView !== targetView
+        ) {
 
-            if (exoPlayer != null) {
+            phoneView.player =
+                null
+        }
 
-                exoPlayer.trackSelectionParameters =
-                    exoPlayer.trackSelectionParameters
-                        .buildUpon()
-                        .setTrackTypeDisabled(
-                            C.TRACK_TYPE_VIDEO,
-                            false
-                        )
-                        .build()
-            }
+        if (
+            carView != null &&
+            carView !== targetView
+        ) {
+
+            carView.player =
+                null
+        }
+
+        if (
+            exoPlayer == null ||
+            targetView == null
+        ) {
 
             Log.d(
                 TAG,
-                "PlayerView.player=" +
-                        "${view.player != null}, " +
-                        "sameInstance=" +
-                        "${view.player === exoPlayer}"
+                "PlayerView not ready yet " +
+                        "car=${carView != null} " +
+                        "phone=${phoneView != null} " +
+                        "player=${exoPlayer != null}"
+            )
+
+            return
+        }
+
+        exoPlayer.trackSelectionParameters =
+            exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(
+                    C.TRACK_TYPE_VIDEO,
+                    false
+                )
+                .build()
+
+        if (targetView.player !== exoPlayer) {
+
+            targetView.player =
+                exoPlayer
+        }
+
+        attachVideoSurface(
+            exoPlayer,
+            targetView
+        )
+
+        if (carView != null) {
+
+            exoPlayer.playWhenReady =
+                true
+
+            if (carSurfaceCallback == null) {
+
+                hookCarSurfaceCallback(
+                    carView
+                )
+            }
+        }
+
+        val surfaceView =
+            targetView.videoSurfaceView
+
+        val targetName =
+            if (targetView === carView) {
+                "car"
+            } else {
+                "phone"
+            }
+
+        Log.d(
+            TAG,
+            "PlayerView.player=" +
+                    "${targetView.player != null}, " +
+                    "sameInstance=" +
+                    "${targetView.player === exoPlayer}, " +
+                    "target=" +
+                    targetName +
+                    ", surface=" +
+                    "${surfaceView?.javaClass?.simpleName} " +
+                    "${surfaceView?.width}x${surfaceView?.height}"
+        )
+    }
+
+    private fun attachVideoSurface(
+        exoPlayer: ExoPlayer,
+        playerView: PlayerView
+    ) {
+
+        when (
+            val videoView =
+                playerView.videoSurfaceView
+        ) {
+
+            is SurfaceView -> {
+
+                val holder =
+                    videoView.holder
+
+                val surface =
+                    holder.surface
+
+                if (
+                    surface != null &&
+                    surface.isValid
+                ) {
+
+                    exoPlayer.clearVideoSurface()
+
+                    exoPlayer.setVideoSurfaceHolder(
+                        holder
+                    )
+
+                    Log.d(
+                        TAG,
+                        "ExoPlayer video SurfaceHolder bound " +
+                                "${holder.surfaceFrame.width()}x" +
+                                "${holder.surfaceFrame.height()}"
+                    )
+
+                } else {
+
+                    Log.d(
+                        TAG,
+                        "Car SurfaceView not valid yet"
+                    )
+                }
+            }
+
+            is TextureView -> {
+
+                exoPlayer.clearVideoSurface()
+
+                exoPlayer.setVideoTextureView(
+                    videoView
+                )
+            }
+        }
+    }
+
+    private fun hookCarSurfaceCallback(
+        playerView: PlayerView?
+    ) {
+
+        val surfaceView =
+            playerView?.videoSurfaceView
+                    as? SurfaceView
+            ?: return
+
+        val callback =
+
+            object : SurfaceHolder.Callback {
+
+                override fun surfaceCreated(
+                    holder: SurfaceHolder
+                ) {
+
+                    val exoPlayer =
+                        player
+                        ?: return
+
+                    exoPlayer.clearVideoSurface()
+
+                    exoPlayer.setVideoSurfaceHolder(
+                        holder
+                    )
+
+                    exoPlayer.trackSelectionParameters =
+                        exoPlayer.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(
+                                C.TRACK_TYPE_VIDEO,
+                                false
+                            )
+                            .build()
+
+                    exoPlayer.playWhenReady =
+                        true
+
+                    Log.d(
+                        TAG,
+                        "Car projection Surface created " +
+                                "${holder.surfaceFrame.width()}x" +
+                                "${holder.surfaceFrame.height()}"
+                    )
+                }
+
+                override fun surfaceChanged(
+                    holder: SurfaceHolder,
+                    format: Int,
+                    width: Int,
+                    height: Int
+                ) {
+
+                    player?.setVideoSurfaceHolder(
+                        holder
+                    )
+
+                    Log.d(
+                        TAG,
+                        "Car projection Surface changed " +
+                                "${width}x${height}"
+                    )
+                }
+
+                override fun surfaceDestroyed(
+                    holder: SurfaceHolder
+                ) {
+
+                    if (
+                        carPlayerView ===
+                            playerView
+                    ) {
+
+                        player?.clearVideoSurface()
+                    }
+
+                    Log.d(
+                        TAG,
+                        "Car projection Surface destroyed"
+                    )
+                }
+            }
+
+        carSurfaceCallback =
+            callback
+
+        surfaceView.holder.addCallback(
+            callback
+        )
+
+        if (
+            surfaceView.holder.surface != null &&
+            surfaceView.holder.surface.isValid
+        ) {
+
+            callback.surfaceCreated(
+                surfaceView.holder
             )
         }
+    }
+
+    private fun unhookCarSurfaceCallback() {
+
+        val callback =
+            carSurfaceCallback
+
+        val surfaceView =
+            carPlayerView?.videoSurfaceView
+                    as? SurfaceView
+
+        if (
+            callback != null &&
+            surfaceView != null
+        ) {
+
+            surfaceView.holder.removeCallback(
+                callback
+            )
+        }
+
+        carSurfaceCallback =
+            null
     }
 
     private fun runOnMainThread(
