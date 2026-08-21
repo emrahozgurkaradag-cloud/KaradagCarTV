@@ -43,12 +43,8 @@ class MirrorProjectionService : Service() {
     }
 
     private var mediaProjection: MediaProjection? = null
-
-    private var virtualDisplay:
-            android.hardware.display.VirtualDisplay? = null
-
+    private var virtualDisplay: android.hardware.display.VirtualDisplay? = null
     private var projectionSurface: Surface? = null
-
     private var projectionWidth = 0
     private var projectionHeight = 0
     private var projectionDpi = 0
@@ -57,7 +53,6 @@ class MirrorProjectionService : Service() {
         super.onCreate()
 
         createNotificationChannel()
-
         val notification = createNotification()
 
         if (Build.VERSION.SDK_INT >= 29) {
@@ -85,44 +80,70 @@ class MirrorProjectionService : Service() {
         when (intent?.action) {
 
             ACTION_START -> {
-                val resultCode = intent.getIntExtra(
-                    EXTRA_RESULT_CODE,
-                    -1
-                )
+                /*
+                 * Prefer the in-process consent object. The permission
+                 * Activity stores the original result Intent here before
+                 * starting this foreground service, so Android 16 cannot
+                 * strip or alter the projection token while it crosses
+                 * another Intent boundary.
+                 */
+                val storedConsent =
+                    MirrorProjectionController
+                        .takeProjectionConsent()
+
+                val resultCode =
+                    storedConsent?.first
+                        ?: intent.getIntExtra(
+                            EXTRA_RESULT_CODE,
+                            -1
+                        )
 
                 val resultData =
-                    if (Build.VERSION.SDK_INT >= 33) {
-                        intent.getParcelableExtra(
-                            EXTRA_RESULT_DATA,
-                            Intent::class.java
-                        )
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra(
-                            EXTRA_RESULT_DATA
-                        )
-                    }
+                    storedConsent?.second
+                        ?: if (Build.VERSION.SDK_INT >= 33) {
+                            intent.getParcelableExtra(
+                                EXTRA_RESULT_DATA,
+                                Intent::class.java
+                            )
+                        } else {
+                            @Suppress("DEPRECATION")
+                            intent.getParcelableExtra(
+                                EXTRA_RESULT_DATA
+                            )
+                        }
+
+                Log.d(
+                    TAG,
+                    "ACTION_START resultCode=$resultCode data=${resultData != null}"
+                )
 
                 if (
-                    resultCode == -1 ||
-                    resultData == null
+                    resultCode != -1 ||
+                    resultData != null
                 ) {
+                    if (resultData != null) {
+                        startMirror(
+                            resultCode,
+                            resultData
+                        )
+                    } else {
+                        Log.e(
+                            TAG,
+                            "MediaProjection result data is null"
+                        )
+                        MirrorProjectionController
+                            .markProjectionInactive()
+                        stopSelf()
+                    }
+                } else {
                     Log.e(
                         TAG,
                         "Invalid MediaProjection result"
                     )
-
                     MirrorProjectionController
                         .markProjectionInactive()
-
                     stopSelf()
-                    return START_NOT_STICKY
                 }
-
-                startMirror(
-                    resultCode,
-                    resultData
-                )
             }
 
             ACTION_REFRESH -> {
@@ -130,7 +151,6 @@ class MirrorProjectionService : Service() {
                     TAG,
                     "Surface refresh requested"
                 )
-
                 createVirtualDisplayIfPossible()
             }
 
@@ -140,12 +160,6 @@ class MirrorProjectionService : Service() {
                     "Android Auto surface lost"
                 )
 
-                /*
-                 * Android 14+ does not allow creating another
-                 * VirtualDisplay from the same MediaProjection.
-                 * Detach the current surface instead and keep the
-                 * projection session alive.
-                 */
                 virtualDisplay?.setSurface(null)
                 projectionSurface = null
             }
@@ -165,11 +179,6 @@ class MirrorProjectionService : Service() {
         resultCode: Int,
         resultData: Intent
     ) {
-
-        /*
-         * ACTION_START represents a new user-approved capture session.
-         * The previous MediaProjection must be fully stopped first.
-         */
         stopMirror()
 
         val manager =
@@ -188,10 +197,8 @@ class MirrorProjectionService : Service() {
                     TAG,
                     "MediaProjection is null"
                 )
-
                 MirrorProjectionController
                     .markProjectionInactive()
-
                 stopSelf()
                 return
             }
@@ -202,6 +209,9 @@ class MirrorProjectionService : Service() {
                 projectionCallback,
                 null
             )
+
+            MirrorProjectionController
+                .markProjectionActive()
 
             Log.d(
                 TAG,
@@ -339,7 +349,6 @@ class MirrorProjectionService : Service() {
                 "VirtualDisplay update/creation error",
                 exception
             )
-
             releaseVirtualDisplay()
         }
     }
@@ -377,10 +386,7 @@ class MirrorProjectionService : Service() {
     }
 
     private fun stopMirror() {
-        Log.d(
-            TAG,
-            "Stopping mirror"
-        )
+        Log.d(TAG, "Stopping mirror")
 
         releaseVirtualDisplay()
 
