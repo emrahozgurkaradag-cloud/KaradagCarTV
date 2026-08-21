@@ -15,12 +15,20 @@ import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.NavigationTemplate
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import android.view.Surface
 
+@UnstableApi
 class CarMirrorService : CarAppService() {
 
     override fun createHostValidator():
             androidx.car.app.validation.HostValidator {
-
         return androidx.car.app.validation
             .HostValidator
             .ALLOW_ALL_HOSTS_VALIDATOR
@@ -39,22 +47,30 @@ private class CarMirrorSession : Session() {
 
     override fun onCreateScreen(
         intent: Intent
-    ): Screen =
-        CarMirrorScreen(carContext)
+    ): Screen = CarMirrorScreen(carContext)
 }
 
+@UnstableApi
 private class CarMirrorScreen(
     carContext: CarContext
 ) : Screen(carContext), SurfaceCallback {
 
     companion object {
         private const val TAG = "KaradagCarMirror"
+
+        // İlk gerçek araç ekranı video testi.
+        // Daha sonra paneldeki seçili kanal ile değiştirilecek.
+        private const val TEST_STREAM_URL =
+            "https://tv-trt1.medya.trt.com.tr/master.m3u8"
     }
 
     private val appManager: AppManager
         get() = carContext.getCarService(
             AppManager::class.java
         )
+
+    private var player: ExoPlayer? = null
+    private var currentSurface: Surface? = null
 
     init {
         appManager.setSurfaceCallback(this)
@@ -70,7 +86,7 @@ private class CarMirrorScreen(
                             .setOnClickListener {
                                 Log.d(
                                     TAG,
-                                    "Karadag Car TV clicked"
+                                    "Karadag Car TV surface video screen"
                                 )
                             }
                             .build()
@@ -92,23 +108,116 @@ private class CarMirrorScreen(
         surfaceContainer: SurfaceContainer
     ) {
         Log.d(TAG, "======================================")
-        Log.d(TAG, "ANDROID AUTO SURFACE AVAILABLE")
+        Log.d(TAG, "ANDROID AUTO VIDEO SURFACE AVAILABLE")
         Log.d(TAG, "width=${surfaceContainer.width}")
         Log.d(TAG, "height=${surfaceContainer.height}")
         Log.d(TAG, "dpi=${surfaceContainer.dpi}")
         Log.d(TAG, "surface=${surfaceContainer.surface}")
         Log.d(TAG, "======================================")
 
-        MirrorSurfaceHolder.setSurface(surfaceContainer)
-        MirrorProjectionController.ensureProjection(carContext)
+        currentSurface = surfaceContainer.surface
+
+        startVideo(
+            surfaceContainer.surface
+        )
+    }
+
+    private fun startVideo(
+        surface: Surface
+    ) {
+        releasePlayer()
+
+        val dataSourceFactory =
+            DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(15_000)
+                .setReadTimeoutMs(20_000)
+                .setAllowCrossProtocolRedirects(true)
+                .setUserAgent("KaradagCarTV/1.0")
+
+        val mediaItem =
+            MediaItem.Builder()
+                .setUri(TEST_STREAM_URL)
+                .setMimeType(MimeTypes.APPLICATION_M3U8)
+                .build()
+
+        val mediaSource =
+            HlsMediaSource.Factory(dataSourceFactory)
+                .setAllowChunklessPreparation(true)
+                .createMediaSource(mediaItem)
+
+        player = ExoPlayer.Builder(carContext)
+            .build()
+            .also { exoPlayer ->
+
+                exoPlayer.setVideoSurface(surface)
+
+                exoPlayer.addListener(
+                    object : Player.Listener {
+
+                        override fun onPlaybackStateChanged(
+                            playbackState: Int
+                        ) {
+                            Log.d(
+                                TAG,
+                                "playbackState=$playbackState"
+                            )
+
+                            if (
+                                playbackState ==
+                                Player.STATE_READY
+                            ) {
+                                Log.d(
+                                    TAG,
+                                    "VIDEO READY - rendering to Android Auto surface"
+                                )
+                            }
+                        }
+
+                        override fun onPlayerError(
+                            error: androidx.media3.common.PlaybackException
+                        ) {
+                            Log.e(
+                                TAG,
+                                "VIDEO PLAYBACK ERROR: ${error.errorCodeName}",
+                                error
+                            )
+                        }
+                    }
+                )
+
+                exoPlayer.setMediaSource(
+                    mediaSource
+                )
+
+                exoPlayer.prepare()
+                exoPlayer.playWhenReady = true
+            }
     }
 
     override fun onSurfaceDestroyed(
         surfaceContainer: SurfaceContainer
     ) {
-        Log.d(TAG, "ANDROID AUTO SURFACE DESTROYED")
-        MirrorSurfaceHolder.clearSurface()
-        MirrorProjectionController.surfaceLost(carContext)
+        Log.d(
+            TAG,
+            "ANDROID AUTO VIDEO SURFACE DESTROYED"
+        )
+
+        currentSurface = null
+        releasePlayer()
+    }
+
+    private fun releasePlayer() {
+        player?.let { exoPlayer ->
+            try {
+                exoPlayer.clearVideoSurface()
+                exoPlayer.stop()
+            } catch (_: Exception) {
+            }
+
+            exoPlayer.release()
+        }
+
+        player = null
     }
 
     override fun onVisibleAreaChanged(
@@ -123,7 +232,10 @@ private class CarMirrorScreen(
         Log.d(TAG, "Stable area: $stableArea")
     }
 
-    override fun onClick(x: Float, y: Float) {
+    override fun onClick(
+        x: Float,
+        y: Float
+    ) {
         Log.d(TAG, "Surface click x=$x y=$y")
     }
 
@@ -156,6 +268,11 @@ private class CarMirrorScreen(
     }
 }
 
+/**
+ * Android Auto surface'ini başka bileşenler için saklamak gerekiyorsa
+ * kullanılabilir. Video oynatma artık MediaProjection yerine doğrudan
+ * CarApp Surface'e yapıldığı için projection zorunlu değildir.
+ */
 object MirrorSurfaceHolder {
 
     @Volatile
@@ -187,7 +304,7 @@ object MirrorSurfaceHolder {
     fun getSurfaceContainer(): SurfaceContainer? =
         currentSurfaceContainer
 
-    fun getSurface(): android.view.Surface? =
+    fun getSurface(): Surface? =
         currentSurfaceContainer?.surface
 
     fun getWidth(): Int =
@@ -198,167 +315,4 @@ object MirrorSurfaceHolder {
 
     fun getDpi(): Int =
         currentSurfaceContainer?.dpi ?: 0
-}
-
-object MirrorProjectionController {
-
-    private const val TAG =
-        "MirrorProjectionController"
-
-    @Volatile
-    private var projectionActive = false
-
-    @Volatile
-    private var projectionRequestInFlight = false
-
-    @Volatile
-    private var pendingResultCode: Int? = null
-
-    @Volatile
-    private var pendingResultData: Intent? = null
-
-    @Synchronized
-    fun setProjectionConsent(
-        resultCode: Int,
-        resultData: Intent
-    ) {
-        pendingResultCode = resultCode
-        pendingResultData = resultData
-
-        Log.d(
-            TAG,
-            "MediaProjection consent stored in-process"
-        )
-    }
-
-    @Synchronized
-    fun takeProjectionConsent(): Pair<Int, Intent>? {
-        val resultCode = pendingResultCode
-        val resultData = pendingResultData
-
-        pendingResultCode = null
-        pendingResultData = null
-
-        return if (
-            resultCode != null &&
-            resultData != null
-        ) {
-            Pair(resultCode, resultData)
-        } else {
-            null
-        }
-    }
-
-    @Synchronized
-    fun clearProjectionConsent() {
-        pendingResultCode = null
-        pendingResultData = null
-    }
-
-    fun ensureProjection(
-        context: CarContext
-    ) {
-        if (projectionActive) {
-            refresh(context)
-            return
-        }
-
-        if (projectionRequestInFlight) {
-            return
-        }
-
-        projectionRequestInFlight = true
-
-        Log.d(
-            TAG,
-            "Requesting MediaProjection consent"
-        )
-
-        val intent = Intent(
-            context,
-            MediaProjectionPermissionActivity::class.java
-        ).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-
-        try {
-            context.startActivity(intent)
-        } catch (exception: Exception) {
-            projectionRequestInFlight = false
-
-            Log.e(
-                TAG,
-                "Unable to open MediaProjection consent activity",
-                exception
-            )
-        }
-    }
-
-    fun markProjectionActive() {
-        projectionRequestInFlight = false
-        projectionActive = true
-
-        Log.d(
-            TAG,
-            "MediaProjection marked active"
-        )
-    }
-
-    fun markProjectionInactive() {
-        projectionRequestInFlight = false
-        projectionActive = false
-    }
-
-    fun refresh(
-        context: CarContext
-    ) {
-        Log.d(
-            TAG,
-            "Surface ready - requesting projection refresh"
-        )
-
-        val intent = Intent(
-            context,
-            MirrorProjectionService::class.java
-        ).apply {
-            action = MirrorProjectionService.ACTION_REFRESH
-        }
-
-        try {
-            context.startService(intent)
-        } catch (exception: Exception) {
-            Log.e(
-                TAG,
-                "Unable to refresh projection service",
-                exception
-            )
-        }
-    }
-
-    fun surfaceLost(
-        context: CarContext
-    ) {
-        Log.d(
-            TAG,
-            "Android Auto surface lost"
-        )
-
-        val intent = Intent(
-            context,
-            MirrorProjectionService::class.java
-        ).apply {
-            action =
-                MirrorProjectionService.ACTION_SURFACE_LOST
-        }
-
-        try {
-            context.startService(intent)
-        } catch (exception: Exception) {
-            Log.e(
-                TAG,
-                "Unable to notify projection service",
-                exception
-            )
-        }
-    }
 }
