@@ -1594,6 +1594,11 @@ object CarVideoPlayerHolder {
     @Volatile
     private var playerView: PlayerView? = null
 
+    fun getPlayer(): ExoPlayer? {
+
+        return player
+    }
+
     fun setPlayer(
         player: ExoPlayer?
     ) {
@@ -1646,13 +1651,49 @@ object CarVideoPlayerHolder {
 
             val view =
                 playerView
-                    ?: return@runOnMainThread
 
-            view.player = player
+            val exoPlayer =
+                player
+
+            if (view == null) {
+
+                Log.d(
+                    TAG,
+                    "PlayerView not ready yet"
+                )
+
+                return@runOnMainThread
+            }
+
+            /*
+             * DHU'da sesin gelip görüntünün gelmemesi,
+             * PlayerView.player atamasının atlanması veya
+             * video track'in surface yokken kapanmasıyla olur.
+             * Aynı ExoPlayer örneğini açıkça bağla.
+             */
+            if (view.player !== exoPlayer) {
+
+                view.player = exoPlayer
+            }
+
+            if (exoPlayer != null) {
+
+                exoPlayer.trackSelectionParameters =
+                    exoPlayer.trackSelectionParameters
+                        .buildUpon()
+                        .setTrackTypeDisabled(
+                            C.TRACK_TYPE_VIDEO,
+                            false
+                        )
+                        .build()
+            }
 
             Log.d(
                 TAG,
-                "PlayerView bound, player=${player != null}"
+                "PlayerView.player=" +
+                        "${view.player != null}, " +
+                        "sameInstance=" +
+                        "${view.player === exoPlayer}"
             )
         }
     }
