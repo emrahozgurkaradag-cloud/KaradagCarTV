@@ -147,19 +147,11 @@ private class CarMirrorScreen(
             "======================================"
         )
 
-        /*
-         * Android Auto tarafından verilen Surface'i
-         * ortak holder'a kaydediyoruz.
-         */
         MirrorSurfaceHolder.setSurface(
             surfaceContainer
         )
 
-        /*
-         * MediaProjection servisine Surface'in
-         * hazır olduğunu bildir.
-         */
-        MirrorProjectionController.refresh(
+        MirrorProjectionController.ensureProjection(
             carContext
         )
     }
@@ -175,7 +167,7 @@ private class CarMirrorScreen(
 
         MirrorSurfaceHolder.clearSurface()
 
-        MirrorProjectionController.stop(
+        MirrorProjectionController.surfaceLost(
             carContext
         )
     }
@@ -218,9 +210,7 @@ private class CarMirrorScreen(
 
         Log.d(
             TAG,
-            "Surface scroll " +
-                    "dx=$distanceX " +
-                    "dy=$distanceY"
+            "Surface scroll dx=$distanceX dy=$distanceY"
         )
     }
 
@@ -231,9 +221,7 @@ private class CarMirrorScreen(
 
         Log.d(
             TAG,
-            "Surface fling " +
-                    "vx=$velocityX " +
-                    "vy=$velocityY"
+            "Surface fling vx=$velocityX vy=$velocityY"
         )
     }
 
@@ -250,18 +238,6 @@ private class CarMirrorScreen(
     }
 }
 
-
-/**
- * Android Auto'nun verdiği Surface'i tutar.
- *
- * CarMirrorService
- *        ↓
- * MirrorSurfaceHolder
- *        ↓
- * MirrorProjectionService
- *        ↓
- * VirtualDisplay
- */
 object MirrorSurfaceHolder {
 
     @Volatile
@@ -278,17 +254,13 @@ object MirrorSurfaceHolder {
 
         Log.d(
             "MirrorSurfaceHolder",
-            "Surface stored: " +
-                    "${surfaceContainer.width}x" +
-                    "${surfaceContainer.height}"
+            "Surface stored: ${surfaceContainer.width}x${surfaceContainer.height}"
         )
     }
 
     @Synchronized
     fun clearSurface() {
-
-        currentSurfaceContainer =
-            null
+        currentSurfaceContainer = null
 
         Log.d(
             "MirrorSurfaceHolder",
@@ -297,49 +269,82 @@ object MirrorSurfaceHolder {
     }
 
     fun getSurfaceContainer():
-            SurfaceContainer? {
-
-        return currentSurfaceContainer
-    }
+            SurfaceContainer? = currentSurfaceContainer
 
     fun getSurface():
-            android.view.Surface? {
+            android.view.Surface? =
+        currentSurfaceContainer?.surface
 
-        return currentSurfaceContainer
-            ?.surface
-    }
+    fun getWidth(): Int =
+        currentSurfaceContainer?.width ?: 0
 
-    fun getWidth(): Int {
+    fun getHeight(): Int =
+        currentSurfaceContainer?.height ?: 0
 
-        return currentSurfaceContainer
-            ?.width
-            ?: 0
-    }
-
-    fun getHeight(): Int {
-
-        return currentSurfaceContainer
-            ?.height
-            ?: 0
-    }
-
-    fun getDpi(): Int {
-
-        return currentSurfaceContainer
-            ?.dpi
-            ?: 0
-    }
+    fun getDpi(): Int =
+        currentSurfaceContainer?.dpi ?: 0
 }
 
-
-/**
- * CarMirrorService ile
- * MirrorProjectionService arasındaki bağlantı.
- */
 object MirrorProjectionController {
 
     private const val TAG =
         "MirrorProjectionController"
+
+    @Volatile
+    private var projectionActive = false
+
+    @Volatile
+    private var projectionRequestInFlight = false
+
+    fun ensureProjection(
+        context: CarContext
+    ) {
+
+        if (projectionActive) {
+            refresh(context)
+            return
+        }
+
+        if (projectionRequestInFlight) {
+            return
+        }
+
+        projectionRequestInFlight = true
+
+        Log.d(
+            TAG,
+            "Requesting MediaProjection consent"
+        )
+
+        val intent = Intent(
+            context,
+            MediaProjectionPermissionActivity::class.java
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        try {
+            context.startActivity(intent)
+        } catch (exception: Exception) {
+            projectionRequestInFlight = false
+
+            Log.e(
+                TAG,
+                "Unable to open MediaProjection consent activity",
+                exception
+            )
+        }
+    }
+
+    fun markProjectionActive() {
+        projectionRequestInFlight = false
+        projectionActive = true
+    }
+
+    fun markProjectionInactive() {
+        projectionRequestInFlight = false
+        projectionActive = false
+    }
 
     fun refresh(
         context: CarContext
@@ -355,20 +360,13 @@ object MirrorProjectionController {
                 context,
                 MirrorProjectionService::class.java
             ).apply {
-
                 action =
-                    MirrorProjectionService
-                        .ACTION_REFRESH
+                    MirrorProjectionService.ACTION_REFRESH
             }
 
         try {
-
-            context.startService(
-                intent
-            )
-
+            context.startService(intent)
         } catch (exception: Exception) {
-
             Log.e(
                 TAG,
                 "Unable to refresh projection service",
@@ -377,13 +375,13 @@ object MirrorProjectionController {
         }
     }
 
-    fun stop(
+    fun surfaceLost(
         context: CarContext
     ) {
 
         Log.d(
             TAG,
-            "Stopping projection surface"
+            "Android Auto surface lost"
         )
 
         val intent =
@@ -391,20 +389,13 @@ object MirrorProjectionController {
                 context,
                 MirrorProjectionService::class.java
             ).apply {
-
                 action =
-                    MirrorProjectionService
-                        .ACTION_SURFACE_LOST
+                    MirrorProjectionService.ACTION_SURFACE_LOST
             }
 
         try {
-
-            context.startService(
-                intent
-            )
-
+            context.startService(intent)
         } catch (exception: Exception) {
-
             Log.e(
                 TAG,
                 "Unable to notify projection service",
