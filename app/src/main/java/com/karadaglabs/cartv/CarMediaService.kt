@@ -2,6 +2,8 @@
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -12,6 +14,7 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionError
+import androidx.media3.ui.PlayerView
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -167,6 +170,8 @@ class CarMediaService : MediaLibraryService() {
                 CarMediaLibraryCallback()
             ).build()
 
+        CarVideoPlayerHolder.setPlayer(player)
+
         Log.d(
             TAG,
             "======================================"
@@ -209,6 +214,8 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "Karadag Car Media Service destroyed"
         )
+
+        CarVideoPlayerHolder.clearPlayer()
 
         if (::mediaLibrarySession.isInitialized) {
             mediaLibrarySession.release()
@@ -1562,5 +1569,110 @@ class CarMediaService : MediaLibraryService() {
 
         private const val GOOGLE_ID =
             "karadag-google"
+    }
+}
+
+/**
+ * CarMediaService ExoPlayer'ını CarVideoActivity PlayerView'ına
+ * bağlar. Ses MediaLibrarySession üzerinden çalışmaya devam eder;
+ * görüntü aauto CarActivity yüzeyindeki PlayerView'a gider.
+ */
+@UnstableApi
+object CarVideoPlayerHolder {
+
+    private const val TAG =
+        "CarVideoPlayerHolder"
+
+    private val mainHandler =
+        Handler(
+            Looper.getMainLooper()
+        )
+
+    @Volatile
+    private var player: ExoPlayer? = null
+
+    @Volatile
+    private var playerView: PlayerView? = null
+
+    fun setPlayer(
+        player: ExoPlayer?
+    ) {
+
+        this.player = player
+
+        bindOnMainThread()
+    }
+
+    fun setPlayerView(
+        playerView: PlayerView?
+    ) {
+
+        this.playerView = playerView
+
+        bindOnMainThread()
+    }
+
+    fun clearPlayerView(
+        playerView: PlayerView
+    ) {
+
+        runOnMainThread {
+
+            if (
+                this.playerView ===
+                    playerView
+            ) {
+
+                playerView.player = null
+
+                this.playerView = null
+            }
+        }
+    }
+
+    fun clearPlayer() {
+
+        runOnMainThread {
+
+            playerView?.player = null
+
+            player = null
+        }
+    }
+
+    private fun bindOnMainThread() {
+
+        runOnMainThread {
+
+            val view =
+                playerView
+                    ?: return@runOnMainThread
+
+            view.player = player
+
+            Log.d(
+                TAG,
+                "PlayerView bound, player=${player != null}"
+            )
+        }
+    }
+
+    private fun runOnMainThread(
+        action: () -> Unit
+    ) {
+
+        if (
+            Looper.myLooper() ==
+                Looper.getMainLooper()
+        ) {
+
+            action()
+
+        } else {
+
+            mainHandler.post(
+                action
+            )
+        }
     }
 }
