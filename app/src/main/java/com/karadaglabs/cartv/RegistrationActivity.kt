@@ -1,13 +1,10 @@
 package com.karadaglabs.cartv
 
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -43,48 +40,6 @@ class RegistrationActivity : ComponentActivity() {
         AppSession.deviceUuid(this)
     }
 
-    /*
-     * Android ekran yakalama izin sonucu.
-     */
-    private val mediaProjectionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-
-            if (
-                result.resultCode == Activity.RESULT_OK &&
-                result.data != null
-            ) {
-
-                startMirrorProjection(
-                    result.resultCode,
-                    result.data!!
-                )
-
-                /*
-                 * Projection izni alındı.
-                 * Artık normal uygulamayı açabiliriz.
-                 */
-                openMain()
-
-            } else {
-
-                Toast.makeText(
-                    this,
-                    "Araç ekranı yansıtması için ekran paylaşım izni gerekiyor.",
-                    Toast.LENGTH_LONG
-                ).show()
-
-                /*
-                 * Kullanıcı izin vermediyse yine uygulamayı
-                 * kullanmasına izin veriyoruz.
-                 *
-                 * Sadece mirror özelliği aktif olmayacak.
-                 */
-                openMain()
-            }
-        }
-
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
@@ -104,10 +59,11 @@ class RegistrationActivity : ComponentActivity() {
             /*
              * Lisans zaten aktif.
              *
-             * Önce MediaProjection izni iste.
-             * İzin verilince MainActivity açılacak.
+             * Telefonda ekran paylaşımı izni istemiyoruz.
+             * Android Auto video projection'ı CarVideoService /
+             * CarVideoActivity tarafından ayrıca yönetiliyor.
              */
-            requestMediaProjection()
+            openMain()
 
             return
         }
@@ -118,84 +74,6 @@ class RegistrationActivity : ComponentActivity() {
 
                 RegistrationScreen()
             }
-        }
-    }
-
-    /**
-     * Android sisteminin MediaProjection izin ekranını açar.
-     */
-    private fun requestMediaProjection() {
-
-        try {
-
-            val projectionManager =
-                getSystemService(
-                    MEDIA_PROJECTION_SERVICE
-                ) as android.media.projection.MediaProjectionManager
-
-            val captureIntent =
-                projectionManager.createScreenCaptureIntent()
-
-            mediaProjectionLauncher.launch(
-                captureIntent
-            )
-
-        } catch (exception: Exception) {
-
-            Toast.makeText(
-                this,
-                "Ekran yansıtma başlatılamadı: ${exception.message}",
-                Toast.LENGTH_LONG
-            ).show()
-
-            openMain()
-        }
-    }
-
-    /**
-     * MediaProjection sonucu alındıktan sonra
-     * gerçek mirror servisini başlatır.
-     */
-    private fun startMirrorProjection(
-        resultCode: Int,
-        resultData: Intent
-    ) {
-
-        val serviceIntent =
-            Intent(
-                this,
-                MirrorProjectionService::class.java
-            ).apply {
-
-                action =
-                    MirrorProjectionService.ACTION_START
-
-                putExtra(
-                    MirrorProjectionService.EXTRA_RESULT_CODE,
-                    resultCode
-                )
-
-                putExtra(
-                    MirrorProjectionService.EXTRA_RESULT_DATA,
-                    resultData
-                )
-            }
-
-        try {
-
-            androidx.core.content.ContextCompat
-                .startForegroundService(
-                    this,
-                    serviceIntent
-                )
-
-        } catch (exception: Exception) {
-
-            Toast.makeText(
-                this,
-                "Mirror servisi başlatılamadı: ${exception.message}",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
 
@@ -415,7 +293,7 @@ class RegistrationActivity : ComponentActivity() {
                                 license
                             )
 
-                            requestMediaProjection()
+                            openMain()
                         }
                     }
 
