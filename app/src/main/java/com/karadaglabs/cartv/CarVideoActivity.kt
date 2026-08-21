@@ -2,11 +2,28 @@ package com.karadaglabs.cartv
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.view.TextureView
+import android.view.View
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.PlayerView
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.MenuAdapter
+import com.google.android.apps.auto.sdk.MenuItem
 
+/**
+ * Android Auto projection host. Phone [PlayerActivity] is not on this path.
+ *
+ * IPTV ExoPlayer (CarMediaService)
+ *   → TextureView inside this CarActivity window
+ *   → host captures that window as DrawingSpec 800x400 SurfaceTexture
+ *
+ * PlayerView/SurfaceView is not used: a child SurfaceView is a different
+ * overlay surface from the host DrawingSpec and is not composited onto
+ * the car screen.
+ */
 @UnstableApi
 class CarVideoActivity : CarActivity() {
 
@@ -14,7 +31,41 @@ class CarVideoActivity : CarActivity() {
         private const val TAG = "KaradagCarVideo"
     }
 
-    private var playerView: PlayerView? = null
+    private var carTextureView: TextureView? = null
+    private var channelMenuAdapter: IptvChannelMenuAdapter? = null
+    private var playerListener: Player.Listener? = null
+
+    private val handler =
+        Handler(
+            Looper.getMainLooper()
+        )
+
+    private val bindProjectionSurfaceRunnable =
+        Runnable {
+            bindProjectionSurface()
+        }
+
+    private val delayedStart =
+        Runnable {
+
+            Log.d(
+                TAG,
+                "CAR VIDEO delayed projection start"
+            )
+
+            CarMediaService.playProjectionChannel()
+            installChannelMenu()
+            bindProjectionSurface()
+            playerListener?.let { listener ->
+                CarVideoPlayerHolder.getPlayer()
+                    ?.addListener(
+                        listener
+                    )
+            }
+            CarVideoPlayerHolder.logPlayback(
+                "activity-ready"
+            )
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,11 +85,11 @@ class CarVideoActivity : CarActivity() {
 
             carUiController
                 .menuController
-                .hideMenuButton()
+                .showMenuButton()
         } catch (exception: Exception) {
             Log.e(
                 TAG,
-                "Unable to hide car chrome",
+                "Unable to configure car chrome",
                 exception
             )
         }
@@ -47,21 +98,19 @@ class CarVideoActivity : CarActivity() {
             R.layout.car_video_player
         )
 
-        val view =
+        val textureView =
             findViewById(
-                R.id.carPlayerView
-            ) as PlayerView
+                R.id.carVideoTexture
+            ) as? TextureView
 
-        playerView = view
-
-        CarVideoPlayerHolder.setCarPlayerView(
-            view
-        )
-
-        view.post {
-            CarVideoPlayerHolder.setCarPlayerView(
-                view
+        if (textureView == null) {
+            Log.e(
+                TAG,
+                "carVideoTexture missing after setContentView"
             )
+        } else {
+            carTextureView = textureView
+            logHostVersusPlayerSurface(textureView)
         }
 
         try {
@@ -78,6 +127,15 @@ class CarVideoActivity : CarActivity() {
                 exception
             )
         }
+
+        attachPlayerDiagnostics()
+        bindProjectionSurface()
+        CarMediaService.playProjectionChannel()
+        installChannelMenu()
+
+        handler.post(bindProjectionSurfaceRunnable)
+        handler.removeCallbacks(delayedStart)
+        handler.postDelayed(delayedStart, 400L)
     }
 
     override fun onStart() {
@@ -85,11 +143,8 @@ class CarVideoActivity : CarActivity() {
 
         Log.d(TAG, "CAR VIDEO ACTIVITY STARTED")
 
-        playerView?.let { view ->
-            CarVideoPlayerHolder.setCarPlayerView(
-                view
-            )
-        }
+        bindProjectionSurface()
+        CarMediaService.playProjectionChannel()
     }
 
     override fun onResume() {
@@ -97,11 +152,11 @@ class CarVideoActivity : CarActivity() {
 
         Log.d(TAG, "CAR VIDEO ACTIVITY RESUMED")
 
-        playerView?.let { view ->
-            CarVideoPlayerHolder.setCarPlayerView(
-                view
-            )
-        }
+        bindProjectionSurface()
+        CarMediaService.playProjectionChannel()
+        CarVideoPlayerHolder.logPlayback(
+            "resumed"
+        )
     }
 
     override fun onPause() {
@@ -110,17 +165,226 @@ class CarVideoActivity : CarActivity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        Log.d(TAG, "CAR VIDEO ACTIVITY STOPPED")
+
+        super.onStop()
+    }
+
     override fun onDestroy() {
         Log.d(TAG, "CAR VIDEO ACTIVITY DESTROYED")
 
-        playerView?.let { view ->
-            CarVideoPlayerHolder.clearCarPlayerView(
-                view
+        handler.removeCallbacksAndMessages(
+            null
+        )
+
+        playerListener?.let { listener ->
+            CarVideoPlayerHolder.getPlayer()
+                ?.removeListener(
+                    listener
+                )
+        }
+
+        playerListener = null
+
+        carTextureView?.let { textureView ->
+            CarVideoPlayerHolder.clearCarTextureView(
+                textureView
             )
         }
 
-        playerView = null
+        carTextureView = null
 
         super.onDestroy()
+    }
+
+    private fun bindProjectionSurface() {
+
+        val textureView =
+            carTextureView
+                ?: findViewById(
+                    R.id.carVideoTexture
+                ) as? TextureView
+                ?: return
+
+        carTextureView = textureView
+
+        logHostVersusPlayerSurface(textureView)
+        CarVideoPlayerHolder.setCarTextureView(
+            textureView
+        )
+    }
+
+    /**
+     * Host DrawingSpec SurfaceTexture is the CarActivity window.
+     * TextureView.surfaceTexture is ExoPlayer's video output; those
+     * pixels are composited into the same window the host captures.
+     * They are not the same Surface object as a PlayerView SurfaceView.
+     */
+    private fun logHostVersusPlayerSurface(
+        textureView: TextureView
+    ) {
+
+        val content =
+            findViewById(
+                android.R.id.content
+            ) as? View
+
+        Log.d(
+            TAG,
+            "PROJECTION SURFACES " +
+                "hostWindow=" +
+                "${content?.width}x${content?.height} " +
+                "textureView=${textureView.width}x${textureView.height} " +
+                "available=${textureView.isAvailable} " +
+                "videoSurface=${textureView.surfaceTexture} " +
+                "sameAsHostDrawingSpec=false " +
+                "(host captures this window; TextureView draws into it)"
+        )
+    }
+
+    private fun attachPlayerDiagnostics() {
+
+        val listener =
+
+            object : Player.Listener {
+
+                override fun onPlaybackStateChanged(
+                    playbackState: Int
+                ) {
+
+                    CarVideoPlayerHolder.logPlayback(
+                        "state-$playbackState"
+                    )
+                }
+
+                override fun onVideoSizeChanged(
+                    videoSize: androidx.media3.common.VideoSize
+                ) {
+
+                    Log.d(
+                        TAG,
+                        "videoSize ${videoSize.width}x${videoSize.height}"
+                    )
+
+                    CarVideoPlayerHolder.logPlayback(
+                        "video-size"
+                    )
+                }
+
+                override fun onPlayerError(
+                    error: androidx.media3.common.PlaybackException
+                ) {
+
+                    Log.e(
+                        TAG,
+                        "CAR VIDEO player error: ${error.errorCodeName} ${error.message}",
+                        error
+                    )
+                }
+            }
+
+        playerListener =
+            listener
+
+        CarVideoPlayerHolder.getPlayer()
+            ?.addListener(
+                listener
+            )
+    }
+
+    private fun installChannelMenu() {
+
+        val channels =
+            CarMediaService.projectionChannels()
+
+        if (channels.isEmpty()) {
+
+            Log.d(
+                TAG,
+                "Projection channel menu empty"
+            )
+
+            return
+        }
+
+        try {
+
+            val adapter =
+                IptvChannelMenuAdapter(
+                    channels
+                )
+
+            channelMenuAdapter =
+                adapter
+
+            getCarUiController()
+                .menuController
+                .setRootMenuAdapter(
+                    adapter
+                )
+
+            getCarUiController()
+                .menuController
+                .showMenuButton()
+
+            Log.d(
+                TAG,
+                "Projection channel menu count=${channels.size}"
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "Unable to install channel menu",
+                exception
+            )
+        }
+    }
+
+    private class IptvChannelMenuAdapter(
+        private val channels:
+            List<Pair<String, String>>
+    ) : MenuAdapter() {
+
+        override fun getMenuItemCount(): Int {
+
+            return channels.size
+        }
+
+        override fun getMenuItem(
+            position: Int
+        ): MenuItem {
+
+            val channel =
+                channels[position]
+
+            return MenuItem.Builder()
+                .setTitle(
+                    channel.second
+                )
+                .setType(
+                    MenuItem.Type.ITEM
+                )
+                .build()
+        }
+
+        override fun onMenuItemClicked(
+            position: Int
+        ) {
+
+            val channel =
+                channels[position]
+
+            Log.d(
+                TAG,
+                "Projection channel selected ${channel.second}"
+            )
+
+            CarMediaService.playProjectionChannel(
+                channel.first
+            )
+        }
     }
 }
