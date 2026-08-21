@@ -26,27 +26,21 @@ class CarMirrorService : CarAppService() {
             .ALLOW_ALL_HOSTS_VALIDATOR
     }
 
-    override fun onCreateSession(): Session {
-        return CarMirrorSession()
-    }
+    override fun onCreateSession(): Session =
+        CarMirrorSession()
 
     override fun onCreateSession(
         sessionInfo: SessionInfo
-    ): Session {
-        return CarMirrorSession()
-    }
+    ): Session =
+        CarMirrorSession()
 }
 
 private class CarMirrorSession : Session() {
 
     override fun onCreateScreen(
         intent: Intent
-    ): Screen {
-
-        return CarMirrorScreen(
-            carContext
-        )
-    }
+    ): Screen =
+        CarMirrorScreen(carContext)
 }
 
 private class CarMirrorScreen(
@@ -54,34 +48,26 @@ private class CarMirrorScreen(
 ) : Screen(carContext), SurfaceCallback {
 
     companion object {
-        private const val TAG =
-            "KaradagCarMirror"
+        private const val TAG = "KaradagCarMirror"
     }
 
     private val appManager: AppManager
-        get() =
-            carContext.getCarService(
-                AppManager::class.java
-            )
+        get() = carContext.getCarService(
+            AppManager::class.java
+        )
 
     init {
         appManager.setSurfaceCallback(this)
     }
 
     override fun onGetTemplate(): Template {
-
         return NavigationTemplate.Builder()
-
             .setActionStrip(
                 ActionStrip.Builder()
-
                     .addAction(
                         Action.Builder()
-                            .setTitle(
-                                "Karadag Car TV"
-                            )
+                            .setTitle("Karadag Car TV")
                             .setOnClickListener {
-
                                 Log.d(
                                     TAG,
                                     "Karadag Car TV clicked"
@@ -89,125 +75,62 @@ private class CarMirrorScreen(
                             }
                             .build()
                     )
-
                     .build()
             )
-
             .setMapActionStrip(
                 ActionStrip.Builder()
-
                     .addAction(
-                        Action.Builder(
-                            Action.PAN
-                        ).build()
+                        Action.Builder(Action.PAN)
+                            .build()
                     )
-
                     .build()
             )
-
             .build()
     }
 
     override fun onSurfaceAvailable(
         surfaceContainer: SurfaceContainer
     ) {
+        Log.d(TAG, "======================================")
+        Log.d(TAG, "ANDROID AUTO SURFACE AVAILABLE")
+        Log.d(TAG, "width=${surfaceContainer.width}")
+        Log.d(TAG, "height=${surfaceContainer.height}")
+        Log.d(TAG, "dpi=${surfaceContainer.dpi}")
+        Log.d(TAG, "surface=${surfaceContainer.surface}")
+        Log.d(TAG, "======================================")
 
-        Log.d(
-            TAG,
-            "======================================"
-        )
-
-        Log.d(
-            TAG,
-            "ANDROID AUTO SURFACE AVAILABLE"
-        )
-
-        Log.d(
-            TAG,
-            "width=${surfaceContainer.width}"
-        )
-
-        Log.d(
-            TAG,
-            "height=${surfaceContainer.height}"
-        )
-
-        Log.d(
-            TAG,
-            "dpi=${surfaceContainer.dpi}"
-        )
-
-        Log.d(
-            TAG,
-            "surface=${surfaceContainer.surface}"
-        )
-
-        Log.d(
-            TAG,
-            "======================================"
-        )
-
-        MirrorSurfaceHolder.setSurface(
-            surfaceContainer
-        )
-
-        MirrorProjectionController.ensureProjection(
-            carContext
-        )
+        MirrorSurfaceHolder.setSurface(surfaceContainer)
+        MirrorProjectionController.ensureProjection(carContext)
     }
 
     override fun onSurfaceDestroyed(
         surfaceContainer: SurfaceContainer
     ) {
-
-        Log.d(
-            TAG,
-            "ANDROID AUTO SURFACE DESTROYED"
-        )
-
+        Log.d(TAG, "ANDROID AUTO SURFACE DESTROYED")
         MirrorSurfaceHolder.clearSurface()
-
-        MirrorProjectionController.surfaceLost(
-            carContext
-        )
+        MirrorProjectionController.surfaceLost(carContext)
     }
 
     override fun onVisibleAreaChanged(
         visibleArea: Rect
     ) {
-
-        Log.d(
-            TAG,
-            "Visible area: $visibleArea"
-        )
+        Log.d(TAG, "Visible area: $visibleArea")
     }
 
     override fun onStableAreaChanged(
         stableArea: Rect
     ) {
-
-        Log.d(
-            TAG,
-            "Stable area: $stableArea"
-        )
+        Log.d(TAG, "Stable area: $stableArea")
     }
 
-    override fun onClick(
-        x: Float,
-        y: Float
-    ) {
-
-        Log.d(
-            TAG,
-            "Surface click x=$x y=$y"
-        )
+    override fun onClick(x: Float, y: Float) {
+        Log.d(TAG, "Surface click x=$x y=$y")
     }
 
     override fun onScroll(
         distanceX: Float,
         distanceY: Float
     ) {
-
         Log.d(
             TAG,
             "Surface scroll dx=$distanceX dy=$distanceY"
@@ -218,7 +141,6 @@ private class CarMirrorScreen(
         velocityX: Float,
         velocityY: Float
     ) {
-
         Log.d(
             TAG,
             "Surface fling vx=$velocityX vy=$velocityY"
@@ -230,11 +152,7 @@ private class CarMirrorScreen(
         focusY: Float,
         scale: Float
     ) {
-
-        Log.d(
-            TAG,
-            "Surface scale=$scale"
-        )
+        Log.d(TAG, "Surface scale=$scale")
     }
 }
 
@@ -248,9 +166,7 @@ object MirrorSurfaceHolder {
     fun setSurface(
         surfaceContainer: SurfaceContainer
     ) {
-
-        currentSurfaceContainer =
-            surfaceContainer
+        currentSurfaceContainer = surfaceContainer
 
         Log.d(
             "MirrorSurfaceHolder",
@@ -268,11 +184,10 @@ object MirrorSurfaceHolder {
         )
     }
 
-    fun getSurfaceContainer():
-            SurfaceContainer? = currentSurfaceContainer
+    fun getSurfaceContainer(): SurfaceContainer? =
+        currentSurfaceContainer
 
-    fun getSurface():
-            android.view.Surface? =
+    fun getSurface(): android.view.Surface? =
         currentSurfaceContainer?.surface
 
     fun getWidth(): Int =
@@ -296,10 +211,53 @@ object MirrorProjectionController {
     @Volatile
     private var projectionRequestInFlight = false
 
+    @Volatile
+    private var pendingResultCode: Int? = null
+
+    @Volatile
+    private var pendingResultData: Intent? = null
+
+    @Synchronized
+    fun setProjectionConsent(
+        resultCode: Int,
+        resultData: Intent
+    ) {
+        pendingResultCode = resultCode
+        pendingResultData = resultData
+
+        Log.d(
+            TAG,
+            "MediaProjection consent stored in-process"
+        )
+    }
+
+    @Synchronized
+    fun takeProjectionConsent(): Pair<Int, Intent>? {
+        val resultCode = pendingResultCode
+        val resultData = pendingResultData
+
+        pendingResultCode = null
+        pendingResultData = null
+
+        return if (
+            resultCode != null &&
+            resultData != null
+        ) {
+            Pair(resultCode, resultData)
+        } else {
+            null
+        }
+    }
+
+    @Synchronized
+    fun clearProjectionConsent() {
+        pendingResultCode = null
+        pendingResultData = null
+    }
+
     fun ensureProjection(
         context: CarContext
     ) {
-
         if (projectionActive) {
             refresh(context)
             return
@@ -339,6 +297,11 @@ object MirrorProjectionController {
     fun markProjectionActive() {
         projectionRequestInFlight = false
         projectionActive = true
+
+        Log.d(
+            TAG,
+            "MediaProjection marked active"
+        )
     }
 
     fun markProjectionInactive() {
@@ -349,20 +312,17 @@ object MirrorProjectionController {
     fun refresh(
         context: CarContext
     ) {
-
         Log.d(
             TAG,
             "Surface ready - requesting projection refresh"
         )
 
-        val intent =
-            Intent(
-                context,
-                MirrorProjectionService::class.java
-            ).apply {
-                action =
-                    MirrorProjectionService.ACTION_REFRESH
-            }
+        val intent = Intent(
+            context,
+            MirrorProjectionService::class.java
+        ).apply {
+            action = MirrorProjectionService.ACTION_REFRESH
+        }
 
         try {
             context.startService(intent)
@@ -378,20 +338,18 @@ object MirrorProjectionController {
     fun surfaceLost(
         context: CarContext
     ) {
-
         Log.d(
             TAG,
             "Android Auto surface lost"
         )
 
-        val intent =
-            Intent(
-                context,
-                MirrorProjectionService::class.java
-            ).apply {
-                action =
-                    MirrorProjectionService.ACTION_SURFACE_LOST
-            }
+        val intent = Intent(
+            context,
+            MirrorProjectionService::class.java
+        ).apply {
+            action =
+                MirrorProjectionService.ACTION_SURFACE_LOST
+        }
 
         try {
             context.startService(intent)
