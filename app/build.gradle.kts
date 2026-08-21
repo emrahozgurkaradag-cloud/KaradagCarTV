@@ -52,11 +52,32 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
 
-    // Android Media3 / ExoPlayer
+    // ============================================================
+    // ANDROIDX CAR APP
+    // Android Auto / projected head-unit desteği
+    // ============================================================
+
+    implementation("androidx.car.app:app:1.7.0")
+    implementation("androidx.car.app:app-projected:1.7.0")
+
+    // ============================================================
+    // ANDROID MEDIA3 / EXOPLAYER
+    // ============================================================
+
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")
+    implementation("androidx.media3:media3-session:1.10.1")
+
+    // ============================================================
+    // MATERIAL
+    // ============================================================
+
     implementation(libs.material)
+
+    // ============================================================
+    // TEST
+    // ============================================================
 
     testImplementation(libs.junit)
 

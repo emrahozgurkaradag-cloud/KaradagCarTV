@@ -1,8 +1,41 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- ========================================================= -->
+    <!-- INTERNET                                                   -->
+    <!-- ========================================================= -->
+
+    <uses-permission
+        android:name="android.permission.INTERNET" />
+
+    <!-- ========================================================= -->
+    <!-- MEDIA3 / BACKGROUND PLAYBACK                               -->
+    <!-- ========================================================= -->
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- ========================================================= -->
+    <!-- MEDIA PROJECTION                                           -->
+    <!-- ========================================================= -->
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <!-- ========================================================= -->
+    <!-- ANDROID AUTO CAR APP                                       -->
+    <!-- ========================================================= -->
+
+    <uses-permission
+        android:name="androidx.car.app.ACCESS_SURFACE" />
+
+    <uses-permission
+        android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
 
     <application
         android:allowBackup="true"
@@ -15,6 +48,18 @@
         android:theme="@style/Theme.KaradagCarTV"
         android:usesCleartextTraffic="true">
 
+        <!-- ===================================================== -->
+        <!-- ANDROID AUTO MEDIA                                     -->
+        <!-- ===================================================== -->
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <!-- ===================================================== -->
+        <!-- NORMAL APP LAUNCHER                                    -->
+        <!-- ===================================================== -->
+
         <activity
             android:name=".RegistrationActivity"
             android:exported="true"
@@ -25,11 +70,23 @@
             android:windowSoftInputMode="adjustResize">
 
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+
+                <action
+                    android:name="android.intent.action.MAIN" />
+
+                <category
+                    android:name="android.intent.category.LAUNCHER" />
+
+                <category
+                    android:name="android.intent.category.CAR_LAUNCHER" />
+
             </intent-filter>
 
         </activity>
+
+        <!-- ===================================================== -->
+        <!-- MAIN ACTIVITY                                          -->
+        <!-- ===================================================== -->
 
         <activity
             android:name=".MainActivity"
@@ -40,12 +97,20 @@
             android:theme="@style/Theme.KaradagCarTV"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- ===================================================== -->
+        <!-- PLAYER ACTIVITY                                        -->
+        <!-- ===================================================== -->
+
         <activity
             android:name=".PlayerActivity"
             android:exported="false"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- ===================================================== -->
+        <!-- YOUTUBE ACTIVITY                                       -->
+        <!-- ===================================================== -->
 
         <activity
             android:name=".YouTubeActivity"
@@ -54,12 +119,69 @@
             android:configChanges="orientation|screenSize"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- ===================================================== -->
+        <!-- IPTV / LIVE TV                                         -->
+        <!-- ===================================================== -->
+
         <activity
             android:name=".IptvActivity"
             android:exported="false"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- ===================================================== -->
+        <!-- ANDROID AUTO MEDIA SERVICE                              -->
+        <!-- ===================================================== -->
+
+        <service
+            android:name=".CarMediaService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+
+            <intent-filter>
+
+                <action
+                    android:name="androidx.media3.session.MediaLibraryService" />
+
+                <action
+                    android:name="android.media.browse.MediaBrowserService" />
+
+                <action
+                    android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+
+            </intent-filter>
+
+        </service>
+
+        <!-- ===================================================== -->
+        <!-- ANDROID AUTO CAR APP SERVICE                            -->
+        <!-- ===================================================== -->
+
+        <service
+            android:name=".CarMirrorService"
+            android:exported="true">
+
+            <intent-filter>
+
+                <action
+                    android:name="androidx.car.app.CarAppService" />
+
+                <category
+                    android:name="androidx.car.app.category.NAVIGATION" />
+
+            </intent-filter>
+
+        </service>
+
+        <!-- ===================================================== -->
+        <!-- MEDIA PROJECTION SERVICE                                -->
+        <!-- ===================================================== -->
+
+        <service
+            android:name=".MirrorProjectionService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
     </application>
 

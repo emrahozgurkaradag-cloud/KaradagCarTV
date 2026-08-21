@@ -44,6 +44,7 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.media3.common.util.UnstableApi
 
 private data class CarContent(
     val id: Int,
@@ -68,6 +69,10 @@ private class ApiException(
     override val message: String
 ) : Exception(message)
 
+@androidx.annotation.OptIn(
+    markerClass = [androidx.media3.common.util.UnstableApi::class]
+)
+@UnstableApi
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -92,6 +97,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun CarTvApp() {
         val context = LocalContext.current
+
         var loading by remember { mutableStateOf(true) }
         var refreshing by remember { mutableStateOf(false) }
         var errorMessage by remember { mutableStateOf("") }
@@ -121,6 +127,7 @@ class MainActivity : ComponentActivity() {
                     val license = licenseResponse.optJSONObject("license")
                     val customer = licenseResponse.optJSONObject("customer")
                     val device = licenseResponse.optJSONObject("device")
+
                     val loadedFeatures = featuresFromJson(
                         license?.optJSONObject("features")
                     )
@@ -152,12 +159,15 @@ class MainActivity : ComponentActivity() {
                         loading = false
                         refreshing = false
                     }
+
                 } catch (exception: ApiException) {
+
                     runOnUiThread {
                         loading = false
                         refreshing = false
 
-                        if (exception.code in setOf(
+                        if (
+                            exception.code in setOf(
                                 "DEVICE_NOT_FOUND",
                                 "LICENSE_NOT_FOUND",
                                 "LICENSE_EXPIRED",
@@ -165,21 +175,31 @@ class MainActivity : ComponentActivity() {
                             )
                         ) {
                             AppSession.clearLicense(context)
-                            startActivity(Intent(this, RegistrationActivity::class.java))
+                            startActivity(
+                                Intent(
+                                    this,
+                                    RegistrationActivity::class.java
+                                )
+                            )
                             finish()
                         } else {
                             errorMessage = exception.message
+
                             if (contents.isEmpty()) {
                                 contents = loadContentsCache(context)
                             }
                         }
                     }
+
                 } catch (exception: Exception) {
+
                     runOnUiThread {
                         loading = false
                         refreshing = false
+
                         errorMessage = exception.message
                             ?: "Sunucuya bağlanırken hata oluştu."
+
                         if (contents.isEmpty()) {
                             contents = loadContentsCache(context)
                         }
@@ -193,106 +213,221 @@ class MainActivity : ComponentActivity() {
         }
 
         when {
-            loading && contents.isEmpty() -> LoadingScreen()
-            selectedType != null -> ContentListScreen(
-                title = if (selectedType == "radio") "Canlı Radyo" else "Videolar",
-                contents = contents.filter { it.type == selectedType },
-                onBack = { selectedType = null }
-            )
-            else -> HomeScreen(
-                customerName = customerName,
-                deviceName = deviceName,
-                contents = contents,
-                features = features,
-                refreshing = refreshing,
-                lastUpdate = lastUpdate,
-                errorMessage = errorMessage,
-                onRefresh = { refresh() },
-                onCategoryClick = { selectedType = it }
-            )
+            loading && contents.isEmpty() -> {
+                LoadingScreen()
+            }
+
+            selectedType != null -> {
+                ContentListScreen(
+                    title = "Canlı Radyo",
+                    contents = contents.filter {
+                        it.type == "radio"
+                    },
+                    onBack = {
+                        selectedType = null
+                    }
+                )
+            }
+
+            else -> {
+                HomeScreen(
+                    customerName = customerName,
+                    deviceName = deviceName,
+                    contents = contents,
+                    features = features,
+                    refreshing = refreshing,
+                    lastUpdate = lastUpdate,
+                    errorMessage = errorMessage,
+                    onRefresh = {
+                        refresh()
+                    },
+                    onCategoryClick = {
+                        selectedType = it
+                    }
+                )
+            }
         }
     }
 
-    private fun postJson(path: String, body: JSONObject): JSONObject {
-        val connection = URL(AppSession.API_BASE_URL + path)
-            .openConnection() as HttpURLConnection
+    private fun postJson(
+        path: String,
+        body: JSONObject
+    ): JSONObject {
+
+        val connection = URL(
+            AppSession.API_BASE_URL + path
+        ).openConnection() as HttpURLConnection
 
         try {
             connection.requestMethod = "POST"
             connection.connectTimeout = 10_000
             connection.readTimeout = 10_000
             connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.setRequestProperty("Accept", "application/json")
+
+            connection.setRequestProperty(
+                "Content-Type",
+                "application/json"
+            )
+
+            connection.setRequestProperty(
+                "Accept",
+                "application/json"
+            )
 
             connection.outputStream.use { output ->
-                output.write(body.toString().toByteArray(Charsets.UTF_8))
+                output.write(
+                    body.toString().toByteArray(
+                        Charsets.UTF_8
+                    )
+                )
             }
 
             val code = connection.responseCode
-            val text = if (code in 200..299) {
-                connection.inputStream.bufferedReader().use { it.readText() }
-            } else {
-                connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            }
 
-            val json = JSONObject(text.ifBlank { "{}" })
+            val text =
+                if (code in 200..299) {
+                    connection.inputStream
+                        .bufferedReader()
+                        .use { it.readText() }
+                } else {
+                    connection.errorStream
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                        .orEmpty()
+                }
+
+            val json = JSONObject(
+                text.ifBlank {
+                    "{}"
+                }
+            )
+
             if (code !in 200..299) {
                 throw ApiException(
-                    json.optString("code", "API_ERROR"),
-                    json.optString("message", "API hatası: $code")
+                    json.optString(
+                        "code",
+                        "API_ERROR"
+                    ),
+                    json.optString(
+                        "message",
+                        "API hatası: $code"
+                    )
                 )
             }
 
             return json
+
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun parseContents(array: JSONArray?): List<CarContent> {
-        if (array == null) return emptyList()
+    private fun parseContents(
+        array: JSONArray?
+    ): List<CarContent> {
+
+        if (array == null) {
+            return emptyList()
+        }
 
         return buildList {
+
             for (index in 0 until array.length()) {
+
                 val item = array.getJSONObject(index)
+
                 add(
                     CarContent(
                         id = item.optInt("id"),
                         title = item.optString("title"),
                         type = item.optString("type"),
                         streamUrl = item.optString("stream_url"),
-                        description = item.optString("description").ifBlank { null }
+                        description = item
+                            .optString("description")
+                            .ifBlank {
+                                null
+                            }
                     )
                 )
             }
         }
     }
 
-    private fun featuresFromJson(json: JSONObject?): LicenseFeatures =
-        LicenseFeatures(
-            liveTv = json?.optBoolean("live_tv", false) == true,
-            radio = json?.optBoolean("radio", false) == true,
-            video = json?.optBoolean("video", false) == true,
-            iptv = json?.optBoolean("iptv", false) == true,
-            youtube = json?.optBoolean("youtube", false) == true,
-            youtubeKids = json?.optBoolean("youtube_kids", false) == true,
-            googleSearch = json?.optBoolean("google_search", false) == true
-        )
+    private fun featuresFromJson(
+        json: JSONObject?
+    ): LicenseFeatures {
 
-    private fun updateIptvCache(context: android.content.Context) {
+        return LicenseFeatures(
+            liveTv = json?.optBoolean(
+                "live_tv",
+                false
+            ) == true,
+
+            radio = json?.optBoolean(
+                "radio",
+                false
+            ) == true,
+
+            video = json?.optBoolean(
+                "video",
+                false
+            ) == true,
+
+            iptv = json?.optBoolean(
+                "iptv",
+                false
+            ) == true,
+
+            youtube = json?.optBoolean(
+                "youtube",
+                false
+            ) == true,
+
+            youtubeKids = json?.optBoolean(
+                "youtube_kids",
+                false
+            ) == true,
+
+            googleSearch = json?.optBoolean(
+                "google_search",
+                false
+            ) == true
+        )
+    }
+
+    private fun updateIptvCache(
+        context: android.content.Context
+    ) {
+
         val response = postJson(
             "/api/iptv",
             JSONObject().apply {
-                put("device_uuid", AppSession.deviceUuid(context))
-                put("license_key", AppSession.licenseKey(context))
+                put(
+                    "device_uuid",
+                    AppSession.deviceUuid(context)
+                )
+
+                put(
+                    "license_key",
+                    AppSession.licenseKey(context)
+                )
             }
         )
 
-        val channels = response.optJSONArray("channels") ?: return
-        AppSession.prefs(context).edit()
-            .putString("iptv_channels", channels.toString())
-            .putString("iptv_last_update", nowText())
+        val channels =
+            response.optJSONArray("channels")
+                ?: return
+
+        AppSession.prefs(context)
+            .edit()
+            .putString(
+                "iptv_channels",
+                channels.toString()
+            )
+            .putString(
+                "iptv_last_update",
+                nowText()
+            )
             .apply()
     }
 
@@ -300,45 +435,119 @@ class MainActivity : ComponentActivity() {
         context: android.content.Context,
         contents: List<CarContent>
     ): String {
+
         val array = JSONArray()
+
         contents.forEach { content ->
-            array.put(JSONObject().apply {
-                put("id", content.id)
-                put("title", content.title)
-                put("type", content.type)
-                put("stream_url", content.streamUrl)
-                put("description", content.description ?: "")
-            })
+
+            array.put(
+                JSONObject().apply {
+
+                    put(
+                        "id",
+                        content.id
+                    )
+
+                    put(
+                        "title",
+                        content.title
+                    )
+
+                    put(
+                        "type",
+                        content.type
+                    )
+
+                    put(
+                        "stream_url",
+                        content.streamUrl
+                    )
+
+                    put(
+                        "description",
+                        content.description ?: ""
+                    )
+                }
+            )
         }
 
         val time = nowText()
-        AppSession.prefs(context).edit()
-            .putString("contents", array.toString())
-            .putString("last_update", time)
+
+        AppSession.prefs(context)
+            .edit()
+            .putString(
+                "contents",
+                array.toString()
+            )
+            .putString(
+                "last_update",
+                time
+            )
             .apply()
+
         return time
     }
 
-    private fun loadContentsCache(context: android.content.Context): List<CarContent> {
-        val raw = AppSession.prefs(context).getString("contents", null) ?: return emptyList()
-        return runCatching { parseContents(JSONArray(raw)) }.getOrDefault(emptyList())
+    private fun loadContentsCache(
+        context: android.content.Context
+    ): List<CarContent> {
+
+        val raw = AppSession.prefs(context)
+            .getString(
+                "contents",
+                null
+            )
+            ?: return emptyList()
+
+        return runCatching {
+            parseContents(
+                JSONArray(raw)
+            )
+        }.getOrDefault(
+            emptyList()
+        )
     }
 
     private fun nowText(): String =
-        SimpleDateFormat("dd.MM.yyyy HH:mm", Locale("tr", "TR")).format(Date())
+        SimpleDateFormat(
+            "dd.MM.yyyy HH:mm",
+            Locale("tr", "TR")
+        ).format(Date())
 
     @Composable
     private fun LoadingScreen() {
+
         Column(
-            Modifier.fillMaxSize().padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+
+            verticalArrangement =
+                Arrangement.Center
         ) {
-            Text("KARADAG CAR TV", style = MaterialTheme.typography.headlineLarge)
-            Spacer(Modifier.height(24.dp))
+
+            Text(
+                "KARADAG CAR TV",
+                style =
+                    MaterialTheme.typography.headlineLarge
+            )
+
+            Spacer(
+                Modifier.height(24.dp)
+            )
+
             CircularProgressIndicator()
-            Spacer(Modifier.height(16.dp))
-            Text("Lisans ve içerikler kontrol ediliyor...")
+
+            Spacer(
+                Modifier.height(16.dp)
+            )
+
+            Text(
+                "Lisans ve içerikler kontrol ediliyor..."
+            )
         }
     }
 
@@ -354,74 +563,239 @@ class MainActivity : ComponentActivity() {
         onRefresh: () -> Unit,
         onCategoryClick: (String) -> Unit
     ) {
-        val context = LocalContext.current
-        val iptvCount = runCatching {
-            val raw = AppSession.prefs(context).getString("iptv_channels", null)
-            if (raw.isNullOrBlank()) 0 else JSONArray(raw).length()
-        }.getOrDefault(0)
 
-        val menu = buildList {
-            if (features.iptv) add("📺 Canlı TV" to "${iptvCount} kanal")
-            if (features.radio) add("📻 Canlı Radyo" to "${contents.count { it.type == "radio" }} içerik")
-            if (features.video) add("🎬 Videolar" to "${contents.count { it.type == "video" }} içerik")
-            if (features.youtube) add("▶ YouTube" to "YouTube")
-            if (features.youtubeKids) add("🧒 YouTube Kids" to "Çocuk")
-            if (features.googleSearch) add("🔎 Google Arama" to "Web")
-        }
+        val context =
+            LocalContext.current
 
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            Text("KARADAG CAR TV", style = MaterialTheme.typography.headlineLarge)
-            Spacer(Modifier.height(4.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(customerName)
-                Text(deviceName)
+        val iptvCount =
+            runCatching {
+
+                val raw =
+                    AppSession.prefs(context)
+                        .getString(
+                            "iptv_channels",
+                            null
+                        )
+
+                if (raw.isNullOrBlank()) {
+                    0
+                } else {
+                    JSONArray(raw).length()
+                }
+
+            }.getOrDefault(0)
+
+        val menu =
+            buildList {
+
+                if (features.iptv) {
+                    add(
+                        "📺 Canlı TV" to
+                                "${iptvCount} kanal"
+                    )
+                }
+
+                if (features.radio) {
+                    add(
+                        "📻 Canlı Radyo" to
+                                "${contents.count {
+                                    it.type == "radio"
+                                }} içerik"
+                    )
+                }
+
+                if (features.youtube) {
+                    add(
+                        "▶ YouTube" to
+                                "YouTube"
+                    )
+                }
+
+                if (features.googleSearch) {
+                    add(
+                        "🔎 Google Arama" to
+                                "Web"
+                    )
+                }
             }
-            Spacer(Modifier.height(12.dp))
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+        ) {
+
+            Text(
+                "KARADAG CAR TV",
+                style =
+                    MaterialTheme.typography.headlineLarge
+            )
+
+            Spacer(
+                Modifier.height(4.dp)
+            )
+
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement =
+                    Arrangement.SpaceBetween
             ) {
+
+                Text(customerName)
+
+                Text(deviceName)
+            }
+
+            Spacer(
+                Modifier.height(12.dp)
+            )
+
+            Row(
+                Modifier.fillMaxWidth(),
+
+                horizontalArrangement =
+                    Arrangement.SpaceBetween,
+
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
                 Text(
-                    if (lastUpdate.isBlank()) "Henüz güncellenmedi" else "Son güncelleme: $lastUpdate",
-                    style = MaterialTheme.typography.bodySmall
+                    if (lastUpdate.isBlank()) {
+                        "Henüz güncellenmedi"
+                    } else {
+                        "Son güncelleme: $lastUpdate"
+                    },
+
+                    style =
+                        MaterialTheme.typography.bodySmall
                 )
-                Button(enabled = !refreshing, onClick = onRefresh) {
-                    if (refreshing) CircularProgressIndicator(Modifier.height(18.dp))
-                    else Text("🔄 Güncelle")
+
+                Button(
+                    enabled = !refreshing,
+                    onClick = onRefresh
+                ) {
+
+                    if (refreshing) {
+
+                        CircularProgressIndicator(
+                            Modifier.height(18.dp)
+                        )
+
+                    } else {
+
+                        Text("🔄 Güncelle")
+                    }
                 }
             }
 
             if (errorMessage.isNotBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(errorMessage, color = MaterialTheme.colorScheme.error)
+
+                Spacer(
+                    Modifier.height(8.dp)
+                )
+
+                Text(
+                    errorMessage,
+                    color =
+                        MaterialTheme.colorScheme.error
+                )
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(
+                Modifier.height(20.dp)
+            )
+
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(230.dp),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                columns =
+                    GridCells.Adaptive(230.dp),
+
+                modifier =
+                    Modifier.fillMaxSize(),
+
+                contentPadding =
+                    PaddingValues(
+                        bottom = 20.dp
+                    ),
+
+                horizontalArrangement =
+                    Arrangement.spacedBy(14.dp),
+
+                verticalArrangement =
+                    Arrangement.spacedBy(14.dp)
             ) {
+
                 items(menu) { item ->
+
                     Card(
-                        Modifier.fillMaxWidth().clickable {
-                            when (item.first) {
-                                "📺 Canlı TV" -> context.startActivity(Intent(context, IptvActivity::class.java))
-                                "📻 Canlı Radyo" -> onCategoryClick("radio")
-                                "🎬 Videolar" -> onCategoryClick("video")
-                                "▶ YouTube" -> context.startActivity(Intent(context, YouTubeActivity::class.java))
-                                "🧒 YouTube Kids" -> context.startActivity(Intent(context, YouTubeActivity::class.java).putExtra("youtube_mode", "kids"))
-                                "🔎 Google Arama" -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/")))
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+
+                                when (item.first)
+                                {
+                                        "📺 Canlı TV" -> {
+                                            context.startActivity(
+                                                Intent(
+                                                    context,
+                                                    IptvActivity::class.java
+                                                )
+                                            )
+                                        }
+
+                                    "📻 Canlı Radyo" -> {
+
+                                        onCategoryClick(
+                                            "radio"
+                                        )
+                                    }
+
+                                    "▶ YouTube" -> {
+
+                                        context.startActivity(
+                                            Intent(
+                                                context,
+                                                YouTubeActivity::class.java
+                                            )
+                                        )
+                                    }
+
+                                    "🔎 Google Arama" -> {
+
+                                        context.startActivity(
+                                            Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse(
+                                                    "https://www.google.com/"
+                                                )
+                                            )
+                                        )
+                                    }
+                                }
                             }
-                        }
                     ) {
-                        Column(Modifier.fillMaxWidth().padding(24.dp)) {
-                            Text(item.first, style = MaterialTheme.typography.titleLarge)
-                            Spacer(Modifier.height(6.dp))
-                            Text(item.second)
+
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp)
+                        ) {
+
+                            Text(
+                                item.first,
+                                style =
+                                    MaterialTheme
+                                        .typography
+                                        .titleLarge
+                            )
+
+                            Spacer(
+                                Modifier.height(6.dp)
+                            )
+
+                            Text(
+                                item.second
+                            )
                         }
                     }
                 }
@@ -435,41 +809,121 @@ class MainActivity : ComponentActivity() {
         contents: List<CarContent>,
         onBack: () -> Unit
     ) {
-        val context = LocalContext.current
-        Column(Modifier.fillMaxSize().padding(20.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = onBack) { Text("← Geri") }
-                Spacer(Modifier.weight(1f))
-                Text(title, style = MaterialTheme.typography.headlineMedium)
+
+        val context =
+            LocalContext.current
+
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(20.dp)
+        ) {
+
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment =
+                    Alignment.CenterVertically
+            ) {
+
+                Button(
+                    onClick = onBack
+                ) {
+                    Text("← Geri")
+                }
+
+                Spacer(
+                    Modifier.weight(1f)
+                )
+
+                Text(
+                    title,
+                    style =
+                        MaterialTheme
+                            .typography
+                            .headlineMedium
+                )
             }
-            Spacer(Modifier.height(16.dp))
+
+            Spacer(
+                Modifier.height(16.dp)
+            )
 
             if (contents.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Bu kategoride içerik bulunamadı.")
+
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment =
+                        Alignment.Center
+                ) {
+
+                    Text(
+                        "Bu kategoride içerik bulunamadı."
+                    )
                 }
+
             } else {
+
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+
+                    verticalArrangement =
+                        Arrangement.spacedBy(12.dp)
                 ) {
+
                     items(contents) { content ->
+
                         Card(
-                            Modifier.fillMaxWidth().clickable {
-                                context.startActivity(
-                                    Intent(context, PlayerActivity::class.java).apply {
-                                        putExtra(PlayerActivity.EXTRA_STREAM_URL, content.streamUrl)
-                                        putExtra(PlayerActivity.EXTRA_TITLE, content.title)
-                                        putExtra(PlayerActivity.EXTRA_MEDIA_TYPE, content.type)
-                                    }
-                                )
-                            }
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+
+                                    context.startActivity(
+                                        Intent(
+                                            context,
+                                            PlayerActivity::class.java
+                                        ).apply {
+
+                                            putExtra(
+                                                PlayerActivity.EXTRA_STREAM_URL,
+                                                content.streamUrl
+                                            )
+
+                                            putExtra(
+                                                PlayerActivity.EXTRA_TITLE,
+                                                content.title
+                                            )
+
+                                            putExtra(
+                                                PlayerActivity.EXTRA_MEDIA_TYPE,
+                                                content.type
+                                            )
+                                        }
+                                    )
+                                }
                         ) {
-                            Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                                Text(content.title, style = MaterialTheme.typography.titleLarge)
+
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp)
+                            ) {
+
+                                Text(
+                                    content.title,
+                                    style =
+                                        MaterialTheme
+                                            .typography
+                                            .titleLarge
+                                )
+
                                 content.description?.let {
+
                                     if (it.isNotBlank()) {
-                                        Spacer(Modifier.height(6.dp))
+
+                                        Spacer(
+                                            Modifier.height(6.dp)
+                                        )
+
                                         Text(it)
                                     }
                                 }

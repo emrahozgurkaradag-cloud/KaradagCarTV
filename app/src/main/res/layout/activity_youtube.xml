@@ -1,11 +1,49 @@
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:orientation="vertical"
     android:background="#000000">
 
+    <!-- Uygulama üst barı -->
+    <LinearLayout
+        android:id="@+id/youtubeToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#151515"
+        android:elevation="4dp">
+
+        <TextView
+            android:id="@+id/youtubeBackButton"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:paddingStart="18dp"
+            android:paddingEnd="22dp"
+            android:text="‹  Geri"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:text="YouTube"
+            android:textColor="#FFFFFF"
+            android:textSize="19sp" />
+
+    </LinearLayout>
+
+    <!-- YouTube -->
     <WebView
         android:id="@+id/youtubeWebView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="0dp"
+        android:layout_weight="1" />
 
-</FrameLayout>
+</LinearLayout>

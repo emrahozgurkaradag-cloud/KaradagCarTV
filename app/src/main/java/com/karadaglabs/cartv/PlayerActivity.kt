@@ -18,6 +18,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
@@ -26,6 +27,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.ui.PlayerView
 
+@UnstableApi
 class PlayerActivity : ComponentActivity() {
 
     private var player: ExoPlayer? = null
@@ -196,7 +198,6 @@ class PlayerActivity : ComponentActivity() {
             )
 
         } else {
-
             initializePlayer()
         }
     }
@@ -275,16 +276,12 @@ class PlayerActivity : ComponentActivity() {
                     ?: return@setOnClickListener
 
             if (currentPlayer.isPlaying) {
-
                 currentPlayer.pause()
-
             } else {
-
                 currentPlayer.play()
             }
 
             updatePlayPauseIcon()
-
             showControls()
         }
 
@@ -360,7 +357,6 @@ class PlayerActivity : ComponentActivity() {
                 event.action ==
                 MotionEvent.ACTION_UP
             ) {
-
                 toggleControls()
             }
 
@@ -586,6 +582,7 @@ class PlayerActivity : ComponentActivity() {
                     )
 
                     exoPlayer.addListener(
+
                         object : Player.Listener {
 
                             override fun

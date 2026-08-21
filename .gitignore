@@ -12,3 +12,8 @@ captures/
 
 # Secrets
 .env
+
+*.bak
+local.properties
+*.jks
+*.keystore

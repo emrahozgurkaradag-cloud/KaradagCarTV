@@ -49,6 +49,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.media3.common.util.UnstableApi
 import com.karadaglabs.cartv.ui.theme.KaradagCarTVTheme
 import org.json.JSONArray
 import org.json.JSONObject
@@ -66,6 +67,7 @@ data class IptvChannel(
     val category: String?
 )
 
+@UnstableApi
 class IptvActivity : ComponentActivity() {
 
     private val apiBaseUrl =
@@ -426,7 +428,6 @@ class IptvActivity : ComponentActivity() {
                     }
                 }
             }
-
         }.start()
     }
 

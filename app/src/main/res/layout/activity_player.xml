@@ -38,7 +38,7 @@
             android:contentDescription="Geri"
             android:padding="8dp"
             android:src="@android:drawable/ic_media_previous"
-            android:tint="#FFFFFF" />
+            app:tint="#FFFFFF" />
 
         <TextView
             android:id="@+id/titleText"
@@ -77,7 +77,7 @@
             android:background="@android:color/transparent"
             android:contentDescription="10 saniye geri"
             android:src="@android:drawable/ic_media_rew"
-            android:tint="#FFFFFF" />
+            app:tint="#FFFFFF" />
 
         <ImageButton
             android:id="@+id/playPauseButton"
@@ -88,7 +88,7 @@
             android:background="@android:color/transparent"
             android:contentDescription="Oynat veya duraklat"
             android:src="@android:drawable/ic_media_pause"
-            android:tint="#FFFFFF" />
+            app:tint="#FFFFFF" />
 
         <ImageButton
             android:id="@+id/forwardButton"
@@ -97,7 +97,7 @@
             android:background="@android:color/transparent"
             android:contentDescription="10 saniye ileri"
             android:src="@android:drawable/ic_media_ff"
-            android:tint="#FFFFFF" />
+            app:tint="#FFFFFF" />
 
     </LinearLayout>
 
