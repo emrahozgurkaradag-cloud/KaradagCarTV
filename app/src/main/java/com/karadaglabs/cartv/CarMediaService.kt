@@ -15,13 +15,39 @@ import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.ListeningExecutorService
+import com.google.common.util.concurrent.MoreExecutors
 import org.json.JSONArray
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 
 @UnstableApi
 class CarMediaService : MediaLibraryService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaLibrarySession: MediaLibrarySession
+
+    private val executor: ListeningExecutorService =
+        MoreExecutors.listeningDecorator(
+            Executors.newSingleThreadExecutor()
+        )
+
+    /*
+     * ============================================================
+     * API
+     * ============================================================
+     */
+
+    private val apiBaseUrl =
+        "https://api.karadaglabs.com"
+
+    private val deviceUuid =
+        "CAR-TEST-001"
+
+    private val licenseKey =
+        "KDG-TEST-2026-001"
 
     /*
      * ============================================================
@@ -34,73 +60,73 @@ class CarMediaService : MediaLibraryService() {
         RadioStation(
             "power-fm",
             "Power FM",
-            "https://live.powerapp.com.tr/powerfmadver/abr/playlist.m3u8"
+            "https://listen.powerapp.com.tr/powerfm/mpeg/icecast.audio"
         ),
 
         RadioStation(
             "radyo-fenomen",
             "Radyo Fenomen",
-            "https://live.radyofenomen.com/fenomen/abr/playlist.m3u8"
+            "https://fenomen.listen2myradio.com/"
         ),
 
         RadioStation(
             "best-fm",
             "Best FM",
-            "https://ssldyg.radyotvonline.com/best/bestfm.stream/playlist.m3u8"
+            "https://bestfm.turkhosted.com/stream"
         ),
 
         RadioStation(
             "kral-pop",
             "Kral Pop",
-            "https://dygedge.radyotvonline.net/kralpop/playlist.m3u8"
+            "https://kralpopwmp.radyotvonline.com/"
         ),
 
         RadioStation(
             "radyo-turkuvaz",
             "Radyo Turkuvaz",
-            "https://trkvz-radyolar.ercdn.net/radyoturkuvaz/playlist.m3u8"
+            "https://turkuvaz.radyotvonline.com/"
         ),
 
         RadioStation(
             "show-radyo",
             "Show Radyo",
-            "https://moondigitaledge.radyotvonline.net/show/playlist.m3u8"
+            "https://radyo.showradyo.com.tr/"
         ),
 
         RadioStation(
             "kral-fm",
             "Kral FM",
-            "https://dygedge2.radyotvonline.net/kralfm/playlist.m3u8"
+            "https://kralfmp3.radyotvonline.com/"
         ),
 
         RadioStation(
             "trt-radyo-1",
             "TRT Radyo 1",
-            "https://radio-trtradyo1.live.trt.com.tr/master.m3u8"
+            "https://rd-trtradyo1.medya.trt.com.tr/master.m3u8"
         ),
 
         RadioStation(
             "trt-fm",
             "TRT-FM",
-            "https://radio-trtfm.live.trt.com.tr/master.m3u8"
+            "https://rd-trtfm.medya.trt.com.tr/master.m3u8"
         ),
 
         RadioStation(
             "radyo-3",
             "Radyo 3",
-            "https://radio-trtradyo3.live.trt.com.tr/master.m3u8"
+            "https://rd-trtradyo3.medya.trt.com.tr/master.m3u8"
         ),
 
         RadioStation(
             "trt-turku",
             "TRT Türkü",
-            "https://radio-trtturku.live.trt.com.tr/master.m3u8"
+            "https://rd-trtturku.medya.trt.com.tr/master.m3u8"
         ),
 
         RadioStation(
             "park-fm",
             "Park FM",
-            "https://vofile.ru/turkey/PARK-FM/playlist.m3u8"
+            "http://yayin.netradyom.com:8050/PARKFM/"
         ),
 
         RadioStation(
@@ -109,15 +135,6 @@ class CarMediaService : MediaLibraryService() {
             "https://yayin.radyoseymen.com.tr:1070/stream"
         )
     )
-
-    /*
-     * ============================================================
-     * CANLI TV CACHE
-     * ============================================================
-     */
-
-    private val liveTvChannels: List<LiveTvStation>
-        get() = loadCachedLiveTv()
 
     /*
      * ============================================================
@@ -165,9 +182,12 @@ class CarMediaService : MediaLibraryService() {
             "Radio count = ${radios.size}"
         )
 
+        val cached =
+            loadCachedLiveTv()
+
         Log.d(
             TAG,
-            "Live TV cache count = ${liveTvChannels.size}"
+            "Local IPTV cache count = ${cached.size}"
         )
 
         Log.d(
@@ -197,6 +217,8 @@ class CarMediaService : MediaLibraryService() {
         if (::player.isInitialized) {
             player.release()
         }
+
+        executor.shutdown()
 
         super.onDestroy()
     }
@@ -285,44 +307,38 @@ class CarMediaService : MediaLibraryService() {
                 LibraryResult<ImmutableList<MediaItem>>
                 > {
 
-            /*
-             * =====================================================
-             * TEST LOG
-             * =====================================================
-             *
-             * Android Auto bu metoda girerse
-             * Logcat'te kesin olarak bunu göreceğiz.
-             */
-
             Log.e(
                 "KARADAG_TEST",
                 "ON_GET_CHILDREN ÇALIŞTI parentId=$parentId"
             )
 
-            Log.d(
-                TAG,
-                "onGetChildren parentId=$parentId"
-            )
+            /*
+             * ====================================================
+             * ROOT
+             * ====================================================
+             */
 
-            val items =
-                when (parentId) {
+            if (parentId == ROOT_ID) {
 
-                    /*
-                     * =================================================
-                     * ANA MENÜ
-                     * =================================================
-                     */
+                /*
+                 * Android Auto ana menüyü açtığında
+                 * IPTV API'yi kontrol ediyoruz.
+                 *
+                 * Böylece telefon uygulamasının cache'ine
+                 * bağımlı kalmıyoruz.
+                 */
 
-                    ROOT_ID -> {
+                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
 
-                        val channels =
-                            liveTvChannels
+                    val channels =
+                        loadLiveTvFromApiWithCacheFallback()
 
-                        Log.d(
-                            TAG,
-                            "Root Live TV count = ${channels.size}"
-                        )
+                    Log.d(
+                        TAG,
+                        "ROOT IPTV count = ${channels.size}"
+                    )
 
+                    val items =
                         listOf(
 
                             createCategoryItem(
@@ -357,104 +373,127 @@ class CarMediaService : MediaLibraryService() {
                                 subtitle = "Web"
                             )
                         )
+
+                    LibraryResult.ofItemList(
+                        ImmutableList.copyOf(
+                            items
+                        ),
+                        params
+                    )
+                }
+            }
+
+            /*
+             * ====================================================
+             * RADYO
+             * ====================================================
+             */
+
+            if (parentId == RADIO_ID) {
+
+                val items =
+                    radios.map { radio ->
+
+                        createRadioMediaItem(
+                            radio
+                        )
                     }
 
-                    /*
-                     * =================================================
-                     * CANLI RADYO
-                     * =================================================
-                     */
+                return Futures.immediateFuture(
 
-                    RADIO_ID -> {
+                    LibraryResult.ofItemList(
+                        ImmutableList.copyOf(
+                            items
+                        ),
+                        params
+                    )
+                )
+            }
 
-                        Log.d(
-                            TAG,
-                            "Returning ${radios.size} radio items"
-                        )
+            /*
+             * ====================================================
+             * CANLI TV
+             * ====================================================
+             */
 
-                        radios.map { radio ->
+            if (parentId == LIVE_TV_ID) {
 
-                            createRadioMediaItem(
-                                radio
-                            )
-                        }
-                    }
+                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
 
-                    /*
-                     * =================================================
-                     * CANLI TV
-                     * =================================================
-                     */
+                    val channels =
+                        loadLiveTvFromApiWithCacheFallback()
 
-                    LIVE_TV_ID -> {
+                    Log.d(
+                        TAG,
+                        "LIVE TV IPTV count = ${channels.size}"
+                    )
 
-                        val channels =
-                            liveTvChannels
-
-                        Log.d(
-                            TAG,
-                            "Returning ${channels.size} Live TV channels"
-                        )
-
+                    val items =
                         channels.map { channel ->
 
                             createLiveTvMediaItem(
                                 channel
                             )
                         }
-                    }
 
-                    /*
-                     * =================================================
-                     * YOUTUBE
-                     * =================================================
-                     */
-
-                    YOUTUBE_ID -> {
-
-                        emptyList()
-                    }
-
-                    /*
-                     * =================================================
-                     * GOOGLE
-                     * =================================================
-                     */
-
-                    GOOGLE_ID -> {
-
-                        emptyList()
-                    }
-
-                    /*
-                     * =================================================
-                     * GEÇERSİZ ID
-                     * =================================================
-                     */
-
-                    else -> {
-
-                        Log.w(
-                            TAG,
-                            "Unknown parentId=$parentId"
-                        )
-
-                        return Futures.immediateFuture(
-
-                            LibraryResult.ofError(
-                                SessionError.ERROR_BAD_VALUE
-                            )
-                        )
-                    }
+                    LibraryResult.ofItemList(
+                        ImmutableList.copyOf(
+                            items
+                        ),
+                        params
+                    )
                 }
+            }
+
+            /*
+             * ====================================================
+             * YOUTUBE
+             * ====================================================
+             */
+
+            if (parentId == YOUTUBE_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItemList(
+                        ImmutableList.of(),
+                        params
+                    )
+                )
+            }
+
+            /*
+             * ====================================================
+             * GOOGLE
+             * ====================================================
+             */
+
+            if (parentId == GOOGLE_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItemList(
+                        ImmutableList.of(),
+                        params
+                    )
+                )
+            }
+
+            /*
+             * ====================================================
+             * BİLİNMEYEN ID
+             * ====================================================
+             */
+
+            Log.w(
+                TAG,
+                "Unknown parentId=$parentId"
+            )
 
             return Futures.immediateFuture(
 
-                LibraryResult.ofItemList(
-                    ImmutableList.copyOf(
-                        items
-                    ),
-                    params
+                LibraryResult.ofError(
+                    SessionError.ERROR_BAD_VALUE
                 )
             )
         }
@@ -476,115 +515,117 @@ class CarMediaService : MediaLibraryService() {
                 "onGetItem mediaId=$mediaId"
             )
 
+            /*
+             * ROOT
+             */
+
             if (mediaId == ROOT_ID) {
-
-                val root =
-                    MediaItem.Builder()
-
-                        .setMediaId(
-                            ROOT_ID
-                        )
-
-                        .setMediaMetadata(
-
-                            MediaMetadata.Builder()
-
-                                .setTitle(
-                                    "Karadag Car TV"
-                                )
-
-                                .setIsBrowsable(
-                                    true
-                                )
-
-                                .setIsPlayable(
-                                    false
-                                )
-
-                                .build()
-                        )
-
-                        .build()
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
-                        root,
+
+                        createCategoryItem(
+                            ROOT_ID,
+                            "Karadag Car TV",
+                            "Karadag Car TV"
+                        ),
+
                         null
                     )
                 )
             }
 
-            when (mediaId) {
+            /*
+             * CANLI TV KATEGORİ
+             */
 
-                LIVE_TV_ID -> {
+            if (mediaId == LIVE_TV_ID) {
 
-                    return Futures.immediateFuture(
+                val channels =
+                    loadCachedLiveTv()
 
-                        LibraryResult.ofItem(
+                return Futures.immediateFuture(
 
-                            createCategoryItem(
-                                LIVE_TV_ID,
-                                "📺 Canlı TV",
-                                "${liveTvChannels.size} kanal"
-                            ),
+                    LibraryResult.ofItem(
 
-                            null
-                        )
+                        createCategoryItem(
+                            LIVE_TV_ID,
+                            "📺 Canlı TV",
+                            "${channels.size} kanal"
+                        ),
+
+                        null
                     )
-                }
-
-                RADIO_ID -> {
-
-                    return Futures.immediateFuture(
-
-                        LibraryResult.ofItem(
-
-                            createCategoryItem(
-                                RADIO_ID,
-                                "📻 Canlı Radyo",
-                                "${radios.size} radyo"
-                            ),
-
-                            null
-                        )
-                    )
-                }
-
-                YOUTUBE_ID -> {
-
-                    return Futures.immediateFuture(
-
-                        LibraryResult.ofItem(
-
-                            createCategoryItem(
-                                YOUTUBE_ID,
-                                "▶️ YouTube",
-                                "YouTube"
-                            ),
-
-                            null
-                        )
-                    )
-                }
-
-                GOOGLE_ID -> {
-
-                    return Futures.immediateFuture(
-
-                        LibraryResult.ofItem(
-
-                            createCategoryItem(
-                                GOOGLE_ID,
-                                "🔎 Google Arama",
-                                "Web"
-                            ),
-
-                            null
-                        )
-                    )
-                }
+                )
             }
+
+            /*
+             * RADYO KATEGORİ
+             */
+
+            if (mediaId == RADIO_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItem(
+
+                        createCategoryItem(
+                            RADIO_ID,
+                            "📻 Canlı Radyo",
+                            "${radios.size} radyo"
+                        ),
+
+                        null
+                    )
+                )
+            }
+
+            /*
+             * YOUTUBE
+             */
+
+            if (mediaId == YOUTUBE_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItem(
+
+                        createCategoryItem(
+                            YOUTUBE_ID,
+                            "▶️ YouTube",
+                            "YouTube"
+                        ),
+
+                        null
+                    )
+                )
+            }
+
+            /*
+             * GOOGLE
+             */
+
+            if (mediaId == GOOGLE_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItem(
+
+                        createCategoryItem(
+                            GOOGLE_ID,
+                            "🔎 Google Arama",
+                            "Web"
+                        ),
+
+                        null
+                    )
+                )
+            }
+
+            /*
+             * RADYO
+             */
 
             val radio =
                 radios.firstOrNull {
@@ -608,27 +649,36 @@ class CarMediaService : MediaLibraryService() {
                 )
             }
 
-            val liveTv =
-                liveTvChannels.firstOrNull {
+            /*
+             * IPTV
+             */
 
-                    it.mediaId ==
-                            mediaId
-                }
+            val channel =
+                loadCachedLiveTv()
+                    .firstOrNull {
 
-            if (liveTv != null) {
+                        it.mediaId ==
+                                mediaId
+                    }
+
+            if (channel != null) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
                         createLiveTvMediaItem(
-                            liveTv
+                            channel
                         ),
 
                         null
                     )
                 )
             }
+
+            /*
+             * BULUNAMADI
+             */
 
             Log.w(
                 TAG,
@@ -663,6 +713,10 @@ class CarMediaService : MediaLibraryService() {
                         "Resolving mediaId=${requested.mediaId}"
                     )
 
+                    /*
+                     * RADYO
+                     */
+
                     radios.firstOrNull {
 
                         it.id ==
@@ -675,17 +729,22 @@ class CarMediaService : MediaLibraryService() {
                         )
                     }
 
-                        ?: liveTvChannels.firstOrNull {
+                    /*
+                     * IPTV
+                     */
 
-                            it.mediaId ==
-                                    requested.mediaId
+                        ?: loadCachedLiveTv()
+                            .firstOrNull {
 
-                        }?.let {
+                                it.mediaId ==
+                                        requested.mediaId
 
-                            createLiveTvMediaItem(
-                                it
-                            )
-                        }
+                            }?.let {
+
+                                createLiveTvMediaItem(
+                                    it
+                                )
+                            }
                 }
 
             Log.d(
@@ -697,6 +756,583 @@ class CarMediaService : MediaLibraryService() {
                 resolved
             )
         }
+    }
+
+    /*
+     * ============================================================
+     * IPTV API + CACHE
+     * ============================================================
+     */
+
+    private fun loadLiveTvFromApiWithCacheFallback():
+            List<LiveTvStation> {
+
+        Log.d(
+            TAG,
+            "======================================"
+        )
+
+        Log.d(
+            TAG,
+            "Android Auto IPTV yükleme başladı"
+        )
+
+        /*
+         * Önce API
+         */
+
+        try {
+
+            val channels =
+                loadLiveTvFromApi()
+
+            if (channels.isNotEmpty()) {
+
+                saveLiveTvCache(
+                    channels
+                )
+
+                Log.d(
+                    TAG,
+                    "IPTV API başarılı: ${channels.size} kanal"
+                )
+
+                return channels
+            }
+
+            Log.w(
+                TAG,
+                "IPTV API boş liste döndürdü"
+            )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            Log.e(
+                TAG,
+                "IPTV API başarısız",
+                exception
+            )
+        }
+
+        /*
+         * API olmazsa kendi cache'i
+         */
+
+        val cached =
+            loadCachedLiveTv()
+
+        Log.d(
+            TAG,
+            "Cache fallback: ${cached.size} kanal"
+        )
+
+        Log.d(
+            TAG,
+            "======================================"
+        )
+
+        return cached
+    }
+
+    /*
+     * ============================================================
+     * IPTV API
+     * ============================================================
+     */
+
+    private fun loadLiveTvFromApi():
+            List<LiveTvStation> {
+
+        val connection =
+            URL(
+                "$apiBaseUrl/api/iptv"
+            )
+                .openConnection()
+                    as HttpURLConnection
+
+        try {
+
+            connection.requestMethod =
+                "POST"
+
+            connection.connectTimeout =
+                10_000
+
+            connection.readTimeout =
+                15_000
+
+            connection.doOutput =
+                true
+
+            connection.setRequestProperty(
+                "Content-Type",
+                "application/json"
+            )
+
+            connection.setRequestProperty(
+                "Accept",
+                "application/json"
+            )
+
+            val body =
+                JSONObject().apply {
+
+                    put(
+                        "device_uuid",
+                        deviceUuid
+                    )
+
+                    put(
+                        "license_key",
+                        licenseKey
+                    )
+                }
+
+            connection.outputStream.use { output ->
+
+                output.write(
+                    body.toString()
+                        .toByteArray(
+                            Charsets.UTF_8
+                        )
+                )
+            }
+
+            val responseCode =
+                connection.responseCode
+
+            Log.d(
+                TAG,
+                "IPTV API responseCode=$responseCode"
+            )
+
+            val responseText =
+                if (
+                    responseCode in 200..299
+                ) {
+
+                    connection.inputStream
+                        .bufferedReader()
+                        .use {
+                            it.readText()
+                        }
+
+                } else {
+
+                    connection.errorStream
+                        ?.bufferedReader()
+                        ?.use {
+                            it.readText()
+                        }
+                        ?: ""
+                }
+
+            if (
+                responseCode !in 200..299
+            ) {
+
+                throw IllegalStateException(
+                    "IPTV API HTTP $responseCode: $responseText"
+                )
+            }
+
+            val response =
+                JSONObject(
+                    responseText
+                )
+
+            val licensed =
+                response.optBoolean(
+                    "licensed",
+                    false
+                )
+
+            if (!licensed) {
+
+                throw IllegalStateException(
+                    response.optString(
+                        "message",
+                        "IPTV lisansı geçersiz."
+                    )
+                )
+            }
+
+            val channelArray =
+                response.optJSONArray(
+                    "channels"
+                )
+                    ?: throw IllegalStateException(
+                        "API channels alanı yok."
+                    )
+
+            val result =
+                mutableListOf<LiveTvStation>()
+
+            for (
+            index in
+            0 until channelArray.length()
+            ) {
+
+                val item =
+                    channelArray.optJSONObject(
+                        index
+                    )
+                        ?: continue
+
+                val id =
+                    item.optInt(
+                        "id",
+                        -1
+                    )
+
+                val name =
+                    item.optString(
+                        "name",
+                        ""
+                    ).trim()
+
+                val streamUrl =
+                    firstNonBlank(
+
+                        item.optString(
+                            "streamUrl",
+                            ""
+                        ),
+
+                        item.optString(
+                            "stream_url",
+                            ""
+                        )
+                    )
+
+                val logoUrl =
+                    firstNonBlank(
+
+                        item.optString(
+                            "logoUrl",
+                            ""
+                        ),
+
+                        item.optString(
+                            "logo_url",
+                            ""
+                        )
+                    )
+
+                val category =
+                    item.optString(
+                        "category",
+                        ""
+                    ).trim()
+
+                if (
+                    id < 0 ||
+                    name.isBlank() ||
+                    streamUrl.isBlank()
+                ) {
+
+                    Log.w(
+                        TAG,
+                        "Geçersiz API kanalı index=$index"
+                    )
+
+                    continue
+                }
+
+                result.add(
+
+                    LiveTvStation(
+
+                        id =
+                            id,
+
+                        name =
+                            name,
+
+                        streamUrl =
+                            streamUrl,
+
+                        logoUrl =
+                            logoUrl
+                                .takeIf {
+                                    it.isNotBlank()
+                                },
+
+                        category =
+                            category
+                                .takeIf {
+                                    it.isNotBlank()
+                                }
+                    )
+                )
+            }
+
+            return result
+
+        } finally {
+
+            connection.disconnect()
+        }
+    }
+
+    /*
+     * ============================================================
+     * IPTV CACHE YAZ
+     * ============================================================
+     */
+
+    private fun saveLiveTvCache(
+        channels: List<LiveTvStation>
+    ) {
+
+        try {
+
+            val array =
+                JSONArray()
+
+            channels.forEach { channel ->
+
+                array.put(
+
+                    JSONObject().apply {
+
+                        put(
+                            "id",
+                            channel.id
+                        )
+
+                        put(
+                            "name",
+                            channel.name
+                        )
+
+                        put(
+                            "stream_url",
+                            channel.streamUrl
+                        )
+
+                        put(
+                            "logo_url",
+                            channel.logoUrl ?: ""
+                        )
+
+                        put(
+                            "category",
+                            channel.category ?: ""
+                        )
+                    }
+                )
+            }
+
+            getSharedPreferences(
+                PREFS_NAME,
+                Context.MODE_PRIVATE
+            )
+                .edit()
+                .putString(
+                    LIVE_TV_CHANNELS_KEY,
+                    array.toString()
+                )
+                .apply()
+
+            Log.d(
+                TAG,
+                "Android Auto IPTV cache kaydedildi: ${channels.size}"
+            )
+
+        } catch (
+            exception: Exception
+        ) {
+
+            Log.e(
+                TAG,
+                "IPTV cache yazılamadı",
+                exception
+            )
+        }
+    }
+
+    /*
+     * ============================================================
+     * IPTV CACHE OKUMA
+     * ============================================================
+     */
+
+    private fun loadCachedLiveTv():
+            List<LiveTvStation> {
+
+        return try {
+
+            val preferences =
+                getSharedPreferences(
+                    PREFS_NAME,
+                    Context.MODE_PRIVATE
+                )
+
+            val json =
+                preferences.getString(
+                    LIVE_TV_CHANNELS_KEY,
+                    null
+                )
+
+            if (json.isNullOrBlank()) {
+
+                Log.w(
+                    TAG,
+                    "Android Auto IPTV cache boş"
+                )
+
+                return emptyList()
+            }
+
+            Log.d(
+                TAG,
+                "Android Auto IPTV cache JSON length=${json.length}"
+            )
+
+            val array =
+                JSONArray(
+                    json
+                )
+
+            val result =
+                mutableListOf<LiveTvStation>()
+
+            for (
+            index in
+            0 until array.length()
+            ) {
+
+                val item =
+                    array.optJSONObject(
+                        index
+                    )
+                        ?: continue
+
+                val id =
+                    item.optInt(
+                        "id",
+                        -1
+                    )
+
+                val name =
+                    item.optString(
+                        "name",
+                        ""
+                    ).trim()
+
+                val streamUrl =
+                    firstNonBlank(
+
+                        item.optString(
+                            "streamUrl",
+                            ""
+                        ),
+
+                        item.optString(
+                            "stream_url",
+                            ""
+                        )
+                    )
+
+                val logoUrl =
+                    firstNonBlank(
+
+                        item.optString(
+                            "logoUrl",
+                            ""
+                        ),
+
+                        item.optString(
+                            "logo_url",
+                            ""
+                        )
+                    )
+
+                val category =
+                    item.optString(
+                        "category",
+                        ""
+                    ).trim()
+
+                if (
+                    id < 0 ||
+                    name.isBlank() ||
+                    streamUrl.isBlank()
+                ) {
+
+                    Log.w(
+                        TAG,
+                        "Geçersiz cache kanalı index=$index"
+                    )
+
+                    continue
+                }
+
+                result.add(
+
+                    LiveTvStation(
+
+                        id =
+                            id,
+
+                        name =
+                            name,
+
+                        streamUrl =
+                            streamUrl,
+
+                        logoUrl =
+                            logoUrl
+                                .takeIf {
+                                    it.isNotBlank()
+                                },
+
+                        category =
+                            category
+                                .takeIf {
+                                    it.isNotBlank()
+                                }
+                    )
+                )
+            }
+
+            Log.d(
+                TAG,
+                "Android Auto cache loaded: ${result.size} channels"
+            )
+
+            result
+
+        } catch (
+            exception: Exception
+        ) {
+
+            Log.e(
+                TAG,
+                "Unable to load IPTV cache",
+                exception
+            )
+
+            emptyList()
+        }
+    }
+
+    /*
+     * ============================================================
+     * JSON YARDIMCI
+     * ============================================================
+     */
+
+    private fun firstNonBlank(
+        vararg values: String
+    ): String {
+
+        return values.firstOrNull {
+            it.isNotBlank()
+        } ?: ""
     }
 
     /*
@@ -868,191 +1504,6 @@ class CarMediaService : MediaLibraryService() {
             )
 
             .build()
-    }
-
-    /*
-     * ============================================================
-     * CANLI TV CACHE OKUMA
-     * ============================================================
-     */
-
-    private fun loadCachedLiveTv():
-            List<LiveTvStation> {
-
-        return try {
-
-            val preferences =
-                getSharedPreferences(
-                    PREFS_NAME,
-                    Context.MODE_PRIVATE
-                )
-
-            val json =
-                preferences.getString(
-                    LIVE_TV_CHANNELS_KEY,
-                    null
-                )
-
-            if (json.isNullOrBlank()) {
-
-                Log.w(
-                    TAG,
-                    "Live TV cache is empty"
-                )
-
-                return emptyList()
-            }
-
-            Log.d(
-                TAG,
-                "Live TV cache JSON length=${json.length}"
-            )
-
-            val array =
-                JSONArray(
-                    json
-                )
-
-            val result =
-                mutableListOf<LiveTvStation>()
-
-            for (
-            index in 0 until array.length()
-            ) {
-
-                val item =
-                    array.optJSONObject(
-                        index
-                    )
-                        ?: continue
-
-                val id =
-                    item.optInt(
-                        "id",
-                        -1
-                    )
-
-                val name =
-                    item.optString(
-                        "name",
-                        ""
-                    ).trim()
-
-                val streamUrl =
-                    firstNonBlank(
-
-                        item.optString(
-                            "streamUrl",
-                            ""
-                        ),
-
-                        item.optString(
-                            "stream_url",
-                            ""
-                        )
-                    )
-
-                val logoUrl =
-                    firstNonBlank(
-
-                        item.optString(
-                            "logoUrl",
-                            ""
-                        ),
-
-                        item.optString(
-                            "logo_url",
-                            ""
-                        )
-                    )
-
-                val category =
-                    item.optString(
-                        "category",
-                        ""
-                    ).trim()
-
-                if (
-                    id < 0 ||
-                    name.isBlank() ||
-                    streamUrl.isBlank()
-                ) {
-
-                    Log.w(
-                        TAG,
-                        "Skipping invalid Live TV item " +
-                                "index=$index " +
-                                "id=$id " +
-                                "name=$name " +
-                                "streamUrl=$streamUrl"
-                    )
-
-                    continue
-                }
-
-                result.add(
-
-                    LiveTvStation(
-
-                        id =
-                            id,
-
-                        name =
-                            name,
-
-                        streamUrl =
-                            streamUrl,
-
-                        logoUrl =
-                            logoUrl
-                                .takeIf {
-                                    it.isNotBlank()
-                                },
-
-                        category =
-                            category
-                                .takeIf {
-                                    it.isNotBlank()
-                                }
-                    )
-                )
-            }
-
-            Log.d(
-                TAG,
-                "Live TV cache loaded: " +
-                        "${result.size} channels"
-            )
-
-            result
-
-        } catch (
-            exception: Exception
-        ) {
-
-            Log.e(
-                TAG,
-                "Unable to load Live TV cache",
-                exception
-            )
-
-            emptyList()
-        }
-    }
-
-    /*
-     * ============================================================
-     * JSON YARDIMCI
-     * ============================================================
-     */
-
-    private fun firstNonBlank(
-        vararg values: String
-    ): String {
-
-        return values.firstOrNull {
-            it.isNotBlank()
-        } ?: ""
     }
 
     /*

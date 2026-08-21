@@ -36,6 +36,10 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
+        <!-- ====================================================== -->
+        <!-- TELEFON UYGULAMASI                                    -->
+        <!-- ====================================================== -->
+
         <activity
             android:name=".RegistrationActivity"
             android:exported="true"
@@ -46,6 +50,7 @@
             android:windowSoftInputMode="adjustResize">
 
             <intent-filter>
+
                 <action
                     android:name="android.intent.action.MAIN" />
 
@@ -54,7 +59,9 @@
 
                 <category
                     android:name="android.intent.category.CAR_LAUNCHER" />
+
             </intent-filter>
+
         </activity>
 
         <activity
@@ -87,12 +94,19 @@
             android:configChanges="orientation|screenSize"
             android:windowSoftInputMode="adjustResize" />
 
-        <!-- Android system permission flow for MediaProjection. -->
+        <!-- ====================================================== -->
+        <!-- MEDIAPROJECTION İZİN EKRANI                           -->
+        <!-- ====================================================== -->
+
         <activity
             android:name=".MediaProjectionPermissionActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.KaradagCarTV" />
+
+        <!-- ====================================================== -->
+        <!-- ANDROID AUTO MEDIA SERVICE                             -->
+        <!-- ====================================================== -->
 
         <service
             android:name=".CarMediaService"
@@ -100,6 +114,7 @@
             android:foregroundServiceType="mediaPlayback">
 
             <intent-filter>
+
                 <action
                     android:name="androidx.media3.session.MediaLibraryService" />
 
@@ -108,21 +123,58 @@
 
                 <action
                     android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+
             </intent-filter>
+
         </service>
+
+        <!-- ====================================================== -->
+        <!-- ANDROIDX CAR APP SERVICE                               -->
+        <!-- ====================================================== -->
 
         <service
             android:name=".CarMirrorService"
             android:exported="true">
 
             <intent-filter>
+
                 <action
                     android:name="androidx.car.app.CarAppService" />
 
                 <category
                     android:name="androidx.car.app.category.NAVIGATION" />
+
             </intent-filter>
+
         </service>
+
+        <!-- ====================================================== -->
+        <!-- FERMATA TİPİ CAR ACTIVITY SERVICE                     -->
+        <!-- ====================================================== -->
+
+        <service
+            android:name=".CarVideoService"
+            android:exported="true"
+            android:label="Karadag Car TV">
+
+            <intent-filter>
+
+                <action
+                    android:name="android.intent.action.MAIN" />
+
+                <category
+                    android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
+
+                <category
+                    android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM" />
+
+            </intent-filter>
+
+        </service>
+
+        <!-- ====================================================== -->
+        <!-- MEDIAPROJECTION SERVİSİ                                -->
+        <!-- ====================================================== -->
 
         <service
             android:name=".MirrorProjectionService"

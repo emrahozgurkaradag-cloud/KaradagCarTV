@@ -106,3 +106,107 @@ class MediaProjectionPermissionActivity : ComponentActivity() {
         )
     }
 }
+/**
+ * MediaProjectionPermissionActivity ile
+ * MirrorProjectionService arasındaki bağlantı.
+ *
+ * Video artık doğrudan Android Auto Surface'ine
+ * ExoPlayer ile gönderiliyor olsa da eski
+ * MediaProjection bileşenleri hâlâ projede bulunduğu
+ * için bu controller gerekli.
+ */
+object MirrorProjectionController {
+
+    private const val TAG =
+        "MirrorProjectionController"
+
+    private var projectionResultCode: Int? = null
+
+    private var projectionResultData: Intent? = null
+
+    private var projectionActive =
+        false
+
+    @Synchronized
+    fun setProjectionConsent(
+        resultCode: Int,
+        data: Intent
+    ) {
+
+        projectionResultCode =
+            resultCode
+
+        projectionResultData =
+            data
+
+        Log.d(
+            TAG,
+            "Projection consent stored"
+        )
+    }
+
+    @Synchronized
+    fun takeProjectionConsent():
+            Pair<Int, Intent>? {
+
+        val resultCode =
+            projectionResultCode
+
+        val resultData =
+            projectionResultData
+
+        projectionResultCode = null
+        projectionResultData = null
+
+        if (
+            resultCode == null ||
+            resultData == null
+        ) {
+            return null
+        }
+
+        return Pair(
+            resultCode,
+            resultData
+        )
+    }
+
+    @Synchronized
+    fun clearProjectionConsent() {
+
+        projectionResultCode = null
+        projectionResultData = null
+
+        Log.d(
+            TAG,
+            "Projection consent cleared"
+        )
+    }
+
+    @Synchronized
+    fun markProjectionActive() {
+
+        projectionActive = true
+
+        Log.d(
+            TAG,
+            "Projection marked ACTIVE"
+        )
+    }
+
+    @Synchronized
+    fun markProjectionInactive() {
+
+        projectionActive = false
+
+        Log.d(
+            TAG,
+            "Projection marked INACTIVE"
+        )
+    }
+
+    fun isProjectionActive(): Boolean {
+
+        return projectionActive
+    }
+}
