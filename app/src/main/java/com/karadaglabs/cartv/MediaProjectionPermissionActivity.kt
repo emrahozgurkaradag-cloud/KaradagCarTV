@@ -6,14 +6,23 @@ import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 
 /**
- * Requests the user's MediaProjection consent and then starts
- * MirrorProjectionService with the returned projection token.
+ * Owns the Android system MediaProjection consent flow.
+ *
+ * The result Intent is kept in-process and handed to
+ * MirrorProjectionService after the foreground service has started.
+ * Keeping the original Intent object avoids losing the projection token
+ * while it is passed through another Intent on newer Android versions.
  */
 class MediaProjectionPermissionActivity : ComponentActivity() {
+
+    companion object {
+        private const val TAG = "KaradagMirror"
+    }
 
     private val projectionLauncher =
         registerForActivityResult(
@@ -22,33 +31,57 @@ class MediaProjectionPermissionActivity : ComponentActivity() {
 
             val data = result.data
 
-            if (
-                result.resultCode == Activity.RESULT_OK &&
-                data != null
-            ) {
-                val serviceIntent = Intent(
-                    this,
-                    MirrorProjectionService::class.java
-                ).apply {
-                    action = MirrorProjectionService.ACTION_START
-                    putExtra(
-                        MirrorProjectionService.EXTRA_RESULT_CODE,
-                        result.resultCode
-                    )
-                    putExtra(
-                        MirrorProjectionService.EXTRA_RESULT_DATA,
-                        data
-                    )
-                }
+            Log.d(
+                TAG,
+                "MediaProjection consent result=${result.resultCode}, data=${data != null}"
+            )
 
+            if (
+                result.resultCode != Activity.RESULT_OK ||
+                data == null
+            ) {
+                Log.e(
+                    TAG,
+                    "MediaProjection consent was not granted"
+                )
+
+                MirrorProjectionController.markProjectionInactive()
+                finish()
+                return@registerForActivityResult
+            }
+
+            MirrorProjectionController.setProjectionConsent(
+                result.resultCode,
+                data
+            )
+
+            val serviceIntent = Intent(
+                this,
+                MirrorProjectionService::class.java
+            ).apply {
+                action = MirrorProjectionService.ACTION_START
+            }
+
+            try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(serviceIntent)
                 } else {
                     startService(serviceIntent)
                 }
 
-                MirrorProjectionController.markProjectionActive()
-            } else {
+                Log.d(
+                    TAG,
+                    "MediaProjection service start requested"
+                )
+
+            } catch (exception: Exception) {
+                Log.e(
+                    TAG,
+                    "Unable to start MediaProjection service",
+                    exception
+                )
+
+                MirrorProjectionController.clearProjectionConsent()
                 MirrorProjectionController.markProjectionInactive()
             }
 
@@ -62,6 +95,11 @@ class MediaProjectionPermissionActivity : ComponentActivity() {
             getSystemService(
                 Context.MEDIA_PROJECTION_SERVICE
             ) as MediaProjectionManager
+
+        Log.d(
+            TAG,
+            "Opening MediaProjection consent dialog"
+        )
 
         projectionLauncher.launch(
             manager.createScreenCaptureIntent()
