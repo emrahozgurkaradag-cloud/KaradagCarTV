@@ -45,7 +45,7 @@ class CarVideoActivity : CarActivity() {
         private const val MENU_LIVE_TV = 0
         private const val MENU_YOUTUBE = 1
         private const val MENU_RADIO = 2
-        private const val MENU_FAVORITES = 3
+        private const val MENU_GOOGLE = 3
         private const val MENU_COUNT = 4
     }
 
@@ -72,9 +72,6 @@ class CarVideoActivity : CarActivity() {
 
     private val radioMenuAdapter =
         RadioMenuAdapter()
-
-    private val favoritesMenuAdapter =
-        FavoritesMenuAdapter()
 
     private val mainMenuAdapter =
         MainMenuAdapter()
@@ -655,7 +652,14 @@ class CarVideoActivity : CarActivity() {
                     MENU_RADIO ->
                         "📻 Radyo"
                     else ->
-                        "⭐ Favoriler"
+                        "🔎 Google Arama"
+                }
+
+            val type =
+                if (position == MENU_GOOGLE) {
+                    MenuItem.Type.ITEM
+                } else {
+                    MenuItem.Type.SUBMENU
                 }
 
             return MenuItem.Builder()
@@ -663,7 +667,7 @@ class CarVideoActivity : CarActivity() {
                     title
                 )
                 .setType(
-                    MenuItem.Type.SUBMENU
+                    type
                 )
                 .build()
         }
@@ -677,10 +681,25 @@ class CarVideoActivity : CarActivity() {
                     liveTvMenuAdapter
                 MENU_YOUTUBE ->
                     youtubeMenuAdapter
-                MENU_RADIO ->
-                    radioMenuAdapter
                 else ->
-                    favoritesMenuAdapter
+                    radioMenuAdapter
+            }
+        }
+
+        override fun onMenuItemClicked(
+            position: Int
+        ) {
+
+            if (position == MENU_GOOGLE) {
+
+                Log.d(
+                    TAG,
+                    "Projection Google Arama selected"
+                )
+
+                showYoutube(
+                    "https://www.google.com/"
+                )
             }
         }
     }
@@ -890,30 +909,4 @@ class CarVideoActivity : CarActivity() {
         }
     }
 
-    private inner class FavoritesMenuAdapter : MenuAdapter() {
-
-        override fun getTitle(): String {
-
-            return "FAVORİLER"
-        }
-
-        override fun getMenuItemCount(): Int {
-
-            return 1
-        }
-
-        override fun getMenuItem(
-            position: Int
-        ): MenuItem {
-
-            return MenuItem.Builder()
-                .setTitle(
-                    "Yakında"
-                )
-                .setType(
-                    MenuItem.Type.ITEM
-                )
-                .build()
-        }
-    }
 }
