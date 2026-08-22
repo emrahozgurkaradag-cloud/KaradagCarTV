@@ -18,4 +18,5 @@
     <uses
         name="projection"
         tools:ignore="InvalidUsesTagAttribute" />
+    <uses name="video" />
 </automotiveApp>
