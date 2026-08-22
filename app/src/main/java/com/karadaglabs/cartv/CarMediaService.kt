@@ -59,11 +59,21 @@ class CarMediaService : MediaLibraryService() {
     private val apiBaseUrl =
         "https://api.karadaglabs.com"
 
-    private val deviceUuid =
-        "CAR-TEST-001"
+    /*
+     * Gerçek aktivasyon bilgisi. Telefon tarafındaki
+     * RegistrationActivity/MainActivity ile aynı AppSession
+     * kaynağını kullanır; sabit test değeri kullanmaz.
+     *
+     * Eskiden burada sabit "CAR-TEST-001"/"KDG-TEST-2026-001"
+     * test değerleri vardı; bu, gerçek araçta IPTV API'sinin
+     * müşterinin gerçek lisansını göremeyip boş/lisanssız
+     * dönmesine (Canlı TV = 0) neden olabiliyordu.
+     */
+    private val deviceUuid: String
+        get() = AppSession.deviceUuid(this)
 
-    private val licenseKey =
-        "KDG-TEST-2026-001"
+    private val licenseKey: String
+        get() = AppSession.licenseKey(this)
 
     /*
      * ============================================================
@@ -192,6 +202,42 @@ class CarMediaService : MediaLibraryService() {
 
             startProjectionPlayback(
                 pendingProjectionMediaId
+            )
+        }
+
+        pendingRadioId?.let { radioId ->
+
+            pendingRadioId =
+                null
+
+            startProjectionRadio(
+                radioId
+            )
+        }
+
+        /*
+         * CarVideoActivity servis henüz oluşmadan
+         * prefetchProjectionLibrary çağırmış olabilir (gerçek
+         * araçta servis başlatma DHU'dan daha yavaş olabilir).
+         * Bu durumda callback kuyruğa alınmıştı; şimdi gerçekten
+         * çalıştır. Aksi halde "Canlı TV" listesi hiç veri
+         * gelmeden sessizce boş kalır.
+         */
+        val queuedPrefetchCallbacks =
+            synchronized(pendingPrefetchCallbacks) {
+
+                val copy =
+                    pendingPrefetchCallbacks.toList()
+
+                pendingPrefetchCallbacks.clear()
+
+                copy
+            }
+
+        queuedPrefetchCallbacks.forEach { callback ->
+
+            prefetchLibrary(
+                callback
             )
         }
 
@@ -1799,6 +1845,13 @@ class CarMediaService : MediaLibraryService() {
         private var pendingProjectionMediaId:
             String? = null
 
+        @Volatile
+        private var pendingRadioId:
+            String? = null
+
+        private val pendingPrefetchCallbacks =
+            mutableListOf<() -> Unit>()
+
         fun playProjectionChannel(
             mediaId: String? = null
         ) {
@@ -1841,6 +1894,9 @@ class CarMediaService : MediaLibraryService() {
             radioId: String
         ) {
 
+            pendingRadioId =
+                radioId
+
             val instance =
                 projectionInstance
 
@@ -1853,6 +1909,9 @@ class CarMediaService : MediaLibraryService() {
 
                 return
             }
+
+            pendingRadioId =
+                null
 
             instance.startProjectionRadio(
                 radioId
@@ -1868,7 +1927,28 @@ class CarMediaService : MediaLibraryService() {
 
             if (instance == null) {
 
-                onDone?.invoke()
+                /*
+                 * Servis henüz hazır değil (gerçek araçta soğuk
+                 * başlangıç DHU'dan daha yavaş olabilir). Callback'i
+                 * "başarılı ama boş" gibi hemen çağırmak yerine
+                 * kuyruğa al; CarMediaService.onCreate() gerçekten
+                 * çalıştığında IPTV API'den veri çekilip callback
+                 * o zaman tetiklenecek.
+                 */
+                if (onDone != null) {
+
+                    synchronized(pendingPrefetchCallbacks) {
+
+                        pendingPrefetchCallbacks.add(
+                            onDone
+                        )
+                    }
+                }
+
+                Log.d(
+                    TAG,
+                    "CarMediaService not ready; prefetch queued"
+                )
 
                 return
             }

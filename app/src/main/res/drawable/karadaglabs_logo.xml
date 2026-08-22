@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Yer tutucu KaradagLabs logosu.
+
+    Gerçek logo eklenecekse:
+    1) Bu dosyayı silin (app/src/main/res/drawable/karadaglabs_logo.xml).
+    2) Gerçek dosyayı aynı isimle ekleyin:
+       app/src/main/res/drawable/karadaglabs_logo.png
+    Kod tarafında hiçbir değişiklik gerekmez; ImageView aynı
+    @drawable/karadaglabs_logo kaynağını kullanmaya devam eder.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <solid android:color="#1565C0" />
+
+    <corners android:radius="14dp" />
+
+</shape>

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,12 +16,15 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.GridLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
-import com.google.android.apps.auto.sdk.MenuAdapter
-import com.google.android.apps.auto.sdk.MenuItem
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
@@ -33,25 +37,38 @@ import java.util.concurrent.Executors
  *   → TextureView inside this CarActivity window
  *   → host captures that window as DrawingSpec 800x400 SurfaceTexture
  *
- * Navigation uses aauto MenuAdapter / DrawerController. The TextureView
- * video pipeline is not replaced.
+ * Main menu (Canlı TV / YouTube / Radyo / Google) is drawn directly with
+ * plain Views on top of the same window — not hidden behind the aauto
+ * hamburger drawer. The TextureView video pipeline is not touched by
+ * any of the menu code below.
  */
 @UnstableApi
 class CarVideoActivity : CarActivity() {
 
+    private enum class CarScreen {
+        MAIN_MENU,
+        LIVE_TV_LIST,
+        RADIO_LIST,
+        YOUTUBE,
+        PLAYER
+    }
+
     companion object {
         private const val TAG = "KaradagCarVideo"
 
-        private const val MENU_LIVE_TV = 0
-        private const val MENU_YOUTUBE = 1
-        private const val MENU_RADIO = 2
-        private const val MENU_GOOGLE = 3
-        private const val MENU_COUNT = 4
+        /*
+         * Ana menü tek satır 4 buton için hedeflenen minimum genişlik.
+         * Ekran bundan darsa 2x2 büyük buton düzenine geçilir.
+         */
+        private const val MENU_ROW_MIN_WIDTH_DP = 620f
     }
 
     private var carTextureView: TextureView? = null
     private var playerListener: Player.Listener? = null
     private var youtubeWebView: WebView? = null
+
+    private var currentScreen: CarScreen =
+        CarScreen.MAIN_MENU
 
     private val handler =
         Handler(
@@ -64,17 +81,8 @@ class CarVideoActivity : CarActivity() {
     private val logoCache =
         ConcurrentHashMap<String, Bitmap>()
 
-    private val liveTvMenuAdapter =
-        LiveTvMenuAdapter()
-
-    private val youtubeMenuAdapter =
-        YouTubeMenuAdapter()
-
-    private val radioMenuAdapter =
-        RadioMenuAdapter()
-
-    private val mainMenuAdapter =
-        MainMenuAdapter()
+    private val channelLogoViews =
+        ConcurrentHashMap<String, ImageView>()
 
     private val bindProjectionSurfaceRunnable =
         Runnable {
@@ -89,7 +97,6 @@ class CarVideoActivity : CarActivity() {
                 "CAR VIDEO delayed menu refresh"
             )
 
-            installMainMenu()
             bindProjectionSurface()
             playerListener?.let { listener ->
                 CarVideoPlayerHolder.getPlayer()
@@ -119,9 +126,14 @@ class CarVideoActivity : CarActivity() {
                 .statusBarController
                 .hideAppHeader()
 
+            /*
+             * Ana seçenekler artık doğrudan ekranda; hamburger
+             * menüde gizli bir içerik olmadığı için buton
+             * gösterilmiyor.
+             */
             carUiController
                 .menuController
-                .showMenuButton()
+                .hideMenuButton()
         } catch (exception: Exception) {
             Log.e(
                 TAG,
@@ -166,8 +178,11 @@ class CarVideoActivity : CarActivity() {
 
         attachPlayerDiagnostics()
         bindProjectionSurface()
-        installMainMenu()
-        showMainMenuDrawer()
+
+        setupMainMenu()
+        setupListOverlay()
+        setupBackToMenuButton()
+        showScreen(CarScreen.MAIN_MENU)
 
         handler.post(bindProjectionSurfaceRunnable)
         handler.removeCallbacks(delayedStart)
@@ -207,14 +222,23 @@ class CarVideoActivity : CarActivity() {
 
     override fun onBackPressed() {
 
-        if (youtubeWebView?.visibility == View.VISIBLE) {
+        when (currentScreen) {
 
-            hideYoutube()
-            showMainMenuDrawer()
-            return
+            CarScreen.YOUTUBE -> {
+                hideYoutube()
+                showScreen(CarScreen.MAIN_MENU)
+            }
+
+            CarScreen.LIVE_TV_LIST,
+            CarScreen.RADIO_LIST,
+            CarScreen.PLAYER -> {
+                showScreen(CarScreen.MAIN_MENU)
+            }
+
+            CarScreen.MAIN_MENU -> {
+                super.onBackPressed()
+            }
         }
-
-        super.onBackPressed()
     }
 
     override fun onDestroy() {
@@ -249,6 +273,12 @@ class CarVideoActivity : CarActivity() {
 
         super.onDestroy()
     }
+
+    /*
+     * ============================================================
+     * VIDEO PIPELINE (DHU/Android Auto projection) — DEĞİŞMEDİ
+     * ============================================================
+     */
 
     private fun bindProjectionSurface() {
 
@@ -345,92 +375,407 @@ class CarVideoActivity : CarActivity() {
             )
     }
 
-    private fun installMainMenu() {
-
-        try {
-
-            val menuController =
-                getCarUiController().menuController
-
-            menuController.setRootMenuAdapter(
-                mainMenuAdapter
-            )
-
-            menuController.showMenuButton()
-
-            Log.d(
-                TAG,
-                "Projection main menu installed"
-            )
-
-        } catch (exception: Exception) {
-
-            Log.e(
-                TAG,
-                "Unable to install main menu",
-                exception
-            )
-        }
-    }
-
-    private fun showMainMenuDrawer() {
-
-        try {
-
-            getCarUiController()
-                .drawerController
-                .openDrawer()
-
-            Log.d(
-                TAG,
-                "Projection main menu drawer opened"
-            )
-
-        } catch (exception: Exception) {
-
-            Log.e(
-                TAG,
-                "Unable to open projection drawer",
-                exception
-            )
-        }
-    }
-
-    private fun closeDrawer() {
-
-        try {
-
-            getCarUiController()
-                .drawerController
-                .closeDrawer()
-
-        } catch (exception: Exception) {
-
-            Log.w(
-                TAG,
-                "Unable to close projection drawer: ${exception.message}"
-            )
-        }
-    }
-
     private fun refreshBrowseData() {
-
-        liveTvMenuAdapter.notifyDataSetChanged()
-        radioMenuAdapter.notifyDataSetChanged()
 
         CarMediaService.prefetchProjectionLibrary {
 
-            liveTvMenuAdapter.notifyDataSetChanged()
-            radioMenuAdapter.notifyDataSetChanged()
+            handler.post {
+
+                when (currentScreen) {
+
+                    CarScreen.LIVE_TV_LIST ->
+                        renderChannelRows(loading = false)
+
+                    CarScreen.RADIO_LIST ->
+                        renderRadioRows(loading = false)
+
+                    else -> {
+                        // Menü açık değil; sadece cache ısındı.
+                    }
+                }
+            }
         }
     }
+
+    /*
+     * ============================================================
+     * ANA MENÜ — doğrudan görünür butonlar (hamburger değil)
+     * ============================================================
+     */
+
+    private fun setupMainMenu() {
+
+        val row =
+            findViewById(
+                R.id.carMenuRow
+            ) as? LinearLayout
+                ?: return
+
+        val grid =
+            findViewById(
+                R.id.carMenuGrid
+            ) as? GridLayout
+                ?: return
+
+        row.removeAllViews()
+        grid.removeAllViews()
+
+        val entries =
+            listOf(
+                "📺  CANLI TV" to { onLiveTvSelected() },
+                "▶  YOUTUBE" to { onYoutubeSelected() },
+                "📻  RADYO" to { onRadioSelected() },
+                "🔎  GOOGLE" to { onGoogleSelected() }
+            )
+
+        entries.forEach { (title, onClick) ->
+
+            row.addView(
+                createMenuButton(title, onClick),
+                LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                ).apply {
+                    marginStart = dp(8)
+                    marginEnd = dp(8)
+                }
+            )
+
+            grid.addView(
+                createMenuButton(title, onClick),
+                GridLayout.LayoutParams().apply {
+                    width = dp(260)
+                    height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    setMargins(dp(8), dp(8), dp(8), dp(8))
+                }
+            )
+        }
+
+        row.post {
+            chooseMenuLayout(row, grid)
+        }
+    }
+
+    private fun chooseMenuLayout(
+        row: LinearLayout,
+        grid: GridLayout
+    ) {
+
+        val overlayWidth =
+            findViewById(
+                R.id.carMenuOverlay
+            )?.width
+                ?: 0
+
+        if (overlayWidth <= 0) {
+
+            row.postDelayed(
+                { chooseMenuLayout(row, grid) },
+                100L
+            )
+
+            return
+        }
+
+        val widthDp =
+            overlayWidth / resources.displayMetrics.density
+
+        val useRow =
+            widthDp >= MENU_ROW_MIN_WIDTH_DP
+
+        row.visibility =
+            if (useRow) View.VISIBLE else View.GONE
+
+        grid.visibility =
+            if (useRow) View.GONE else View.VISIBLE
+
+        Log.d(
+            TAG,
+            "Main menu layout widthDp=$widthDp mode=${if (useRow) "row(1x4)" else "grid(2x2)"}"
+        )
+    }
+
+    private fun createMenuButton(
+        title: String,
+        onClick: () -> Unit
+    ): Button {
+
+        return Button(this).apply {
+
+            text = title
+            isAllCaps = false
+            textSize = 20f
+            setTextColor(Color.WHITE)
+            minimumWidth = dp(180)
+            minimumHeight = dp(96)
+
+            setPadding(
+                dp(20),
+                dp(24),
+                dp(20),
+                dp(24)
+            )
+
+            background =
+                getDrawable(
+                    R.drawable.car_menu_button_background
+                )
+
+            setOnClickListener {
+                onClick()
+            }
+        }
+    }
+
+    private fun onLiveTvSelected() {
+        showChannelList()
+    }
+
+    private fun onYoutubeSelected() {
+        showYoutube("https://www.youtube.com/")
+    }
+
+    private fun onRadioSelected() {
+        showRadioList()
+    }
+
+    private fun onGoogleSelected() {
+        showYoutube("https://www.google.com/")
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+
+    /*
+     * ============================================================
+     * EKRAN DURUMU (menü / liste / video / youtube)
+     * ============================================================
+     */
+
+    private fun setupBackToMenuButton() {
+
+        findViewById(
+            R.id.carBackToMenuButton
+        )?.setOnClickListener {
+
+            if (currentScreen == CarScreen.YOUTUBE) {
+                hideYoutube()
+            }
+
+            showScreen(CarScreen.MAIN_MENU)
+        }
+    }
+
+    private fun setupListOverlay() {
+
+        findViewById(
+            R.id.carListBack
+        )?.setOnClickListener {
+
+            showScreen(CarScreen.MAIN_MENU)
+        }
+    }
+
+    private fun showScreen(
+        screen: CarScreen
+    ) {
+
+        currentScreen =
+            screen
+
+        findViewById(
+            R.id.carMenuOverlay
+        )?.visibility =
+            if (screen == CarScreen.MAIN_MENU) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        findViewById(
+            R.id.carListOverlay
+        )?.visibility =
+            if (
+                screen == CarScreen.LIVE_TV_LIST ||
+                screen == CarScreen.RADIO_LIST
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        youtubeWebView?.visibility =
+            if (screen == CarScreen.YOUTUBE) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        findViewById(
+            R.id.carBackToMenuButton
+        )?.visibility =
+            if (screen == CarScreen.MAIN_MENU) {
+                View.GONE
+            } else {
+                View.VISIBLE
+            }
+
+        Log.d(
+            TAG,
+            "CAR VIDEO screen=$screen"
+        )
+    }
+
+    /*
+     * ============================================================
+     * CANLI TV LİSTESİ
+     * ============================================================
+     */
+
+    private fun showChannelList() {
+
+        (findViewById(
+            R.id.carListTitle
+        ) as? TextView)?.text =
+            "CANLI TV"
+
+        showScreen(CarScreen.LIVE_TV_LIST)
+
+        renderChannelRows(loading = true)
+
+        CarMediaService.prefetchProjectionLibrary {
+
+            handler.post {
+
+                if (currentScreen == CarScreen.LIVE_TV_LIST) {
+                    renderChannelRows(loading = false)
+                }
+            }
+        }
+    }
+
+    private fun renderChannelRows(
+        loading: Boolean
+    ) {
+
+        val container =
+            findViewById(
+                R.id.carListContainer
+            ) as? LinearLayout
+                ?: return
+
+        val channels =
+            CarMediaService.projectionChannels()
+
+        container.removeAllViews()
+        channelLogoViews.clear()
+
+        if (channels.isEmpty()) {
+
+            container.addView(
+                createMessageRow(
+                    if (loading) {
+                        "Kanallar yükleniyor…"
+                    } else {
+                        "Kanal bulunamadı. Geri dönüp tekrar deneyin."
+                    }
+                )
+            )
+
+            return
+        }
+
+        channels.forEach { channel ->
+
+            container.addView(
+                createChannelRow(channel) {
+                    playLiveTvChannel(channel)
+                }
+            )
+        }
+    }
+
+    /*
+     * ============================================================
+     * RADYO LİSTESİ
+     * ============================================================
+     */
+
+    private fun showRadioList() {
+
+        (findViewById(
+            R.id.carListTitle
+        ) as? TextView)?.text =
+            "RADYO"
+
+        showScreen(CarScreen.RADIO_LIST)
+
+        renderRadioRows(loading = true)
+
+        CarMediaService.prefetchProjectionLibrary {
+
+            handler.post {
+
+                if (currentScreen == CarScreen.RADIO_LIST) {
+                    renderRadioRows(loading = false)
+                }
+            }
+        }
+    }
+
+    private fun renderRadioRows(
+        loading: Boolean
+    ) {
+
+        val container =
+            findViewById(
+                R.id.carListContainer
+            ) as? LinearLayout
+                ?: return
+
+        val stations =
+            CarMediaService.projectionRadios()
+
+        container.removeAllViews()
+
+        if (stations.isEmpty()) {
+
+            container.addView(
+                createMessageRow(
+                    if (loading) {
+                        "Radyolar yükleniyor…"
+                    } else {
+                        "Radyo bulunamadı."
+                    }
+                )
+            )
+
+            return
+        }
+
+        stations.forEach { station ->
+
+            container.addView(
+                createRadioRow(station) {
+                    playRadioStation(station)
+                }
+            )
+        }
+    }
+
+    /*
+     * ============================================================
+     * OYNATMA SEÇİMİ
+     * ============================================================
+     */
 
     private fun playLiveTvChannel(
         channel: ProjectionListItem
     ) {
 
         hideYoutube()
-        closeDrawer()
 
         Log.d(
             TAG,
@@ -440,6 +785,8 @@ class CarVideoActivity : CarActivity() {
         CarMediaService.playProjectionChannel(
             channel.id
         )
+
+        showScreen(CarScreen.PLAYER)
     }
 
     private fun playRadioStation(
@@ -447,7 +794,6 @@ class CarVideoActivity : CarActivity() {
     ) {
 
         hideYoutube()
-        closeDrawer()
 
         Log.d(
             TAG,
@@ -457,7 +803,15 @@ class CarVideoActivity : CarActivity() {
         CarMediaService.playProjectionRadio(
             station.id
         )
+
+        showScreen(CarScreen.PLAYER)
     }
+
+    /*
+     * ============================================================
+     * YOUTUBE / GOOGLE (WebView, mevcut akış korunuyor)
+     * ============================================================
+     */
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun showYoutube(
@@ -511,14 +865,15 @@ class CarVideoActivity : CarActivity() {
             )
         }
 
-        webView.visibility =
-            View.VISIBLE
-
         webView.loadUrl(
             url
         )
 
-        closeDrawer()
+        showScreen(CarScreen.YOUTUBE)
+
+        findViewById(
+            R.id.carBackToMenuButton
+        )?.bringToFront()
 
         Log.d(
             TAG,
@@ -540,10 +895,112 @@ class CarVideoActivity : CarActivity() {
         )
     }
 
+    /*
+     * ============================================================
+     * KANAL SATIRLARI (görsel, aauto MenuAdapter'a bağlı değil)
+     * ============================================================
+     */
+
+    private fun createChannelRow(
+        channel: ProjectionListItem,
+        onClick: () -> Unit
+    ): View {
+
+        val row =
+            getLayoutInflater().inflate(
+                R.layout.car_channel_row,
+                null,
+                false
+            )
+
+        val logo =
+            row.findViewById<ImageView>(
+                R.id.rowLogo
+            )
+
+        val title =
+            row.findViewById<TextView>(
+                R.id.rowTitle
+            )
+
+        title.text =
+            channel.title
+
+        requestChannelLogo(
+            channel,
+            logo
+        )
+
+        row.setOnClickListener {
+            onClick()
+        }
+
+        return row
+    }
+
+    private fun createRadioRow(
+        station: ProjectionListItem,
+        onClick: () -> Unit
+    ): View {
+
+        val row =
+            getLayoutInflater().inflate(
+                R.layout.car_channel_row,
+                null,
+                false
+            )
+
+        val logo =
+            row.findViewById<ImageView>(
+                R.id.rowLogo
+            )
+
+        logo.setImageDrawable(null)
+        logo.visibility =
+            View.INVISIBLE
+
+        val title =
+            row.findViewById<TextView>(
+                R.id.rowTitle
+            )
+
+        title.text =
+            "📻  ${station.title}"
+
+        row.setOnClickListener {
+            onClick()
+        }
+
+        return row
+    }
+
+    private fun createMessageRow(
+        message: String
+    ): View {
+
+        return TextView(this).apply {
+
+            text = message
+            setTextColor(Color.LTGRAY)
+            textSize = 18f
+
+            setPadding(
+                dp(28),
+                dp(28),
+                dp(28),
+                dp(28)
+            )
+        }
+    }
+
     private fun requestChannelLogo(
         channel: ProjectionListItem,
-        position: Int
+        imageView: ImageView
     ) {
+
+        logoCache[channel.id]?.let { cached ->
+            imageView.setImageBitmap(cached)
+        }
 
         val logoUrl =
             channel.logoUrl
@@ -553,9 +1010,11 @@ class CarVideoActivity : CarActivity() {
                 ?: return
 
         if (logoCache.containsKey(channel.id)) {
-
             return
         }
+
+        channelLogoViews[channel.id] =
+            imageView
 
         logoExecutor.execute {
 
@@ -570,9 +1029,10 @@ class CarVideoActivity : CarActivity() {
 
             handler.post {
 
-                liveTvMenuAdapter.notifyItemChanged(
-                    position
-                )
+                channelLogoViews[channel.id]
+                    ?.setImageBitmap(
+                        bitmap
+                    )
             }
         }
     }
@@ -626,287 +1086,4 @@ class CarVideoActivity : CarActivity() {
             null
         }
     }
-
-    private inner class MainMenuAdapter : MenuAdapter() {
-
-        override fun getTitle(): String {
-
-            return "KARADAG CAR TV"
-        }
-
-        override fun getMenuItemCount(): Int {
-
-            return MENU_COUNT
-        }
-
-        override fun getMenuItem(
-            position: Int
-        ): MenuItem {
-
-            val title =
-                when (position) {
-                    MENU_LIVE_TV ->
-                        "📺 Canlı TV"
-                    MENU_YOUTUBE ->
-                        "▶️ YouTube"
-                    MENU_RADIO ->
-                        "📻 Radyo"
-                    else ->
-                        "🔎 Google Arama"
-                }
-
-            val type =
-                if (position == MENU_GOOGLE) {
-                    MenuItem.Type.ITEM
-                } else {
-                    MenuItem.Type.SUBMENU
-                }
-
-            return MenuItem.Builder()
-                .setTitle(
-                    title
-                )
-                .setType(
-                    type
-                )
-                .build()
-        }
-
-        override fun onLoadSubmenu(
-            position: Int
-        ): MenuAdapter {
-
-            return when (position) {
-                MENU_LIVE_TV ->
-                    liveTvMenuAdapter
-                MENU_YOUTUBE ->
-                    youtubeMenuAdapter
-                else ->
-                    radioMenuAdapter
-            }
-        }
-
-        override fun onMenuItemClicked(
-            position: Int
-        ) {
-
-            if (position == MENU_GOOGLE) {
-
-                Log.d(
-                    TAG,
-                    "Projection Google Arama selected"
-                )
-
-                showYoutube(
-                    "https://www.google.com/"
-                )
-            }
-        }
-    }
-
-    private inner class LiveTvMenuAdapter : MenuAdapter() {
-
-        override fun getTitle(): String {
-
-            return "CANLI TV"
-        }
-
-        override fun getMenuItemCount(): Int {
-
-            val count =
-                CarMediaService.projectionChannels().size
-
-            return if (count == 0) {
-                1
-            } else {
-                count
-            }
-        }
-
-        override fun getMenuItem(
-            position: Int
-        ): MenuItem {
-
-            val channels =
-                CarMediaService.projectionChannels()
-
-            if (channels.isEmpty()) {
-
-                return MenuItem.Builder()
-                    .setTitle(
-                        "IPTV yükleniyor…"
-                    )
-                    .setType(
-                        MenuItem.Type.ITEM
-                    )
-                    .build()
-            }
-
-            val channel =
-                channels[position]
-
-            requestChannelLogo(
-                channel,
-                position
-            )
-
-            val builder =
-                MenuItem.Builder()
-                    .setTitle(
-                        channel.title
-                    )
-                    .setType(
-                        MenuItem.Type.ITEM
-                    )
-
-            logoCache[channel.id]?.let { icon ->
-
-                builder.setIconBitmap(
-                    icon
-                )
-            }
-
-            return builder.build()
-        }
-
-        override fun onMenuItemClicked(
-            position: Int
-        ) {
-
-            val channels =
-                CarMediaService.projectionChannels()
-
-            if (
-                channels.isEmpty() ||
-                position !in channels.indices
-            ) {
-
-                return
-            }
-
-            playLiveTvChannel(
-                channels[position]
-            )
-        }
-    }
-
-    private inner class YouTubeMenuAdapter : MenuAdapter() {
-
-        override fun getTitle(): String {
-
-            return "YOUTUBE"
-        }
-
-        override fun getMenuItemCount(): Int {
-
-            return 2
-        }
-
-        override fun getMenuItem(
-            position: Int
-        ): MenuItem {
-
-            val title =
-                if (position == 0) {
-                    "YouTube"
-                } else {
-                    "YouTube Kids"
-                }
-
-            return MenuItem.Builder()
-                .setTitle(
-                    title
-                )
-                .setType(
-                    MenuItem.Type.ITEM
-                )
-                .build()
-        }
-
-        override fun onMenuItemClicked(
-            position: Int
-        ) {
-
-            val url =
-                if (position == 0) {
-                    "https://www.youtube.com/"
-                } else {
-                    "https://www.youtubekids.com/"
-                }
-
-            showYoutube(
-                url
-            )
-        }
-    }
-
-    private inner class RadioMenuAdapter : MenuAdapter() {
-
-        override fun getTitle(): String {
-
-            return "RADYO"
-        }
-
-        override fun getMenuItemCount(): Int {
-
-            val count =
-                CarMediaService.projectionRadios().size
-
-            return if (count == 0) {
-                1
-            } else {
-                count
-            }
-        }
-
-        override fun getMenuItem(
-            position: Int
-        ): MenuItem {
-
-            val stations =
-                CarMediaService.projectionRadios()
-
-            if (stations.isEmpty()) {
-
-                return MenuItem.Builder()
-                    .setTitle(
-                        "Radyo yükleniyor…"
-                    )
-                    .setType(
-                        MenuItem.Type.ITEM
-                    )
-                    .build()
-            }
-
-            return MenuItem.Builder()
-                .setTitle(
-                    stations[position].title
-                )
-                .setType(
-                    MenuItem.Type.ITEM
-                )
-                .build()
-        }
-
-        override fun onMenuItemClicked(
-            position: Int
-        ) {
-
-            val stations =
-                CarMediaService.projectionRadios()
-
-            if (
-                stations.isEmpty() ||
-                position !in stations.indices
-            ) {
-
-                return
-            }
-
-            playRadioStation(
-                stations[position]
-            )
-        }
-    }
-
 }

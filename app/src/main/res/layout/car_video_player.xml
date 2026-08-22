@@ -4,9 +4,146 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
+    <!--
+        DHU/Android Auto video pipeline: bu TextureView değişmedi.
+        CarVideoPlayerHolder ExoPlayer'ı doğrudan bu id'ye bağlar.
+    -->
     <TextureView
         android:id="@+id/carVideoTexture"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
+
+    <!-- Video/YouTube gösterilirken ana menüye dönüş için küçük buton -->
+    <ImageButton
+        android:id="@+id/carBackToMenuButton"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="16dp"
+        android:background="@drawable/car_menu_button_background"
+        android:contentDescription="Ana menü"
+        android:padding="12dp"
+        android:src="@android:drawable/ic_menu_more"
+        android:tint="#FFFFFF"
+        android:visibility="gone" />
+
+    <!-- Ana menü: KaradagLabs logosu + 4 doğrudan buton (hamburger'a gizli değil) -->
+    <FrameLayout
+        android:id="@+id/carMenuOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#E6101418">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingStart="24dp"
+            android:paddingTop="24dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="24dp">
+
+            <ImageView
+                android:id="@+id/carLogoImage"
+                android:layout_width="wrap_content"
+                android:layout_height="56dp"
+                android:layout_marginBottom="10dp"
+                android:adjustViewBounds="true"
+                android:contentDescription="KaradagLabs"
+                android:scaleType="fitCenter"
+                android:src="@drawable/karadaglabs_logo" />
+
+            <TextView
+                android:id="@+id/carBrandTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="28dp"
+                android:letterSpacing="0.06"
+                android:text="KARADAG CAR TV"
+                android:textColor="#FFFFFF"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <!-- Tercih: tek satır yatay 4 buton -->
+            <LinearLayout
+                android:id="@+id/carMenuRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="horizontal" />
+
+            <!-- Ekran genişliği yetmezse: 2x2 büyük buton düzeni -->
+            <GridLayout
+                android:id="@+id/carMenuGrid"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:columnCount="2"
+                android:rowCount="2"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </FrameLayout>
+
+    <!-- Canlı TV / Radyo kanal listesi -->
+    <FrameLayout
+        android:id="@+id/carListOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#F2101418"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#1A1D22"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="8dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="24dp"
+                android:paddingBottom="12dp">
+
+                <ImageButton
+                    android:id="@+id/carListBack"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Geri"
+                    android:src="@android:drawable/ic_media_previous"
+                    android:tint="#FFFFFF" />
+
+                <TextView
+                    android:id="@+id/carListTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:text="CANLI TV"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <LinearLayout
+                    android:id="@+id/carListContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </ScrollView>
+        </LinearLayout>
+    </FrameLayout>
 
 </FrameLayout>
