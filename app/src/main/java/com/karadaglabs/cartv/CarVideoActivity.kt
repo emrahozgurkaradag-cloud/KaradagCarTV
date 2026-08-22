@@ -44,12 +44,25 @@ import java.util.concurrent.Executors
 @UnstableApi
 class CarVideoActivity : CarActivity() {
 
+    /*
+     * Navigation ağacı:
+     *
+     * MAIN_MENU
+     *   ├── LIVE_TV_LIST
+     *   │      └── CHANNEL_PLAYER
+     *   ├── RADIO_LIST
+     *   ├── YOUTUBE
+     *   └── GOOGLE
+     *
+     * Geri davranışı navigateBack() içinde merkezi olarak yönetilir.
+     */
     private enum class CarScreen {
         MAIN_MENU,
         LIVE_TV_LIST,
+        CHANNEL_PLAYER,
         RADIO_LIST,
         YOUTUBE,
-        PLAYER
+        GOOGLE
     }
 
     companion object {
@@ -272,20 +285,58 @@ class CarVideoActivity : CarActivity() {
 
     override fun onBackPressed() {
 
-        when (currentScreen) {
+        /*
+         * Android Auto host'un fiziksel/sistem geri action'ı da
+         * buradan geçer; tek merkezi navigasyon noktası navigateBack().
+         */
+        navigateBack()
+    }
 
-            CarScreen.YOUTUBE -> {
-                hideYoutube()
-                showScreen(CarScreen.MAIN_MENU)
+    /**
+     * Tüm geri navigasyonunun (host'un fiziksel geri tuşu, üstteki
+     * geri butonu, liste başlığındaki geri butonu) tek geçtiği yer.
+     *
+     * CHANNEL_PLAYER -> LIVE_TV_LIST
+     * LIVE_TV_LIST / RADIO_LIST / YOUTUBE / GOOGLE -> MAIN_MENU
+     * MAIN_MENU -> Android Auto'nun normal geri davranışı
+     */
+    private fun navigateBack() {
+
+        val from =
+            currentScreen
+
+        when (from) {
+
+            CarScreen.CHANNEL_PLAYER -> {
+
+                Log.d(
+                    TAG,
+                    "NAV BACK $from -> LIVE_TV_LIST"
+                )
+
+                showScreen(CarScreen.LIVE_TV_LIST)
             }
 
             CarScreen.LIVE_TV_LIST,
             CarScreen.RADIO_LIST,
-            CarScreen.PLAYER -> {
+            CarScreen.YOUTUBE,
+            CarScreen.GOOGLE -> {
+
+                Log.d(
+                    TAG,
+                    "NAV BACK $from -> MAIN_MENU"
+                )
+
                 showScreen(CarScreen.MAIN_MENU)
             }
 
             CarScreen.MAIN_MENU -> {
+
+                Log.d(
+                    TAG,
+                    "NAV BACK $from -> host default back"
+                )
+
                 super.onBackPressed()
             }
         }
@@ -478,10 +529,26 @@ class CarVideoActivity : CarActivity() {
         val backButton =
             android.widget.ImageButton(this).apply {
                 id = R.id.carBackToMenuButton
-                visibility = View.GONE
-                setImageResource(android.R.drawable.ic_menu_more)
+                setImageResource(android.R.drawable.ic_media_previous)
                 setColorFilter(Color.WHITE)
-                setPadding(dp(12), dp(12), dp(12), dp(12))
+                background = null
+            }
+
+        val backLabel =
+            TextView(this).apply {
+                id = R.id.carBackLabel
+                setTextColor(Color.WHITE)
+                textSize = 18f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+
+        val backBar =
+            LinearLayout(this).apply {
+                id = R.id.carBackBar
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                visibility = View.GONE
+                setPadding(dp(10), dp(10), dp(22), dp(10))
 
                 try {
                     setBackgroundResource(
@@ -491,11 +558,29 @@ class CarVideoActivity : CarActivity() {
                 }
             }
 
-        root.addView(
+        backBar.addView(
             backButton,
+            LinearLayout.LayoutParams(
+                dp(40),
+                dp(40)
+            )
+        )
+
+        backBar.addView(
+            backLabel,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = dp(6)
+            }
+        )
+
+        root.addView(
+            backBar,
             FrameLayout.LayoutParams(
-                dp(56),
-                dp(56)
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
                 gravity = android.view.Gravity.TOP or android.view.Gravity.START
                 setMargins(dp(16), dp(16), dp(16), dp(16))
@@ -758,7 +843,10 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun onYoutubeSelected() {
-        showYoutube("https://www.youtube.com/")
+        showYoutube(
+            CarScreen.YOUTUBE,
+            "https://www.youtube.com/"
+        )
     }
 
     private fun onRadioSelected() {
@@ -766,7 +854,10 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun onGoogleSelected() {
-        showYoutube("https://www.google.com/")
+        showYoutube(
+            CarScreen.GOOGLE,
+            "https://www.google.com/"
+        )
     }
 
     private fun dp(value: Int): Int {
@@ -781,16 +872,22 @@ class CarVideoActivity : CarActivity() {
 
     private fun setupBackToMenuButton() {
 
-        findViewById(
-            R.id.carBackToMenuButton
-        )?.setOnClickListener {
-
-            if (currentScreen == CarScreen.YOUTUBE) {
-                hideYoutube()
+        val backClickListener =
+            View.OnClickListener {
+                navigateBack()
             }
 
-            showScreen(CarScreen.MAIN_MENU)
-        }
+        findViewById(
+            R.id.carBackBar
+        )?.setOnClickListener(
+            backClickListener
+        )
+
+        findViewById(
+            R.id.carBackToMenuButton
+        )?.setOnClickListener(
+            backClickListener
+        )
     }
 
     private fun setupListOverlay() {
@@ -799,7 +896,7 @@ class CarVideoActivity : CarActivity() {
             R.id.carListBack
         )?.setOnClickListener {
 
-            showScreen(CarScreen.MAIN_MENU)
+            navigateBack()
         }
     }
 
@@ -807,50 +904,80 @@ class CarVideoActivity : CarActivity() {
         screen: CarScreen
     ) {
 
+        val previousScreen =
+            currentScreen
+
         currentScreen =
             screen
+
+        Log.d(
+            TAG,
+            "NAV -> $screen"
+        )
+
+        val wasOnWeb =
+            previousScreen == CarScreen.YOUTUBE ||
+                previousScreen == CarScreen.GOOGLE
+
+        val isOnWeb =
+            screen == CarScreen.YOUTUBE ||
+                screen == CarScreen.GOOGLE
+
+        if (wasOnWeb && !isOnWeb) {
+
+            /*
+             * Web ekranından çıkılıyor: WebView'ı durdur/gizle.
+             * Bunu her back/menu tıklamasında tekrar yazmak yerine
+             * tek merkezi yerde (showScreen) yapılıyor.
+             */
+            hideYoutube()
+        }
+
+        val showMainMenu =
+            screen == CarScreen.MAIN_MENU
+
+        val showList =
+            screen == CarScreen.LIVE_TV_LIST ||
+                screen == CarScreen.RADIO_LIST
+
+        val showBackBar =
+            screen == CarScreen.CHANNEL_PLAYER ||
+                isOnWeb
 
         findViewById(
             R.id.carMenuOverlay
         )?.visibility =
-            if (screen == CarScreen.MAIN_MENU) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+            if (showMainMenu) View.VISIBLE else View.GONE
 
         findViewById(
             R.id.carListOverlay
         )?.visibility =
-            if (
-                screen == CarScreen.LIVE_TV_LIST ||
-                screen == CarScreen.RADIO_LIST
-            ) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+            if (showList) View.VISIBLE else View.GONE
 
         youtubeWebView?.visibility =
-            if (screen == CarScreen.YOUTUBE) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
+            if (isOnWeb) View.VISIBLE else View.GONE
 
         findViewById(
-            R.id.carBackToMenuButton
+            R.id.carBackBar
         )?.visibility =
-            if (screen == CarScreen.MAIN_MENU) {
-                View.GONE
-            } else {
-                View.VISIBLE
+            if (showBackBar) View.VISIBLE else View.GONE
+
+        (findViewById(
+            R.id.carBackLabel
+        ) as? TextView)?.text =
+            when (screen) {
+                CarScreen.CHANNEL_PLAYER -> "←  KANAL LİSTESİ"
+                CarScreen.YOUTUBE -> "←  YOUTUBE"
+                CarScreen.GOOGLE -> "←  GOOGLE ARAMA"
+                else -> ""
             }
 
-        Log.d(
-            TAG,
-            "CAR VIDEO screen=$screen"
-        )
+        if (isOnWeb) {
+
+            findViewById(
+                R.id.carBackBar
+            )?.bringToFront()
+        }
     }
 
     /*
@@ -893,6 +1020,11 @@ class CarVideoActivity : CarActivity() {
 
         val channels =
             CarMediaService.projectionChannels()
+
+        Log.d(
+            TAG,
+            "IPTV CHANNEL COUNT (UI) = ${channels.size} loading=$loading"
+        )
 
         container.removeAllViews()
         channelLogoViews.clear()
@@ -1011,14 +1143,12 @@ class CarVideoActivity : CarActivity() {
             channel.id
         )
 
-        showScreen(CarScreen.PLAYER)
+        showScreen(CarScreen.CHANNEL_PLAYER)
     }
 
     private fun playRadioStation(
         station: ProjectionListItem
     ) {
-
-        hideYoutube()
 
         Log.d(
             TAG,
@@ -1029,7 +1159,12 @@ class CarVideoActivity : CarActivity() {
             station.id
         )
 
-        showScreen(CarScreen.PLAYER)
+        /*
+         * Radyo, navigasyon ağacında MAIN_MENU'nün doğrudan altında
+         * bir yapraktır (CHANNEL_PLAYER gibi ayrı bir alt ekranı
+         * yok); seçim yapıldıktan sonra kullanıcı RADIO_LIST
+         * ekranında kalır, ses arka planda çalmaya başlar.
+         */
     }
 
     /*
@@ -1040,6 +1175,7 @@ class CarVideoActivity : CarActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun showYoutube(
+        screen: CarScreen,
         url: String
     ) {
 
@@ -1094,15 +1230,11 @@ class CarVideoActivity : CarActivity() {
             url
         )
 
-        showScreen(CarScreen.YOUTUBE)
-
-        findViewById(
-            R.id.carBackToMenuButton
-        )?.bringToFront()
+        showScreen(screen)
 
         Log.d(
             TAG,
-            "Projection YouTube url=$url"
+            "Projection web screen=$screen url=$url"
         )
     }
 

@@ -850,13 +850,9 @@ class CarMediaService : MediaLibraryService() {
             List<LiveTvStation> {
 
         Log.d(
-            TAG,
-            "======================================"
-        )
-
-        Log.d(
-            TAG,
-            "Android Auto IPTV yükleme başladı"
+            "KaradagCarVideo",
+            "IPTV LOAD START deviceUuid=$deviceUuid " +
+                "licenseKeyBlank=${licenseKey.isBlank()}"
         )
 
         /*
@@ -867,6 +863,11 @@ class CarMediaService : MediaLibraryService() {
 
             val channels =
                 loadLiveTvFromApi()
+
+            Log.d(
+                "KaradagCarVideo",
+                "IPTV CHANNEL COUNT = ${channels.size}"
+            )
 
             if (channels.isNotEmpty()) {
 
@@ -892,6 +893,12 @@ class CarMediaService : MediaLibraryService() {
         ) {
 
             Log.e(
+                "KaradagCarVideo",
+                "IPTV LOAD ERROR = ${exception.message}",
+                exception
+            )
+
+            Log.e(
                 TAG,
                 "IPTV API başarısız",
                 exception
@@ -906,13 +913,13 @@ class CarMediaService : MediaLibraryService() {
             loadCachedLiveTv()
 
         Log.d(
-            TAG,
-            "Cache fallback: ${cached.size} kanal"
+            "KaradagCarVideo",
+            "IPTV CHANNEL COUNT (cache fallback) = ${cached.size}"
         )
 
         Log.d(
             TAG,
-            "======================================"
+            "Cache fallback: ${cached.size} kanal"
         )
 
         return cached
@@ -926,6 +933,25 @@ class CarMediaService : MediaLibraryService() {
 
     private fun loadLiveTvFromApi():
             List<LiveTvStation> {
+
+        if (licenseKey.isBlank()) {
+
+            /*
+             * Cihaz henüz aktive edilmemiş (RegistrationActivity'de
+             * lisans kaydedilmemiş). Boş license_key ile API'ye
+             * gitmenin bir anlamı yok; net bir hata fırlatıp
+             * cache fallback'e düşülsün.
+             */
+            Log.e(
+                "KaradagCarVideo",
+                "IPTV LOAD ERROR = license_key is blank; " +
+                    "device not activated (AppSession.licenseKey)"
+            )
+
+            throw IllegalStateException(
+                "Cihaz aktive edilmemiş: license_key boş"
+            )
+        }
 
         val connection =
             URL(

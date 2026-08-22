@@ -13,19 +13,47 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Video/YouTube gösterilirken ana menüye dönüş için küçük buton -->
-    <ImageButton
-        android:id="@+id/carBackToMenuButton"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
+    <!--
+        Kanal oynatıcı / YouTube / Google ekranlarında görünen tek
+        geri çubuğu. Her ekran için metin navigateBack() ile aynı
+        hedefe göre showScreen() içinde güncellenir.
+    -->
+    <LinearLayout
+        android:id="@+id/carBackBar"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_gravity="top|start"
         android:layout_margin="16dp"
         android:background="@drawable/car_menu_button_background"
-        android:contentDescription="Ana menü"
-        android:padding="12dp"
-        android:src="@android:drawable/ic_menu_more"
-        android:tint="#FFFFFF"
-        android:visibility="gone" />
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="22dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <ImageButton
+            android:id="@+id/carBackToMenuButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="Geri"
+            android:src="@android:drawable/ic_media_previous"
+            android:tint="#FFFFFF" />
+
+        <TextView
+            android:id="@+id/carBackLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
 
     <!-- Ana menü: KaradagLabs logosu + 4 doğrudan buton (hamburger'a gizli değil) -->
     <FrameLayout
