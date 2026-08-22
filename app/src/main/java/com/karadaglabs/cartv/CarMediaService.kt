@@ -326,11 +326,6 @@ class CarMediaService : MediaLibraryService() {
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
 
-            Log.e(
-                "KARADAG_TEST",
-                "ON_GET_LIBRARY_ROOT ÇALIŞTI"
-            )
-
             val root =
                 MediaItem.Builder()
 
@@ -388,11 +383,6 @@ class CarMediaService : MediaLibraryService() {
         ): ListenableFuture<
                 LibraryResult<ImmutableList<MediaItem>>
                 > {
-
-            Log.e(
-                "KARADAG_TEST",
-                "ON_GET_CHILDREN ÇALIŞTI parentId=$parentId"
-            )
 
             /*
              * ====================================================
