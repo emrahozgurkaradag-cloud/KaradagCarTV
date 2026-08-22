@@ -5,10 +5,13 @@
     android:background="#000000">
 
     <!--
-        DHU/Android Auto video pipeline: bu TextureView değişmedi.
-        CarVideoPlayerHolder ExoPlayer'ı doğrudan bu id'ye bağlar.
+        Android Auto projection video pipeline. CarVideoPlayerHolder
+        ExoPlayer'ı doğrudan bu id'ye bağlar (setVideoSurfaceHolder).
+        SurfaceView; gerçek araçta ses gelip görüntü gelmemesine neden
+        olan TextureView/GPU örnekleme sorunundan kaçınmak için
+        donanım overlay üzerinden video gösterir.
     -->
-    <TextureView
+    <SurfaceView
         android:id="@+id/carVideoTexture"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />

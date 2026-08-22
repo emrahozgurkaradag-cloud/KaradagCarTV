@@ -2,11 +2,11 @@
 
 import android.content.Context
 import android.net.Uri
-import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.TextureView
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -856,57 +856,90 @@ class CarMediaService : MediaLibraryService() {
         )
 
         /*
-         * Önce API
+         * Panelde müşteri için IPTV senkronizasyonu yeni yapılmışsa
+         * (veya cihaz ilk kez bağlanıyorsa) backend'in kanal listesini
+         * hazırlaması bir kaç saniye sürebilir; API bu sırada
+         * "licensed=true, channels=[]" dönebilir. Bunu tek seferde
+         * "0 kanal" kabul etmek yerine artan aralıklarla tekrar dene.
          */
+        val maxAttempts = 4
 
-        try {
-
-            val channels =
-                loadLiveTvFromApi()
-
-            Log.d(
-                "KaradagCarVideo",
-                "IPTV CHANNEL COUNT = ${channels.size}"
-            )
-
-            if (channels.isNotEmpty()) {
-
-                saveLiveTvCache(
-                    channels
-                )
-
-                Log.d(
-                    TAG,
-                    "IPTV API başarılı: ${channels.size} kanal"
-                )
-
-                return channels
-            }
-
-            Log.w(
-                TAG,
-                "IPTV API boş liste döndürdü"
-            )
-
-        } catch (
-            exception: Exception
+        for (
+            attempt in 1..maxAttempts
         ) {
 
-            Log.e(
-                "KaradagCarVideo",
-                "IPTV LOAD ERROR = ${exception.message}",
-                exception
-            )
+            try {
 
-            Log.e(
-                TAG,
-                "IPTV API başarısız",
-                exception
-            )
+                val channels =
+                    loadLiveTvFromApi()
+
+                Log.d(
+                    "KaradagCarVideo",
+                    "IPTV CHANNEL COUNT (attempt $attempt/$maxAttempts) = " +
+                        "${channels.size}"
+                )
+
+                if (channels.isNotEmpty()) {
+
+                    saveLiveTvCache(
+                        channels
+                    )
+
+                    Log.d(
+                        TAG,
+                        "IPTV API başarılı: ${channels.size} kanal " +
+                            "(attempt $attempt)"
+                    )
+
+                    return channels
+                }
+
+                Log.w(
+                    TAG,
+                    "IPTV API boş liste döndürdü " +
+                        "(attempt $attempt/$maxAttempts)"
+                )
+
+            } catch (
+                exception: Exception
+            ) {
+
+                Log.e(
+                    "KaradagCarVideo",
+                    "IPTV LOAD ERROR = ${exception.message} " +
+                        "(attempt $attempt/$maxAttempts)",
+                    exception
+                )
+
+                Log.e(
+                    TAG,
+                    "IPTV API başarısız (attempt $attempt)",
+                    exception
+                )
+            }
+
+            if (attempt < maxAttempts) {
+
+                try {
+
+                    Thread.sleep(
+                        attempt * 2_500L
+                    )
+
+                } catch (
+                    interrupted: InterruptedException
+                ) {
+
+                    Thread.currentThread()
+                        .interrupt()
+
+                    break
+                }
+            }
         }
 
         /*
-         * API olmazsa kendi cache'i
+         * API tüm denemelerde boş/başarısız olduysa kendi cache'i
          */
 
         val cached =
@@ -2006,9 +2039,21 @@ class CarMediaService : MediaLibraryService() {
 
 /**
  * CarMediaService ExoPlayer video output'u, CarActivity
- * penceresindeki TextureView'a gider. Host DrawingSpec
- * SurfaceTexture bu pencereyi yakalar; ayrı SurfaceView
- * overlay'i yakalamaz.
+ * penceresindeki bir SurfaceView'a gider.
+ *
+ * Önceki sürüm TextureView kullanıyordu (DHU'da ses+görüntü
+ * bağlanıyordu). Gerçek araç testinde ses geliyor ama görüntü
+ * gelmiyordu — TextureView, decode edilen video buffer'ını GPU
+ * texture olarak örnekleyebilmek için donanım hızlandırmasına ve
+ * GPU'nun o buffer formatını (renk uzayı/pixel format) örnekleyebilmesine
+ * ihtiyaç duyar; bazı gerçek cihaz/GPU/donanım video decoder
+ * kombinasyonlarında (özellikle otomotiv/orta segment SoC'lerde) bu
+ * örnekleme çalışmaz ve "ses var, görüntü yok" ile sonuçlanır — ses
+ * ExoPlayer'ın audio pipeline'ından ayrı gittiği için bundan etkilenmez.
+ * SurfaceView, decoder çıktısını donanım overlay katmanı üzerinden
+ * doğrudan gösterir; GPU texture örneklemesi gerektirmez, bu yüzden
+ * gerçek cihaz donanım video decode/GPU uyumsuzluklarına karşı daha
+ * güvenilirdir (ExoPlayer'ın kendi resmi önerisi de budur).
  */
 @UnstableApi
 object CarVideoPlayerHolder {
@@ -2025,10 +2070,10 @@ object CarVideoPlayerHolder {
     private var player: ExoPlayer? = null
 
     @Volatile
-    private var carTextureView: TextureView? = null
+    private var carSurfaceView: SurfaceView? = null
 
-    private var carTextureListener:
-        TextureView.SurfaceTextureListener? = null
+    private var carSurfaceCallback:
+        SurfaceHolder.Callback? = null
 
     private var lastVideoDecoder: String? = null
 
@@ -2068,15 +2113,15 @@ object CarVideoPlayerHolder {
                 lastVideoOutput =
                     output
 
-                val textureView =
-                    carTextureView
+                val surfaceView =
+                    carSurfaceView
 
                 Log.d(
                     TAG,
                     "PROJECTION FIRST FRAME " +
                         "videoSurface=$output " +
-                        "textureViewSurface=${textureView?.surfaceTexture} " +
-                        "texture=${textureView?.width}x${textureView?.height} " +
+                        "surfaceViewSurface=${surfaceView?.holder?.surface} " +
+                        "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "renderTimeMs=$renderTimeMs"
                 )
 
@@ -2129,16 +2174,16 @@ object CarVideoPlayerHolder {
         }
     }
 
-    fun setCarTextureView(
-        textureView: TextureView?
+    fun setCarSurfaceView(
+        surfaceView: SurfaceView?
     ) {
 
         runOnMainThread {
 
             if (
-                carTextureView ===
-                    textureView &&
-                textureView != null
+                carSurfaceView ===
+                    surfaceView &&
+                surfaceView != null
             ) {
 
                 bindLocked()
@@ -2146,37 +2191,35 @@ object CarVideoPlayerHolder {
                 return@runOnMainThread
             }
 
-            unhookCarTextureListener()
+            unhookCarSurfaceCallback()
 
-            carTextureView =
-                textureView
+            carSurfaceView =
+                surfaceView
 
-            hookCarTextureListener(
-                textureView
+            hookCarSurfaceCallback(
+                surfaceView
             )
 
             bindLocked()
         }
     }
 
-    fun clearCarTextureView(
-        textureView: TextureView
+    fun clearCarSurfaceView(
+        surfaceView: SurfaceView
     ) {
 
         runOnMainThread {
 
             if (
-                carTextureView ===
-                    textureView
+                carSurfaceView ===
+                    surfaceView
             ) {
 
-                unhookCarTextureListener()
+                unhookCarSurfaceCallback()
 
-                player?.clearVideoTextureView(
-                    textureView
-                )
+                player?.clearVideoSurface()
 
-                carTextureView =
+                carSurfaceView =
                     null
             }
         }
@@ -2186,16 +2229,11 @@ object CarVideoPlayerHolder {
 
         runOnMainThread {
 
-            unhookCarTextureListener()
+            unhookCarSurfaceCallback()
 
-            carTextureView?.let { view ->
+            player?.clearVideoSurface()
 
-                player?.clearVideoTextureView(
-                    view
-                )
-            }
-
-            carTextureView =
+            carSurfaceView =
                 null
 
             player?.removeAnalyticsListener(
@@ -2219,8 +2257,11 @@ object CarVideoPlayerHolder {
             val exoPlayer =
                 player
 
-            val textureView =
-                carTextureView
+            val surfaceView =
+                carSurfaceView
+
+            val surface =
+                surfaceView?.holder?.surface
 
             Log.d(
                 TAG,
@@ -2243,12 +2284,12 @@ object CarVideoPlayerHolder {
                         "$lastVideoDecoder " +
                         "videoSurface=" +
                         "$lastVideoOutput " +
-                        "texture=" +
-                        "${textureView?.width}x${textureView?.height} " +
-                        "available=" +
-                        "${textureView?.isAvailable} " +
+                        "surfaceView=" +
+                        "${surfaceView?.width}x${surfaceView?.height} " +
+                        "surfaceValid=" +
+                        "${surface?.isValid} " +
                         "surface=" +
-                        "${textureView?.surfaceTexture}"
+                        "$surface"
             )
         }
     }
@@ -2258,19 +2299,19 @@ object CarVideoPlayerHolder {
         val exoPlayer =
             player
 
-        val textureView =
-            carTextureView
+        val surfaceView =
+            carSurfaceView
 
         if (
             exoPlayer == null ||
-            textureView == null
+            surfaceView == null
         ) {
 
             Log.d(
                 TAG,
                 "Projection bind waiting " +
                         "player=${exoPlayer != null} " +
-                        "texture=${textureView != null}"
+                        "surfaceView=${surfaceView != null}"
             )
 
             return
@@ -2285,23 +2326,29 @@ object CarVideoPlayerHolder {
                 )
                 .build()
 
-        textureView.isOpaque =
-            true
+        val holder =
+            surfaceView.holder
 
-        if (textureView.isAvailable) {
+        val surface =
+            holder.surface
 
-            exoPlayer.setVideoTextureView(
-                textureView
+        if (
+            surface != null &&
+            surface.isValid
+        ) {
+
+            exoPlayer.setVideoSurfaceHolder(
+                holder
             )
 
             lastVideoOutput =
-                textureView.surfaceTexture
+                surface
 
             Log.d(
                 TAG,
-                "ExoPlayer.setVideoTextureView " +
-                    "${textureView.width}x${textureView.height} " +
-                    "videoSurface=${textureView.surfaceTexture}"
+                "ExoPlayer.setVideoSurfaceHolder " +
+                    "${surfaceView.width}x${surfaceView.height} " +
+                    "videoSurface=$surface"
             )
         }
 
@@ -2310,65 +2357,57 @@ object CarVideoPlayerHolder {
         )
     }
 
-    private fun hookCarTextureListener(
-        textureView: TextureView?
+    private fun hookCarSurfaceCallback(
+        surfaceView: SurfaceView?
     ) {
 
-        if (textureView == null) {
+        if (surfaceView == null) {
 
             return
         }
 
-        val listener =
+        val callback =
 
-            object :
-                TextureView.SurfaceTextureListener {
+            object : SurfaceHolder.Callback {
 
-                override fun onSurfaceTextureAvailable(
-                    surface: SurfaceTexture,
-                    width: Int,
-                    height: Int
+                override fun surfaceCreated(
+                    holder: SurfaceHolder
                 ) {
 
                     Log.d(
                         TAG,
-                        "surfaceCreated " +
-                            "${width}x${height} " +
-                            "surface=$surface"
+                        "surfaceCreated surface=${holder.surface}"
                     )
 
                     val exoPlayer =
                         player
                         ?: return
 
-                    textureView.isOpaque =
-                        true
-
-                    exoPlayer.setVideoTextureView(
-                        textureView
+                    exoPlayer.setVideoSurfaceHolder(
+                        holder
                     )
 
                     lastVideoOutput =
-                        surface
+                        holder.surface
 
                     exoPlayer.playWhenReady =
                         true
 
                     Log.d(
                         TAG,
-                        "Projection TextureView available " +
-                                "${width}x${height} " +
-                                "videoSurface=$surface " +
+                        "Projection SurfaceView available " +
+                                "videoSurface=${holder.surface} " +
                                 "boundToExoPlayer=true"
                     )
 
                     logPlayback(
-                        "texture-available"
+                        "surface-available"
                     )
                 }
 
-                override fun onSurfaceTextureSizeChanged(
-                    surface: SurfaceTexture,
+                override fun surfaceChanged(
+                    holder: SurfaceHolder,
+                    format: Int,
                     width: Int,
                     height: Int
                 ) {
@@ -2377,78 +2416,73 @@ object CarVideoPlayerHolder {
                         TAG,
                         "surfaceChanged " +
                             "${width}x${height} " +
-                            "surface=$surface"
+                            "surface=${holder.surface}"
                     )
 
-                    player?.setVideoTextureView(
-                        textureView
+                    player?.setVideoSurfaceHolder(
+                        holder
                     )
                 }
 
-                override fun onSurfaceTextureDestroyed(
-                    surface: SurfaceTexture
-                ): Boolean {
+                override fun surfaceDestroyed(
+                    holder: SurfaceHolder
+                ) {
 
                     Log.d(
                         TAG,
-                        "surfaceDestroyed surface=$surface"
+                        "surfaceDestroyed surface=${holder.surface}"
                     )
 
                     if (
-                        carTextureView ===
-                            textureView
+                        carSurfaceView ===
+                            surfaceView
                     ) {
 
-                        player?.clearVideoTextureView(
-                            textureView
-                        )
+                        player?.clearVideoSurface()
                     }
-
-                    return true
-                }
-
-                override fun onSurfaceTextureUpdated(
-                    surface: SurfaceTexture
-                ) {
                 }
             }
 
-        carTextureListener =
-            listener
+        carSurfaceCallback =
+            callback
 
-        textureView.surfaceTextureListener =
-            listener
+        surfaceView.holder.addCallback(
+            callback
+        )
 
-        if (textureView.isAvailable) {
+        val existingSurface =
+            surfaceView.holder.surface
 
-            val surface =
-                textureView.surfaceTexture
-                ?: return
+        if (
+            existingSurface != null &&
+            existingSurface.isValid
+        ) {
 
-            listener.onSurfaceTextureAvailable(
-                surface,
-                textureView.width,
-                textureView.height
+            callback.surfaceCreated(
+                surfaceView.holder
             )
         }
     }
 
-    private fun unhookCarTextureListener() {
+    private fun unhookCarSurfaceCallback() {
 
-        val textureView =
-            carTextureView
+        val surfaceView =
+            carSurfaceView
+
+        val callback =
+            carSurfaceCallback
 
         if (
-            textureView != null &&
-            textureView.surfaceTextureListener ===
-                carTextureListener
+            surfaceView != null &&
+            callback != null
         ) {
 
-            textureView.surfaceTextureListener =
-                null
+            surfaceView.holder.removeCallback(
+                callback
+            )
         }
 
-        carTextureListener =
+        carSurfaceCallback =
             null
     }
 

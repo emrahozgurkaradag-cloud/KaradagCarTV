@@ -9,7 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.view.TextureView
+import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
@@ -33,13 +33,18 @@ import java.util.concurrent.Executors
  * Android Auto projection host. Phone [PlayerActivity] is not on this path.
  *
  * IPTV ExoPlayer (CarMediaService)
- *   → TextureView inside this CarActivity window
- *   → host captures that window as DrawingSpec 800x400 SurfaceTexture
+ *   → SurfaceView inside this CarActivity window
+ *   → host captures that window as DrawingSpec 800x400
+ *
+ * SurfaceView is used instead of TextureView: on a real car the video
+ * decoder's output could not be sampled as a GPU texture (audio played,
+ * video stayed black), while SurfaceView renders through the hardware
+ * overlay path and does not need that GPU sampling step.
  *
  * Main menu (Canlı TV / YouTube / Radyo / Google) is drawn directly with
  * plain Views on top of the same window — not hidden behind the aauto
- * hamburger drawer. The TextureView video pipeline is not touched by
- * any of the menu code below.
+ * hamburger drawer. The video pipeline is not touched by any of the
+ * menu code below.
  */
 @UnstableApi
 class CarVideoActivity : CarActivity() {
@@ -69,7 +74,7 @@ class CarVideoActivity : CarActivity() {
         private const val TAG = "KaradagCarVideo"
     }
 
-    private var carTextureView: TextureView? = null
+    private var carSurfaceView: SurfaceView? = null
     private var playerListener: Player.Listener? = null
     private var youtubeWebView: WebView? = null
 
@@ -187,19 +192,19 @@ class CarVideoActivity : CarActivity() {
             }
         }
 
-        val textureView =
+        val surfaceView =
             findViewById(
                 R.id.carVideoTexture
-            ) as? TextureView
+            ) as? SurfaceView
 
-        if (textureView == null) {
+        if (surfaceView == null) {
             Log.e(
                 TAG,
                 "carVideoTexture missing after setContentView"
             )
         } else {
-            carTextureView = textureView
-            logHostVersusPlayerSurface(textureView)
+            carSurfaceView = surfaceView
+            logHostVersusPlayerSurface(surfaceView)
         }
 
         try {
@@ -362,13 +367,13 @@ class CarVideoActivity : CarActivity() {
         youtubeWebView?.destroy()
         youtubeWebView = null
 
-        carTextureView?.let { textureView ->
-            CarVideoPlayerHolder.clearCarTextureView(
-                textureView
+        carSurfaceView?.let { surfaceView ->
+            CarVideoPlayerHolder.clearCarSurfaceView(
+                surfaceView
             )
         }
 
-        carTextureView = null
+        carSurfaceView = null
 
         logoExecutor.shutdownNow()
 
@@ -383,29 +388,29 @@ class CarVideoActivity : CarActivity() {
 
     private fun bindProjectionSurface() {
 
-        val textureView =
-            carTextureView
+        val surfaceView =
+            carSurfaceView
                 ?: findViewById(
                     R.id.carVideoTexture
-                ) as? TextureView
+                ) as? SurfaceView
                 ?: return
 
-        carTextureView = textureView
+        carSurfaceView = surfaceView
 
-        logHostVersusPlayerSurface(textureView)
-        CarVideoPlayerHolder.setCarTextureView(
-            textureView
+        logHostVersusPlayerSurface(surfaceView)
+        CarVideoPlayerHolder.setCarSurfaceView(
+            surfaceView
         )
     }
 
     /**
-     * Host DrawingSpec SurfaceTexture is the CarActivity window.
-     * TextureView.surfaceTexture is ExoPlayer's video output; those
-     * pixels are composited into the same window the host captures.
-     * They are not the same Surface object as a PlayerView SurfaceView.
+     * Host DrawingSpec is the CarActivity window. The SurfaceView's
+     * surface is ExoPlayer's video output; the host composites this
+     * window (including the SurfaceView's hardware overlay) as the
+     * projection surface shown on the car screen.
      */
     private fun logHostVersusPlayerSurface(
-        textureView: TextureView
+        surfaceView: SurfaceView
     ) {
 
         val content =
@@ -418,11 +423,9 @@ class CarVideoActivity : CarActivity() {
             "PROJECTION SURFACES " +
                 "hostWindow=" +
                 "${content?.width}x${content?.height} " +
-                "textureView=${textureView.width}x${textureView.height} " +
-                "available=${textureView.isAvailable} " +
-                "videoSurface=${textureView.surfaceTexture} " +
-                "sameAsHostDrawingSpec=false " +
-                "(host captures this window; TextureView draws into it)"
+                "surfaceView=${surfaceView.width}x${surfaceView.height} " +
+                "videoSurface=${surfaceView.holder.surface} " +
+                "surfaceValid=${surfaceView.holder.surface?.isValid}"
         )
     }
 
@@ -513,13 +516,13 @@ class CarVideoActivity : CarActivity() {
                 )
             }
 
-        val textureView =
-            TextureView(this).apply {
+        val surfaceView =
+            SurfaceView(this).apply {
                 id = R.id.carVideoTexture
             }
 
         root.addView(
-            textureView,
+            surfaceView,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -1184,7 +1187,7 @@ class CarVideoActivity : CarActivity() {
             false
 
         val parent =
-            (carTextureView?.parent as? ViewGroup)
+            (carSurfaceView?.parent as? ViewGroup)
                 ?: return
 
         val webView =
