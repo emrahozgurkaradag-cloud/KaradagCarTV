@@ -203,6 +203,7 @@ class CarVideoActivity : CarActivity() {
                 "carVideoTexture missing after setContentView"
             )
         } else {
+            configureSurfaceZOrder(surfaceView)
             carSurfaceView = surfaceView
             logHostVersusPlayerSurface(surfaceView)
         }
@@ -395,12 +396,50 @@ class CarVideoActivity : CarActivity() {
                 ) as? SurfaceView
                 ?: return
 
+        configureSurfaceZOrder(surfaceView)
+
         carSurfaceView = surfaceView
 
         logHostVersusPlayerSurface(surfaceView)
         CarVideoPlayerHolder.setCarSurfaceView(
             surfaceView
         )
+    }
+
+    /**
+     * SurfaceView, varsayılan olarak kendi donanım katmanını
+     * pencerenin ARKASINA yerleştirir (host'un normal View çizim
+     * katmanı üstte kalır). Bu, standart bir Activity'de pencere
+     * "delinerek" (hole-punch) çözülür; ancak CarActivity standart
+     * bir Activity/Window değildir — host'un kendi compositing'i bu
+     * deliği her zaman doğru uygulamayabilir. setZOrderMediaOverlay
+     * bu katmanı host'un normal View çizimi ÜSTÜNE zorlar; bu olmadan
+     * host'ta hiç video görünmeyebilir (ses ExoPlayer'ın ayrı audio
+     * pipeline'ından gittiği için etkilenmez).
+     */
+    private fun configureSurfaceZOrder(
+        surfaceView: SurfaceView
+    ) {
+
+        try {
+
+            surfaceView.setZOrderMediaOverlay(
+                true
+            )
+
+            Log.d(
+                TAG,
+                "carVideoTexture setZOrderMediaOverlay=true"
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "Unable to set SurfaceView z-order",
+                exception
+            )
+        }
     }
 
     /**
@@ -519,6 +558,7 @@ class CarVideoActivity : CarActivity() {
         val surfaceView =
             SurfaceView(this).apply {
                 id = R.id.carVideoTexture
+                setZOrderMediaOverlay(true)
             }
 
         root.addView(
