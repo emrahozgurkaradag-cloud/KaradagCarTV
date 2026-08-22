@@ -18,7 +18,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -55,12 +54,6 @@ class CarVideoActivity : CarActivity() {
 
     companion object {
         private const val TAG = "KaradagCarVideo"
-
-        /*
-         * Ana menü tek satır 4 buton için hedeflenen minimum genişlik.
-         * Ekran bundan darsa 2x2 büyük buton düzenine geçilir.
-         */
-        private const val MENU_ROW_MIN_WIDTH_DP = 620f
     }
 
     private var carTextureView: TextureView? = null
@@ -142,9 +135,44 @@ class CarVideoActivity : CarActivity() {
             )
         }
 
-        setContentView(
-            R.layout.car_video_player
-        )
+        val contentInflated =
+            try {
+
+                setContentView(
+                    R.layout.car_video_player
+                )
+
+                true
+
+            } catch (exception: Exception) {
+
+                Log.e(
+                    TAG,
+                    "setContentView(car_video_player) failed; " +
+                        "building fallback view tree",
+                    exception
+                )
+
+                false
+            }
+
+        if (!contentInflated) {
+
+            try {
+
+                setContentView(
+                    buildFallbackContentView()
+                )
+
+            } catch (exception: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Fallback content view also failed",
+                    exception
+                )
+            }
+        }
 
         val textureView =
             findViewById(
@@ -179,10 +207,32 @@ class CarVideoActivity : CarActivity() {
         attachPlayerDiagnostics()
         bindProjectionSurface()
 
-        setupMainMenu()
-        setupListOverlay()
-        setupBackToMenuButton()
-        showScreen(CarScreen.MAIN_MENU)
+        /*
+         * Video/ExoPlayer bağlama yukarıda tamamlandı. Menü kurulumu
+         * ayrı bir try/catch içinde: burada bir istisna olsa da video
+         * pipeline'ı zaten kurulmuş olur ve host penceresi tamamen
+         * boş kalmaz.
+         */
+        try {
+
+            setupMainMenu()
+            setupListOverlay()
+            setupBackToMenuButton()
+            showScreen(CarScreen.MAIN_MENU)
+
+            Log.d(
+                TAG,
+                "CAR VIDEO main menu setup complete"
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "Unable to set up main menu",
+                exception
+            )
+        }
 
         handler.post(bindProjectionSurfaceRunnable)
         handler.removeCallbacks(delayedStart)
@@ -397,6 +447,224 @@ class CarVideoActivity : CarActivity() {
         }
     }
 
+    /**
+     * car_video_player.xml inflate edilemezse (host'un LayoutInflater'ı
+     * bir attribute/kaynak nedeniyle reddederse) ekran tamamen boş
+     * kalmasın diye aynı view id'leriyle (R.id.carVideoTexture vb.)
+     * eşdeğer bir ağaç kodla kurulur. Video pipeline id'si değişmez.
+     */
+    private fun buildFallbackContentView(): View {
+
+        val root =
+            FrameLayout(this).apply {
+                setBackgroundColor(
+                    Color.BLACK
+                )
+            }
+
+        val textureView =
+            TextureView(this).apply {
+                id = R.id.carVideoTexture
+            }
+
+        root.addView(
+            textureView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val backButton =
+            android.widget.ImageButton(this).apply {
+                id = R.id.carBackToMenuButton
+                visibility = View.GONE
+                setImageResource(android.R.drawable.ic_menu_more)
+                setColorFilter(Color.WHITE)
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+
+                try {
+                    setBackgroundResource(
+                        R.drawable.car_menu_button_background
+                    )
+                } catch (_: Exception) {
+                }
+            }
+
+        root.addView(
+            backButton,
+            FrameLayout.LayoutParams(
+                dp(56),
+                dp(56)
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                setMargins(dp(16), dp(16), dp(16), dp(16))
+            }
+        )
+
+        val menuOverlay =
+            FrameLayout(this).apply {
+                id = R.id.carMenuOverlay
+                setBackgroundColor(
+                    Color.parseColor("#E6101418")
+                )
+            }
+
+        val menuColumn =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER
+                setPadding(dp(24), dp(24), dp(24), dp(24))
+            }
+
+        val brandTitle =
+            TextView(this).apply {
+                id = R.id.carBrandTitle
+                text = "KARADAG CAR TV"
+                setTextColor(Color.WHITE)
+                textSize = 22f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+
+        val menuRow =
+            LinearLayout(this).apply {
+                id = R.id.carMenuRow
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER
+            }
+
+        menuColumn.addView(brandTitle)
+        menuColumn.addView(
+            menuRow,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(24)
+            }
+        )
+
+        menuOverlay.addView(
+            menuColumn,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER
+            }
+        )
+
+        root.addView(
+            menuOverlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val listOverlay =
+            FrameLayout(this).apply {
+                id = R.id.carListOverlay
+                setBackgroundColor(
+                    Color.parseColor("#F2101418")
+                )
+                visibility = View.GONE
+            }
+
+        val listColumn =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+
+        val listHeader =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setBackgroundColor(
+                    Color.parseColor("#1A1D22")
+                )
+                setPadding(dp(8), dp(12), dp(24), dp(12))
+            }
+
+        val listBack =
+            android.widget.ImageButton(this).apply {
+                id = R.id.carListBack
+                setImageResource(android.R.drawable.ic_media_previous)
+                setColorFilter(Color.WHITE)
+            }
+
+        val listTitle =
+            TextView(this).apply {
+                id = R.id.carListTitle
+                text = "CANLI TV"
+                setTextColor(Color.WHITE)
+                textSize = 20f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+
+        listHeader.addView(listBack)
+        listHeader.addView(
+            listTitle,
+            LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            ).apply {
+                marginStart = dp(12)
+            }
+        )
+
+        val listScroll =
+            android.widget.ScrollView(this)
+
+        val listContainer =
+            LinearLayout(this).apply {
+                id = R.id.carListContainer
+                orientation = LinearLayout.VERTICAL
+            }
+
+        listScroll.addView(
+            listContainer,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        listColumn.addView(listHeader)
+        listColumn.addView(
+            listScroll,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
+
+        listOverlay.addView(
+            listColumn,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        root.addView(
+            listOverlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        Log.d(
+            TAG,
+            "Fallback content view built programmatically"
+        )
+
+        return root
+    }
+
     /*
      * ============================================================
      * ANA MENÜ — doğrudan görünür butonlar (hamburger değil)
@@ -411,14 +679,7 @@ class CarVideoActivity : CarActivity() {
             ) as? LinearLayout
                 ?: return
 
-        val grid =
-            findViewById(
-                R.id.carMenuGrid
-            ) as? GridLayout
-                ?: return
-
         row.removeAllViews()
-        grid.removeAllViews()
 
         val entries =
             listOf(
@@ -437,62 +698,15 @@ class CarVideoActivity : CarActivity() {
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     1f
                 ).apply {
-                    marginStart = dp(8)
-                    marginEnd = dp(8)
-                }
-            )
-
-            grid.addView(
-                createMenuButton(title, onClick),
-                GridLayout.LayoutParams().apply {
-                    width = dp(260)
-                    height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    setMargins(dp(8), dp(8), dp(8), dp(8))
+                    marginStart = dp(6)
+                    marginEnd = dp(6)
                 }
             )
         }
-
-        row.post {
-            chooseMenuLayout(row, grid)
-        }
-    }
-
-    private fun chooseMenuLayout(
-        row: LinearLayout,
-        grid: GridLayout
-    ) {
-
-        val overlayWidth =
-            findViewById(
-                R.id.carMenuOverlay
-            )?.width
-                ?: 0
-
-        if (overlayWidth <= 0) {
-
-            row.postDelayed(
-                { chooseMenuLayout(row, grid) },
-                100L
-            )
-
-            return
-        }
-
-        val widthDp =
-            overlayWidth / resources.displayMetrics.density
-
-        val useRow =
-            widthDp >= MENU_ROW_MIN_WIDTH_DP
-
-        row.visibility =
-            if (useRow) View.VISIBLE else View.GONE
-
-        grid.visibility =
-            if (useRow) View.GONE else View.VISIBLE
 
         Log.d(
             TAG,
-            "Main menu layout widthDp=$widthDp mode=${if (useRow) "row(1x4)" else "grid(2x2)"}"
+            "Main menu buttons installed count=${row.childCount}"
         )
     }
 
@@ -501,31 +715,42 @@ class CarVideoActivity : CarActivity() {
         onClick: () -> Unit
     ): Button {
 
-        return Button(this).apply {
+        val button =
+            Button(this)
 
-            text = title
-            isAllCaps = false
-            textSize = 20f
-            setTextColor(Color.WHITE)
-            minimumWidth = dp(180)
-            minimumHeight = dp(96)
+        button.text = title
+        button.isAllCaps = false
+        button.textSize = 18f
+        button.setTextColor(Color.WHITE)
+        button.minimumWidth = dp(140)
+        button.minimumHeight = dp(88)
 
-            setPadding(
-                dp(20),
-                dp(24),
-                dp(20),
-                dp(24)
+        button.setPadding(
+            dp(12),
+            dp(20),
+            dp(12),
+            dp(20)
+        )
+
+        try {
+
+            button.setBackgroundResource(
+                R.drawable.car_menu_button_background
             )
 
-            background =
-                getDrawable(
-                    R.drawable.car_menu_button_background
-                )
+        } catch (exception: Exception) {
 
-            setOnClickListener {
-                onClick()
-            }
+            Log.w(
+                TAG,
+                "Unable to load menu button background: ${exception.message}"
+            )
         }
+
+        button.setOnClickListener {
+            onClick()
+        }
+
+        return button
     }
 
     private fun onLiveTvSelected() {
