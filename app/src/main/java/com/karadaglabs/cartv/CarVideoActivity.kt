@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
@@ -21,8 +22,11 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import com.google.android.apps.auto.sdk.CarActivity
 import java.net.HttpURLConnection
 import java.net.URL
@@ -72,11 +76,47 @@ class CarVideoActivity : CarActivity() {
 
     companion object {
         private const val TAG = "KaradagCarVideo"
+
+        /*
+         * ============================================================
+         * POC_VIDEO — GEÇİCİ, İZOLE VİDEO KANIT TESTİ
+         * ============================================================
+         *
+         * IPTV/YouTube/Radyo/MediaSession/API kodlarına dokunmaz.
+         * Mevcut CarVideoPlayerHolder (paylaşılan ExoPlayer) + mevcut
+         * SurfaceView hattını yeniden kullanarak, sabit bir HTTPS test
+         * videosunu OTOMATİK (kanala basılmadan) oynatır. Amaç:
+         * "ExoPlayer frame üretiyor mu" ile "host bu frame'i araç
+         * ekranında gösteriyor mu" sorularını birbirinden ayırmak.
+         *
+         * POC_VIDEO_TEST_ENABLED = false yapılıp bu blok / çağrı satırı
+         * silinerek tamamen geri alınabilir; IPTV/Radyo/YouTube/Google
+         * akışlarının hiçbiri bu bayrağa bağlı değildir.
+         */
+        private const val POC_VIDEO_TEST_ENABLED = true
+
+        /*
+         * Apple'ın herkese açık, uzun süredir yayında olan HLS test
+         * akışı (bipbop) — bu ortamdan erişilebilirliği doğrulandı
+         * (HTTP 200, content-type application/x-mpegURL).
+         */
+        private const val POC_TEST_VIDEO_URL =
+            "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8"
+
+        private const val POC_TAG = "POC_VIDEO"
+
+        private const val POC_PLAYER_WAIT_MAX_ATTEMPTS = 10
+
+        private const val POC_PLAYER_WAIT_INTERVAL_MS = 500L
     }
 
     private var carSurfaceView: SurfaceView? = null
     private var playerListener: Player.Listener? = null
     private var youtubeWebView: WebView? = null
+
+    private var pocSurfaceCallback: SurfaceHolder.Callback? = null
+    private var pocPlayerListener: Player.Listener? = null
+    private var pocAnalyticsListener: AnalyticsListener? = null
 
     private var currentScreen: CarScreen =
         CarScreen.MAIN_MENU
@@ -256,12 +296,26 @@ class CarVideoActivity : CarActivity() {
         handler.post(bindProjectionSurfaceRunnable)
         handler.removeCallbacks(delayedStart)
         handler.postDelayed(delayedStart, 400L)
+
+        if (POC_VIDEO_TEST_ENABLED) {
+
+            Log.d(POC_TAG, "host lifecycle onCreate; scheduling POC start")
+
+            handler.postDelayed(
+                { startPocVideoTest() },
+                500L
+            )
+        }
     }
 
     override fun onStart() {
         super.onStart()
 
         Log.d(TAG, "CAR VIDEO ACTIVITY STARTED")
+
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onStart")
+        }
 
         bindProjectionSurface()
     }
@@ -270,6 +324,10 @@ class CarVideoActivity : CarActivity() {
         super.onResume()
 
         Log.d(TAG, "CAR VIDEO ACTIVITY RESUMED")
+
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onResume")
+        }
 
         bindProjectionSurface()
         CarVideoPlayerHolder.logPlayback(
@@ -280,11 +338,19 @@ class CarVideoActivity : CarActivity() {
     override fun onPause() {
         Log.d(TAG, "CAR VIDEO ACTIVITY PAUSED")
 
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onPause")
+        }
+
         super.onPause()
     }
 
     override fun onStop() {
         Log.d(TAG, "CAR VIDEO ACTIVITY STOPPED")
+
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onStop")
+        }
 
         super.onStop()
     }
@@ -351,6 +417,10 @@ class CarVideoActivity : CarActivity() {
     override fun onDestroy() {
         Log.d(TAG, "CAR VIDEO ACTIVITY DESTROYED")
 
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onDestroy")
+        }
+
         handler.removeCallbacksAndMessages(
             null
         )
@@ -363,6 +433,8 @@ class CarVideoActivity : CarActivity() {
         }
 
         playerListener = null
+
+        stopPocVideoTest()
 
         hideYoutube()
         youtubeWebView?.destroy()
@@ -466,6 +538,297 @@ class CarVideoActivity : CarActivity() {
                 "videoSurface=${surfaceView.holder.surface} " +
                 "surfaceValid=${surfaceView.holder.surface?.isValid}"
         )
+    }
+
+    /*
+     * ============================================================
+     * POC_VIDEO — GEÇİCİ VİDEO KANIT TESTİ (izole, aşağıda tek blok)
+     * ============================================================
+     *
+     * Bu blok IPTV/Radyo/YouTube/Google akışlarına, CarMediaService
+     * içindeki IPTV/lisans koduna veya MediaSession'a dokunmaz.
+     * Sadece mevcut paylaşılan CarVideoPlayerHolder/ExoPlayer ve
+     * mevcut carVideoTexture SurfaceView'ini kullanarak sabit bir
+     * HTTPS test videosu (POC_TEST_VIDEO_URL) oynatır.
+     */
+
+    private fun startPocVideoTest() {
+
+        if (!POC_VIDEO_TEST_ENABLED) {
+            return
+        }
+
+        Log.d(
+            POC_TAG,
+            "start url=$POC_TEST_VIDEO_URL"
+        )
+
+        /*
+         * Ana menü/liste overlay'lerini gizle: test videosu ekranın
+         * tamamını kaplamalı, kendi View'larımızın arkasında/altında
+         * kalmamalı. Bu, sadece POC süresince geçerli — IPTV/Radyo
+         * ekranlarının kod akışı değişmiyor.
+         */
+        (findViewById(R.id.carMenuOverlay) as? View)?.visibility = View.GONE
+        (findViewById(R.id.carListOverlay) as? View)?.visibility = View.GONE
+        (findViewById(R.id.carBackBar) as? View)?.visibility = View.GONE
+
+        Log.d(
+            POC_TAG,
+            "menu/list overlays hidden for isolated test"
+        )
+
+        val surfaceView = carSurfaceView
+
+        if (surfaceView == null) {
+
+            Log.e(
+                POC_TAG,
+                "carSurfaceView null; cannot attach POC surface callback"
+            )
+
+        } else {
+
+            attachPocSurfaceCallback(surfaceView)
+        }
+
+        waitForPocPlayerAndStart(attempt = 1)
+    }
+
+    private fun attachPocSurfaceCallback(
+        surfaceView: SurfaceView
+    ) {
+
+        val callback =
+
+            object : SurfaceHolder.Callback {
+
+                override fun surfaceCreated(
+                    holder: SurfaceHolder
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "surfaceCreated surface=${holder.surface} " +
+                            "valid=${holder.surface?.isValid}"
+                    )
+                }
+
+                override fun surfaceChanged(
+                    holder: SurfaceHolder,
+                    format: Int,
+                    width: Int,
+                    height: Int
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "surfaceChanged ${width}x${height} " +
+                            "surface=${holder.surface}"
+                    )
+                }
+
+                override fun surfaceDestroyed(
+                    holder: SurfaceHolder
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "surfaceDestroyed surface=${holder.surface}"
+                    )
+                }
+            }
+
+        pocSurfaceCallback = callback
+
+        surfaceView.holder.addCallback(callback)
+
+        val existingSurface =
+            surfaceView.holder.surface
+
+        if (
+            existingSurface != null &&
+            existingSurface.isValid
+        ) {
+
+            Log.d(
+                POC_TAG,
+                "surface already created before POC callback attached " +
+                    "surface=$existingSurface"
+            )
+        }
+    }
+
+    private fun waitForPocPlayerAndStart(
+        attempt: Int
+    ) {
+
+        val player =
+            CarVideoPlayerHolder.getPlayer()
+
+        if (player == null) {
+
+            if (attempt >= POC_PLAYER_WAIT_MAX_ATTEMPTS) {
+
+                Log.e(
+                    POC_TAG,
+                    "player never became available after " +
+                        "$attempt attempts; aborting POC"
+                )
+
+                return
+            }
+
+            Log.d(
+                POC_TAG,
+                "waiting for CarMediaService player " +
+                    "(attempt $attempt/$POC_PLAYER_WAIT_MAX_ATTEMPTS)"
+            )
+
+            handler.postDelayed(
+                { waitForPocPlayerAndStart(attempt + 1) },
+                POC_PLAYER_WAIT_INTERVAL_MS
+            )
+
+            return
+        }
+
+        Log.d(
+            POC_TAG,
+            "playerAttached player=$player"
+        )
+
+        attachPocPlayerDiagnostics(player)
+
+        val mediaItem =
+            MediaItem.fromUri(
+                POC_TEST_VIDEO_URL
+            )
+
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        player.playWhenReady = true
+
+        Log.d(
+            POC_TAG,
+            "setMediaItem+prepare+playWhenReady=true url=$POC_TEST_VIDEO_URL"
+        )
+    }
+
+    private fun attachPocPlayerDiagnostics(
+        player: ExoPlayer
+    ) {
+
+        val listener =
+
+            object : Player.Listener {
+
+                override fun onPlaybackStateChanged(
+                    playbackState: Int
+                ) {
+
+                    val stateName =
+                        when (playbackState) {
+                            Player.STATE_IDLE -> "STATE_IDLE"
+                            Player.STATE_BUFFERING -> "STATE_BUFFERING"
+                            Player.STATE_READY -> "STATE_READY"
+                            Player.STATE_ENDED -> "STATE_ENDED"
+                            else -> "STATE_UNKNOWN($playbackState)"
+                        }
+
+                    Log.d(
+                        POC_TAG,
+                        stateName
+                    )
+                }
+
+                override fun onVideoSizeChanged(
+                    videoSize: androidx.media3.common.VideoSize
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "videoResolution ${videoSize.width}x${videoSize.height}"
+                    )
+                }
+
+                override fun onPlayerError(
+                    error: androidx.media3.common.PlaybackException
+                ) {
+
+                    Log.e(
+                        POC_TAG,
+                        "playerError ${error.errorCodeName} ${error.message}",
+                        error
+                    )
+                }
+            }
+
+        pocPlayerListener = listener
+
+        player.addListener(listener)
+
+        val analyticsListener =
+
+            object : AnalyticsListener {
+
+                override fun onVideoDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "videoDecoder=$decoderName " +
+                            "initMs=$initializationDurationMs"
+                    )
+                }
+
+                override fun onRenderedFirstFrame(
+                    eventTime: AnalyticsListener.EventTime,
+                    output: Any,
+                    renderTimeMs: Long
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "FIRST_FRAME output=$output renderTimeMs=$renderTimeMs"
+                    )
+                }
+            }
+
+        pocAnalyticsListener = analyticsListener
+
+        player.addAnalyticsListener(analyticsListener)
+    }
+
+    private fun stopPocVideoTest() {
+
+        carSurfaceView?.holder?.let { holder ->
+
+            pocSurfaceCallback?.let { callback ->
+                holder.removeCallback(callback)
+            }
+        }
+
+        pocSurfaceCallback = null
+
+        val player =
+            CarVideoPlayerHolder.getPlayer()
+
+        pocPlayerListener?.let { listener ->
+            player?.removeListener(listener)
+        }
+
+        pocPlayerListener = null
+
+        pocAnalyticsListener?.let { listener ->
+            player?.removeAnalyticsListener(listener)
+        }
+
+        pocAnalyticsListener = null
     }
 
     private fun attachPlayerDiagnostics() {
