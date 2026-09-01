@@ -1,4 +1,15 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+    "media" burada bilerek geri eklendi. Gerçek araçta (DHU değil)
+    Karadag Car TV'nin Android Auto uygulama listesinde görünmesi
+    58a1ec4 commit'ine kadar bu tag'in var olduğu sürümlerde
+    doğrulanmıştı. 3b05bd7'de DHU'daki ikinci (media) ikon sorununu
+    çözmek için kaldırılmıştı; ancak gerçek araçta CarMediaService
+    (bir MediaBrowserService bileşeni) manifest'te dururken bu tag
+    olmadan uygulamanın kendisi (CarVideoService/projection girişi
+    dahil) listeden tamamen kayboluyor. Gerçek araçta görünürlük,
+    tek ikon görünümünden önceliklidir.
+-->
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <uses name="media" />
     <!--
@@ -14,4 +25,5 @@
     <uses
         name="projection"
         tools:ignore="InvalidUsesTagAttribute" />
+    <uses name="video" />
 </automotiveApp>

@@ -78,17 +78,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
 
     // ============================================================
-    // ANDROID AUTO - MODERN CAR APP API
-    //
-    // CarMirrorService.kt tarafından kullanılıyor.
-    // aauto.aar ile birlikte şimdilik tutuluyor.
-    // ============================================================
-
-    implementation("androidx.car.app:app:1.7.0")
-
-    implementation("androidx.car.app:app-projected:1.7.0")
-
-    // ============================================================
     // MEDIA3 / EXOPLAYER
     // ============================================================
 

@@ -1,23 +1,165 @@
 package com.karadaglabs.cartv
 
+import android.annotation.SuppressLint
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import android.view.ContextThemeWrapper
+import android.view.SurfaceHolder
+import android.view.SurfaceView
+import android.view.View
 import android.view.ViewGroup
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.PlayerView
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import com.google.android.apps.auto.sdk.CarActivity
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
+/**
+ * Android Auto projection host. Phone [PlayerActivity] is not on this path.
+ *
+ * IPTV ExoPlayer (CarMediaService)
+ *   → SurfaceView inside this CarActivity window
+ *   → host captures that window as DrawingSpec 800x400
+ *
+ * SurfaceView is used instead of TextureView: on a real car the video
+ * decoder's output could not be sampled as a GPU texture (audio played,
+ * video stayed black), while SurfaceView renders through the hardware
+ * overlay path and does not need that GPU sampling step.
+ *
+ * Main menu (Canlı TV / YouTube / Radyo / Google) is drawn directly with
+ * plain Views on top of the same window — not hidden behind the aauto
+ * hamburger drawer. The video pipeline is not touched by any of the
+ * menu code below.
+ */
 @UnstableApi
 class CarVideoActivity : CarActivity() {
 
-    companion object {
-        private const val TAG = "KaradagCarVideo"
+    /*
+     * Navigation ağacı:
+     *
+     * MAIN_MENU
+     *   ├── LIVE_TV_LIST
+     *   │      └── CHANNEL_PLAYER
+     *   ├── RADIO_LIST
+     *   ├── YOUTUBE
+     *   └── GOOGLE
+     *
+     * Geri davranışı navigateBack() içinde merkezi olarak yönetilir.
+     */
+    private enum class CarScreen {
+        MAIN_MENU,
+        LIVE_TV_LIST,
+        CHANNEL_PLAYER,
+        RADIO_LIST,
+        YOUTUBE,
+        GOOGLE
     }
 
-    private var playerView: PlayerView? = null
+    companion object {
+        private const val TAG = "KaradagCarVideo"
+
+        /*
+         * ============================================================
+         * POC_VIDEO — GEÇİCİ, İZOLE VİDEO KANIT TESTİ
+         * ============================================================
+         *
+         * IPTV/YouTube/Radyo/MediaSession/API kodlarına dokunmaz.
+         * Mevcut CarVideoPlayerHolder (paylaşılan ExoPlayer) + mevcut
+         * SurfaceView hattını yeniden kullanarak, sabit bir HTTPS test
+         * videosunu OTOMATİK (kanala basılmadan) oynatır. Amaç:
+         * "ExoPlayer frame üretiyor mu" ile "host bu frame'i araç
+         * ekranında gösteriyor mu" sorularını birbirinden ayırmak.
+         *
+         * POC_VIDEO_TEST_ENABLED = false yapılıp bu blok / çağrı satırı
+         * silinerek tamamen geri alınabilir; IPTV/Radyo/YouTube/Google
+         * akışlarının hiçbiri bu bayrağa bağlı değildir.
+         */
+        private const val POC_VIDEO_TEST_ENABLED = true
+
+        /*
+         * Apple'ın herkese açık, uzun süredir yayında olan HLS test
+         * akışı (bipbop) — bu ortamdan erişilebilirliği doğrulandı
+         * (HTTP 200, content-type application/x-mpegURL).
+         */
+        private const val POC_TEST_VIDEO_URL =
+            "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8"
+
+        private const val POC_TAG = "POC_VIDEO"
+
+        private const val POC_PLAYER_WAIT_MAX_ATTEMPTS = 10
+
+        private const val POC_PLAYER_WAIT_INTERVAL_MS = 500L
+    }
+
+    private var carSurfaceView: SurfaceView? = null
+    private var playerListener: Player.Listener? = null
+    private var youtubeWebView: WebView? = null
+
+    private var pocSurfaceCallback: SurfaceHolder.Callback? = null
+    private var pocPlayerListener: Player.Listener? = null
+    private var pocAnalyticsListener: AnalyticsListener? = null
+
+    private var currentScreen: CarScreen =
+        CarScreen.MAIN_MENU
+
+    private val handler =
+        Handler(
+            Looper.getMainLooper()
+        )
+
+    private val logoExecutor =
+        Executors.newFixedThreadPool(2)
+
+    private val logoCache =
+        ConcurrentHashMap<String, Bitmap>()
+
+    private val channelLogoViews =
+        ConcurrentHashMap<String, ImageView>()
+
+    private val bindProjectionSurfaceRunnable =
+        Runnable {
+            bindProjectionSurface()
+        }
+
+    private val delayedStart =
+        Runnable {
+
+            Log.d(
+                TAG,
+                "CAR VIDEO delayed menu refresh"
+            )
+
+            bindProjectionSurface()
+            playerListener?.let { listener ->
+                CarVideoPlayerHolder.getPlayer()
+                    ?.addListener(
+                        listener
+                    )
+            }
+            refreshBrowseData()
+            CarVideoPlayerHolder.logPlayback(
+                "activity-ready"
+            )
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,38 +177,76 @@ class CarVideoActivity : CarActivity() {
                 .statusBarController
                 .hideAppHeader()
 
+            /*
+             * Ana seçenekler artık doğrudan ekranda; hamburger
+             * menüde gizli bir içerik olmadığı için buton
+             * gösterilmiyor.
+             */
             carUiController
                 .menuController
                 .hideMenuButton()
         } catch (exception: Exception) {
             Log.e(
                 TAG,
-                "Unable to hide car chrome",
+                "Unable to configure car chrome",
                 exception
             )
         }
 
-        val view = PlayerView(
-            ContextThemeWrapper(
-                this,
-                R.style.Theme_KaradagCarTV
-            )
-        ).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.BLACK)
-            setShutterBackgroundColor(Color.BLACK)
-            useController = false
-            keepScreenOn = true
+        val contentInflated =
+            try {
+
+                setContentView(
+                    R.layout.car_video_player
+                )
+
+                true
+
+            } catch (exception: Exception) {
+
+                Log.e(
+                    TAG,
+                    "setContentView(car_video_player) failed; " +
+                        "building fallback view tree",
+                    exception
+                )
+
+                false
+            }
+
+        if (!contentInflated) {
+
+            try {
+
+                setContentView(
+                    buildFallbackContentView()
+                )
+
+            } catch (exception: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Fallback content view also failed",
+                    exception
+                )
+            }
         }
 
-        playerView = view
+        val surfaceView =
+            findViewById(
+                R.id.carVideoTexture
+            ) as? SurfaceView
 
-        setContentView(view)
-
-        CarVideoPlayerHolder.setPlayerView(view)
+        if (surfaceView == null) {
+            Log.e(
+                TAG,
+                "carVideoTexture missing after setContentView"
+            )
+        } else {
+            configureSurfaceZOrder(surfaceView)
+            carSurfaceView = surfaceView
+            logHostVersusPlayerSurface(surfaceView)
+        }
 
         try {
             startService(
@@ -82,6 +262,62 @@ class CarVideoActivity : CarActivity() {
                 exception
             )
         }
+
+        attachPlayerDiagnostics()
+        bindProjectionSurface()
+
+        /*
+         * Video/ExoPlayer bağlama yukarıda tamamlandı. Menü kurulumu
+         * ayrı bir try/catch içinde: burada bir istisna olsa da video
+         * pipeline'ı zaten kurulmuş olur ve host penceresi tamamen
+         * boş kalmaz.
+         */
+        try {
+
+            setupMainMenu()
+            setupListOverlay()
+            setupBackToMenuButton()
+            showScreen(CarScreen.MAIN_MENU)
+
+            Log.d(
+                TAG,
+                "CAR VIDEO main menu setup complete"
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "Unable to set up main menu",
+                exception
+            )
+        }
+
+        handler.post(bindProjectionSurfaceRunnable)
+        handler.removeCallbacks(delayedStart)
+        handler.postDelayed(delayedStart, 400L)
+
+        if (POC_VIDEO_TEST_ENABLED) {
+
+            Log.d(POC_TAG, "host lifecycle onCreate; scheduling POC start")
+
+            handler.postDelayed(
+                { startPocVideoTest() },
+                500L
+            )
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+
+        Log.d(TAG, "CAR VIDEO ACTIVITY STARTED")
+
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onStart")
+        }
+
+        bindProjectionSurface()
     }
 
     override fun onResume() {
@@ -89,26 +325,1528 @@ class CarVideoActivity : CarActivity() {
 
         Log.d(TAG, "CAR VIDEO ACTIVITY RESUMED")
 
-        playerView?.let { view ->
-            CarVideoPlayerHolder.setPlayerView(view)
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onResume")
         }
+
+        bindProjectionSurface()
+        CarVideoPlayerHolder.logPlayback(
+            "resumed"
+        )
     }
 
     override fun onPause() {
         Log.d(TAG, "CAR VIDEO ACTIVITY PAUSED")
 
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onPause")
+        }
+
         super.onPause()
+    }
+
+    override fun onStop() {
+        Log.d(TAG, "CAR VIDEO ACTIVITY STOPPED")
+
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onStop")
+        }
+
+        super.onStop()
+    }
+
+    override fun onBackPressed() {
+
+        /*
+         * Android Auto host'un fiziksel/sistem geri action'ı da
+         * buradan geçer; tek merkezi navigasyon noktası navigateBack().
+         */
+        navigateBack()
+    }
+
+    /**
+     * Tüm geri navigasyonunun (host'un fiziksel geri tuşu, üstteki
+     * geri butonu, liste başlığındaki geri butonu) tek geçtiği yer.
+     *
+     * CHANNEL_PLAYER -> LIVE_TV_LIST
+     * LIVE_TV_LIST / RADIO_LIST / YOUTUBE / GOOGLE -> MAIN_MENU
+     * MAIN_MENU -> Android Auto'nun normal geri davranışı
+     */
+    private fun navigateBack() {
+
+        val from =
+            currentScreen
+
+        when (from) {
+
+            CarScreen.CHANNEL_PLAYER -> {
+
+                Log.d(
+                    TAG,
+                    "NAV BACK $from -> LIVE_TV_LIST"
+                )
+
+                showScreen(CarScreen.LIVE_TV_LIST)
+            }
+
+            CarScreen.LIVE_TV_LIST,
+            CarScreen.RADIO_LIST,
+            CarScreen.YOUTUBE,
+            CarScreen.GOOGLE -> {
+
+                Log.d(
+                    TAG,
+                    "NAV BACK $from -> MAIN_MENU"
+                )
+
+                showScreen(CarScreen.MAIN_MENU)
+            }
+
+            CarScreen.MAIN_MENU -> {
+
+                Log.d(
+                    TAG,
+                    "NAV BACK $from -> host default back"
+                )
+
+                super.onBackPressed()
+            }
+        }
     }
 
     override fun onDestroy() {
         Log.d(TAG, "CAR VIDEO ACTIVITY DESTROYED")
 
-        playerView?.let { view ->
-            CarVideoPlayerHolder.clearPlayerView(view)
+        if (POC_VIDEO_TEST_ENABLED) {
+            Log.d(POC_TAG, "host lifecycle onDestroy")
         }
 
-        playerView = null
+        handler.removeCallbacksAndMessages(
+            null
+        )
+
+        playerListener?.let { listener ->
+            CarVideoPlayerHolder.getPlayer()
+                ?.removeListener(
+                    listener
+                )
+        }
+
+        playerListener = null
+
+        stopPocVideoTest()
+
+        hideYoutube()
+        youtubeWebView?.destroy()
+        youtubeWebView = null
+
+        carSurfaceView?.let { surfaceView ->
+            CarVideoPlayerHolder.clearCarSurfaceView(
+                surfaceView
+            )
+        }
+
+        carSurfaceView = null
+
+        logoExecutor.shutdownNow()
 
         super.onDestroy()
+    }
+
+    /*
+     * ============================================================
+     * VIDEO PIPELINE (DHU/Android Auto projection) — DEĞİŞMEDİ
+     * ============================================================
+     */
+
+    private fun bindProjectionSurface() {
+
+        val surfaceView =
+            carSurfaceView
+                ?: findViewById(
+                    R.id.carVideoTexture
+                ) as? SurfaceView
+                ?: return
+
+        configureSurfaceZOrder(surfaceView)
+
+        carSurfaceView = surfaceView
+
+        logHostVersusPlayerSurface(surfaceView)
+        CarVideoPlayerHolder.setCarSurfaceView(
+            surfaceView
+        )
+    }
+
+    /**
+     * SurfaceView, varsayılan olarak kendi donanım katmanını
+     * pencerenin ARKASINA yerleştirir (host'un normal View çizim
+     * katmanı üstte kalır). Bu, standart bir Activity'de pencere
+     * "delinerek" (hole-punch) çözülür; ancak CarActivity standart
+     * bir Activity/Window değildir — host'un kendi compositing'i bu
+     * deliği her zaman doğru uygulamayabilir. setZOrderMediaOverlay
+     * bu katmanı host'un normal View çizimi ÜSTÜNE zorlar; bu olmadan
+     * host'ta hiç video görünmeyebilir (ses ExoPlayer'ın ayrı audio
+     * pipeline'ından gittiği için etkilenmez).
+     */
+    private fun configureSurfaceZOrder(
+        surfaceView: SurfaceView
+    ) {
+
+        try {
+
+            surfaceView.setZOrderMediaOverlay(
+                true
+            )
+
+            Log.d(
+                TAG,
+                "carVideoTexture setZOrderMediaOverlay=true"
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "Unable to set SurfaceView z-order",
+                exception
+            )
+        }
+    }
+
+    /**
+     * Host DrawingSpec is the CarActivity window. The SurfaceView's
+     * surface is ExoPlayer's video output; the host composites this
+     * window (including the SurfaceView's hardware overlay) as the
+     * projection surface shown on the car screen.
+     */
+    private fun logHostVersusPlayerSurface(
+        surfaceView: SurfaceView
+    ) {
+
+        val content =
+            findViewById(
+                android.R.id.content
+            ) as? View
+
+        Log.d(
+            TAG,
+            "PROJECTION SURFACES " +
+                "hostWindow=" +
+                "${content?.width}x${content?.height} " +
+                "surfaceView=${surfaceView.width}x${surfaceView.height} " +
+                "videoSurface=${surfaceView.holder.surface} " +
+                "surfaceValid=${surfaceView.holder.surface?.isValid}"
+        )
+    }
+
+    /*
+     * ============================================================
+     * POC_VIDEO — GEÇİCİ VİDEO KANIT TESTİ (izole, aşağıda tek blok)
+     * ============================================================
+     *
+     * Bu blok IPTV/Radyo/YouTube/Google akışlarına, CarMediaService
+     * içindeki IPTV/lisans koduna veya MediaSession'a dokunmaz.
+     * Sadece mevcut paylaşılan CarVideoPlayerHolder/ExoPlayer ve
+     * mevcut carVideoTexture SurfaceView'ini kullanarak sabit bir
+     * HTTPS test videosu (POC_TEST_VIDEO_URL) oynatır.
+     */
+
+    private fun startPocVideoTest() {
+
+        if (!POC_VIDEO_TEST_ENABLED) {
+            return
+        }
+
+        Log.d(
+            POC_TAG,
+            "start url=$POC_TEST_VIDEO_URL"
+        )
+
+        /*
+         * Ana menü/liste overlay'lerini gizle: test videosu ekranın
+         * tamamını kaplamalı, kendi View'larımızın arkasında/altında
+         * kalmamalı. Bu, sadece POC süresince geçerli — IPTV/Radyo
+         * ekranlarının kod akışı değişmiyor.
+         */
+        (findViewById(R.id.carMenuOverlay) as? View)?.visibility = View.GONE
+        (findViewById(R.id.carListOverlay) as? View)?.visibility = View.GONE
+        (findViewById(R.id.carBackBar) as? View)?.visibility = View.GONE
+
+        Log.d(
+            POC_TAG,
+            "menu/list overlays hidden for isolated test"
+        )
+
+        val surfaceView = carSurfaceView
+
+        if (surfaceView == null) {
+
+            Log.e(
+                POC_TAG,
+                "carSurfaceView null; cannot attach POC surface callback"
+            )
+
+        } else {
+
+            attachPocSurfaceCallback(surfaceView)
+        }
+
+        waitForPocPlayerAndStart(attempt = 1)
+    }
+
+    private fun attachPocSurfaceCallback(
+        surfaceView: SurfaceView
+    ) {
+
+        val callback =
+
+            object : SurfaceHolder.Callback {
+
+                override fun surfaceCreated(
+                    holder: SurfaceHolder
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "surfaceCreated surface=${holder.surface} " +
+                            "valid=${holder.surface?.isValid}"
+                    )
+                }
+
+                override fun surfaceChanged(
+                    holder: SurfaceHolder,
+                    format: Int,
+                    width: Int,
+                    height: Int
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "surfaceChanged ${width}x${height} " +
+                            "surface=${holder.surface}"
+                    )
+                }
+
+                override fun surfaceDestroyed(
+                    holder: SurfaceHolder
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "surfaceDestroyed surface=${holder.surface}"
+                    )
+                }
+            }
+
+        pocSurfaceCallback = callback
+
+        surfaceView.holder.addCallback(callback)
+
+        val existingSurface =
+            surfaceView.holder.surface
+
+        if (
+            existingSurface != null &&
+            existingSurface.isValid
+        ) {
+
+            Log.d(
+                POC_TAG,
+                "surface already created before POC callback attached " +
+                    "surface=$existingSurface"
+            )
+        }
+    }
+
+    private fun waitForPocPlayerAndStart(
+        attempt: Int
+    ) {
+
+        val player =
+            CarVideoPlayerHolder.getPlayer()
+
+        if (player == null) {
+
+            if (attempt >= POC_PLAYER_WAIT_MAX_ATTEMPTS) {
+
+                Log.e(
+                    POC_TAG,
+                    "player never became available after " +
+                        "$attempt attempts; aborting POC"
+                )
+
+                return
+            }
+
+            Log.d(
+                POC_TAG,
+                "waiting for CarMediaService player " +
+                    "(attempt $attempt/$POC_PLAYER_WAIT_MAX_ATTEMPTS)"
+            )
+
+            handler.postDelayed(
+                { waitForPocPlayerAndStart(attempt + 1) },
+                POC_PLAYER_WAIT_INTERVAL_MS
+            )
+
+            return
+        }
+
+        Log.d(
+            POC_TAG,
+            "playerAttached player=$player"
+        )
+
+        attachPocPlayerDiagnostics(player)
+
+        val mediaItem =
+            MediaItem.fromUri(
+                POC_TEST_VIDEO_URL
+            )
+
+        player.setMediaItem(mediaItem)
+        player.prepare()
+        player.playWhenReady = true
+
+        Log.d(
+            POC_TAG,
+            "setMediaItem+prepare+playWhenReady=true url=$POC_TEST_VIDEO_URL"
+        )
+    }
+
+    private fun attachPocPlayerDiagnostics(
+        player: ExoPlayer
+    ) {
+
+        val listener =
+
+            object : Player.Listener {
+
+                override fun onPlaybackStateChanged(
+                    playbackState: Int
+                ) {
+
+                    val stateName =
+                        when (playbackState) {
+                            Player.STATE_IDLE -> "STATE_IDLE"
+                            Player.STATE_BUFFERING -> "STATE_BUFFERING"
+                            Player.STATE_READY -> "STATE_READY"
+                            Player.STATE_ENDED -> "STATE_ENDED"
+                            else -> "STATE_UNKNOWN($playbackState)"
+                        }
+
+                    Log.d(
+                        POC_TAG,
+                        stateName
+                    )
+                }
+
+                override fun onVideoSizeChanged(
+                    videoSize: androidx.media3.common.VideoSize
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "videoResolution ${videoSize.width}x${videoSize.height}"
+                    )
+                }
+
+                override fun onPlayerError(
+                    error: androidx.media3.common.PlaybackException
+                ) {
+
+                    Log.e(
+                        POC_TAG,
+                        "playerError ${error.errorCodeName} ${error.message}",
+                        error
+                    )
+                }
+            }
+
+        pocPlayerListener = listener
+
+        player.addListener(listener)
+
+        val analyticsListener =
+
+            object : AnalyticsListener {
+
+                override fun onVideoDecoderInitialized(
+                    eventTime: AnalyticsListener.EventTime,
+                    decoderName: String,
+                    initializedTimestampMs: Long,
+                    initializationDurationMs: Long
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "videoDecoder=$decoderName " +
+                            "initMs=$initializationDurationMs"
+                    )
+                }
+
+                override fun onRenderedFirstFrame(
+                    eventTime: AnalyticsListener.EventTime,
+                    output: Any,
+                    renderTimeMs: Long
+                ) {
+
+                    Log.d(
+                        POC_TAG,
+                        "FIRST_FRAME output=$output renderTimeMs=$renderTimeMs"
+                    )
+                }
+            }
+
+        pocAnalyticsListener = analyticsListener
+
+        player.addAnalyticsListener(analyticsListener)
+    }
+
+    private fun stopPocVideoTest() {
+
+        carSurfaceView?.holder?.let { holder ->
+
+            pocSurfaceCallback?.let { callback ->
+                holder.removeCallback(callback)
+            }
+        }
+
+        pocSurfaceCallback = null
+
+        val player =
+            CarVideoPlayerHolder.getPlayer()
+
+        pocPlayerListener?.let { listener ->
+            player?.removeListener(listener)
+        }
+
+        pocPlayerListener = null
+
+        pocAnalyticsListener?.let { listener ->
+            player?.removeAnalyticsListener(listener)
+        }
+
+        pocAnalyticsListener = null
+    }
+
+    private fun attachPlayerDiagnostics() {
+
+        val listener =
+
+            object : Player.Listener {
+
+                override fun onPlaybackStateChanged(
+                    playbackState: Int
+                ) {
+
+                    CarVideoPlayerHolder.logPlayback(
+                        "state-$playbackState"
+                    )
+                }
+
+                override fun onVideoSizeChanged(
+                    videoSize: androidx.media3.common.VideoSize
+                ) {
+
+                    Log.d(
+                        TAG,
+                        "videoSize ${videoSize.width}x${videoSize.height}"
+                    )
+
+                    CarVideoPlayerHolder.logPlayback(
+                        "video-size"
+                    )
+                }
+
+                override fun onPlayerError(
+                    error: androidx.media3.common.PlaybackException
+                ) {
+
+                    Log.e(
+                        TAG,
+                        "CAR VIDEO player error: ${error.errorCodeName} ${error.message}",
+                        error
+                    )
+                }
+            }
+
+        playerListener =
+            listener
+
+        CarVideoPlayerHolder.getPlayer()
+            ?.addListener(
+                listener
+            )
+    }
+
+    private fun refreshBrowseData() {
+
+        CarMediaService.prefetchProjectionLibrary {
+
+            handler.post {
+
+                when (currentScreen) {
+
+                    CarScreen.LIVE_TV_LIST ->
+                        renderChannelRows(loading = false)
+
+                    CarScreen.RADIO_LIST ->
+                        renderRadioRows(loading = false)
+
+                    else -> {
+                        // Menü açık değil; sadece cache ısındı.
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * car_video_player.xml inflate edilemezse (host'un LayoutInflater'ı
+     * bir attribute/kaynak nedeniyle reddederse) ekran tamamen boş
+     * kalmasın diye aynı view id'leriyle (R.id.carVideoTexture vb.)
+     * eşdeğer bir ağaç kodla kurulur. Video pipeline id'si değişmez.
+     */
+    private fun buildFallbackContentView(): View {
+
+        val root =
+            FrameLayout(this).apply {
+                setBackgroundColor(
+                    Color.BLACK
+                )
+            }
+
+        val surfaceView =
+            SurfaceView(this).apply {
+                id = R.id.carVideoTexture
+                setZOrderMediaOverlay(true)
+            }
+
+        root.addView(
+            surfaceView,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val backButton =
+            android.widget.ImageButton(this).apply {
+                id = R.id.carBackToMenuButton
+                setImageResource(android.R.drawable.ic_media_previous)
+                setColorFilter(Color.WHITE)
+                background = null
+            }
+
+        val backLabel =
+            TextView(this).apply {
+                id = R.id.carBackLabel
+                setTextColor(Color.WHITE)
+                textSize = 18f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+
+        val backBar =
+            LinearLayout(this).apply {
+                id = R.id.carBackBar
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                visibility = View.GONE
+                setPadding(dp(10), dp(10), dp(22), dp(10))
+
+                try {
+                    setBackgroundResource(
+                        R.drawable.car_menu_button_background
+                    )
+                } catch (_: Exception) {
+                }
+            }
+
+        backBar.addView(
+            backButton,
+            LinearLayout.LayoutParams(
+                dp(40),
+                dp(40)
+            )
+        )
+
+        backBar.addView(
+            backLabel,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                marginStart = dp(6)
+            }
+        )
+
+        root.addView(
+            backBar,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.TOP or android.view.Gravity.START
+                setMargins(dp(16), dp(16), dp(16), dp(16))
+            }
+        )
+
+        val menuOverlay =
+            FrameLayout(this).apply {
+                id = R.id.carMenuOverlay
+                setBackgroundColor(
+                    Color.parseColor("#E6101418")
+                )
+            }
+
+        val menuColumn =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER
+                setPadding(dp(24), dp(24), dp(24), dp(24))
+            }
+
+        val brandTitle =
+            TextView(this).apply {
+                id = R.id.carBrandTitle
+                text = "KARADAG CAR TV"
+                setTextColor(Color.WHITE)
+                textSize = 22f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+
+        val menuRow =
+            LinearLayout(this).apply {
+                id = R.id.carMenuRow
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER
+            }
+
+        menuColumn.addView(brandTitle)
+        menuColumn.addView(
+            menuRow,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                topMargin = dp(24)
+            }
+        )
+
+        menuOverlay.addView(
+            menuColumn,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                gravity = android.view.Gravity.CENTER
+            }
+        )
+
+        root.addView(
+            menuOverlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        val listOverlay =
+            FrameLayout(this).apply {
+                id = R.id.carListOverlay
+                setBackgroundColor(
+                    Color.parseColor("#F2101418")
+                )
+                visibility = View.GONE
+            }
+
+        val listColumn =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+
+        val listHeader =
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setBackgroundColor(
+                    Color.parseColor("#1A1D22")
+                )
+                setPadding(dp(8), dp(12), dp(24), dp(12))
+            }
+
+        val listBack =
+            android.widget.ImageButton(this).apply {
+                id = R.id.carListBack
+                setImageResource(android.R.drawable.ic_media_previous)
+                setColorFilter(Color.WHITE)
+            }
+
+        val listTitle =
+            TextView(this).apply {
+                id = R.id.carListTitle
+                text = "CANLI TV"
+                setTextColor(Color.WHITE)
+                textSize = 20f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+            }
+
+        listHeader.addView(listBack)
+        listHeader.addView(
+            listTitle,
+            LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            ).apply {
+                marginStart = dp(12)
+            }
+        )
+
+        val listScroll =
+            android.widget.ScrollView(this)
+
+        val listContainer =
+            LinearLayout(this).apply {
+                id = R.id.carListContainer
+                orientation = LinearLayout.VERTICAL
+            }
+
+        listScroll.addView(
+            listContainer,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        )
+
+        listColumn.addView(listHeader)
+        listColumn.addView(
+            listScroll,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
+
+        listOverlay.addView(
+            listColumn,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        root.addView(
+            listOverlay,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        Log.d(
+            TAG,
+            "Fallback content view built programmatically"
+        )
+
+        return root
+    }
+
+    /*
+     * ============================================================
+     * ANA MENÜ — doğrudan görünür butonlar (hamburger değil)
+     * ============================================================
+     */
+
+    private fun setupMainMenu() {
+
+        val row =
+            findViewById(
+                R.id.carMenuRow
+            ) as? LinearLayout
+                ?: return
+
+        row.removeAllViews()
+
+        val entries =
+            listOf(
+                "📺  CANLI TV" to { onLiveTvSelected() },
+                "▶  YOUTUBE" to { onYoutubeSelected() },
+                "📻  RADYO" to { onRadioSelected() },
+                "🔎  GOOGLE" to { onGoogleSelected() }
+            )
+
+        entries.forEach { (title, onClick) ->
+
+            row.addView(
+                createMenuButton(title, onClick),
+                LinearLayout.LayoutParams(
+                    0,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    1f
+                ).apply {
+                    marginStart = dp(6)
+                    marginEnd = dp(6)
+                }
+            )
+        }
+
+        Log.d(
+            TAG,
+            "Main menu buttons installed count=${row.childCount}"
+        )
+    }
+
+    private fun createMenuButton(
+        title: String,
+        onClick: () -> Unit
+    ): Button {
+
+        val button =
+            Button(this)
+
+        button.text = title
+        button.isAllCaps = false
+        button.textSize = 18f
+        button.setTextColor(Color.WHITE)
+        button.minimumWidth = dp(140)
+        button.minimumHeight = dp(88)
+
+        button.setPadding(
+            dp(12),
+            dp(20),
+            dp(12),
+            dp(20)
+        )
+
+        try {
+
+            button.setBackgroundResource(
+                R.drawable.car_menu_button_background
+            )
+
+        } catch (exception: Exception) {
+
+            Log.w(
+                TAG,
+                "Unable to load menu button background: ${exception.message}"
+            )
+        }
+
+        button.setOnClickListener {
+            onClick()
+        }
+
+        return button
+    }
+
+    private fun onLiveTvSelected() {
+        showChannelList()
+    }
+
+    private fun onYoutubeSelected() {
+        showYoutube(
+            CarScreen.YOUTUBE,
+            "https://www.youtube.com/"
+        )
+    }
+
+    private fun onRadioSelected() {
+        showRadioList()
+    }
+
+    private fun onGoogleSelected() {
+        showYoutube(
+            CarScreen.GOOGLE,
+            "https://www.google.com/"
+        )
+    }
+
+    private fun dp(value: Int): Int {
+        return (value * resources.displayMetrics.density).toInt()
+    }
+
+    /*
+     * ============================================================
+     * EKRAN DURUMU (menü / liste / video / youtube)
+     * ============================================================
+     */
+
+    private fun setupBackToMenuButton() {
+
+        val backClickListener =
+            View.OnClickListener {
+                navigateBack()
+            }
+
+        findViewById(
+            R.id.carBackBar
+        )?.setOnClickListener(
+            backClickListener
+        )
+
+        findViewById(
+            R.id.carBackToMenuButton
+        )?.setOnClickListener(
+            backClickListener
+        )
+    }
+
+    private fun setupListOverlay() {
+
+        findViewById(
+            R.id.carListBack
+        )?.setOnClickListener {
+
+            navigateBack()
+        }
+    }
+
+    private fun showScreen(
+        screen: CarScreen
+    ) {
+
+        val previousScreen =
+            currentScreen
+
+        currentScreen =
+            screen
+
+        Log.d(
+            TAG,
+            "NAV -> $screen"
+        )
+
+        val wasOnWeb =
+            previousScreen == CarScreen.YOUTUBE ||
+                previousScreen == CarScreen.GOOGLE
+
+        val isOnWeb =
+            screen == CarScreen.YOUTUBE ||
+                screen == CarScreen.GOOGLE
+
+        if (wasOnWeb && !isOnWeb) {
+
+            /*
+             * Web ekranından çıkılıyor: WebView'ı durdur/gizle.
+             * Bunu her back/menu tıklamasında tekrar yazmak yerine
+             * tek merkezi yerde (showScreen) yapılıyor.
+             */
+            hideYoutube()
+        }
+
+        val showMainMenu =
+            screen == CarScreen.MAIN_MENU
+
+        val showList =
+            screen == CarScreen.LIVE_TV_LIST ||
+                screen == CarScreen.RADIO_LIST
+
+        val showBackBar =
+            screen == CarScreen.CHANNEL_PLAYER ||
+                isOnWeb
+
+        findViewById(
+            R.id.carMenuOverlay
+        )?.visibility =
+            if (showMainMenu) View.VISIBLE else View.GONE
+
+        findViewById(
+            R.id.carListOverlay
+        )?.visibility =
+            if (showList) View.VISIBLE else View.GONE
+
+        youtubeWebView?.visibility =
+            if (isOnWeb) View.VISIBLE else View.GONE
+
+        findViewById(
+            R.id.carBackBar
+        )?.visibility =
+            if (showBackBar) View.VISIBLE else View.GONE
+
+        (findViewById(
+            R.id.carBackLabel
+        ) as? TextView)?.text =
+            when (screen) {
+                CarScreen.CHANNEL_PLAYER -> "←  KANAL LİSTESİ"
+                CarScreen.YOUTUBE -> "←  YOUTUBE"
+                CarScreen.GOOGLE -> "←  GOOGLE ARAMA"
+                else -> ""
+            }
+
+        if (isOnWeb) {
+
+            findViewById(
+                R.id.carBackBar
+            )?.bringToFront()
+        }
+    }
+
+    /*
+     * ============================================================
+     * CANLI TV LİSTESİ
+     * ============================================================
+     */
+
+    private fun showChannelList() {
+
+        (findViewById(
+            R.id.carListTitle
+        ) as? TextView)?.text =
+            "CANLI TV"
+
+        showScreen(CarScreen.LIVE_TV_LIST)
+
+        renderChannelRows(loading = true)
+
+        CarMediaService.prefetchProjectionLibrary {
+
+            handler.post {
+
+                if (currentScreen == CarScreen.LIVE_TV_LIST) {
+                    renderChannelRows(loading = false)
+                }
+            }
+        }
+    }
+
+    private fun renderChannelRows(
+        loading: Boolean
+    ) {
+
+        val container =
+            findViewById(
+                R.id.carListContainer
+            ) as? LinearLayout
+                ?: return
+
+        val channels =
+            CarMediaService.projectionChannels()
+
+        Log.d(
+            TAG,
+            "IPTV CHANNEL COUNT (UI) = ${channels.size} loading=$loading"
+        )
+
+        container.removeAllViews()
+        channelLogoViews.clear()
+
+        if (channels.isEmpty()) {
+
+            container.addView(
+                createMessageRow(
+                    if (loading) {
+                        "Kanallar yükleniyor…"
+                    } else {
+                        "Kanal bulunamadı. Geri dönüp tekrar deneyin."
+                    }
+                )
+            )
+
+            return
+        }
+
+        channels.forEach { channel ->
+
+            container.addView(
+                createChannelRow(channel) {
+                    playLiveTvChannel(channel)
+                }
+            )
+        }
+    }
+
+    /*
+     * ============================================================
+     * RADYO LİSTESİ
+     * ============================================================
+     */
+
+    private fun showRadioList() {
+
+        (findViewById(
+            R.id.carListTitle
+        ) as? TextView)?.text =
+            "RADYO"
+
+        showScreen(CarScreen.RADIO_LIST)
+
+        renderRadioRows(loading = true)
+
+        CarMediaService.prefetchProjectionLibrary {
+
+            handler.post {
+
+                if (currentScreen == CarScreen.RADIO_LIST) {
+                    renderRadioRows(loading = false)
+                }
+            }
+        }
+    }
+
+    private fun renderRadioRows(
+        loading: Boolean
+    ) {
+
+        val container =
+            findViewById(
+                R.id.carListContainer
+            ) as? LinearLayout
+                ?: return
+
+        val stations =
+            CarMediaService.projectionRadios()
+
+        container.removeAllViews()
+
+        if (stations.isEmpty()) {
+
+            container.addView(
+                createMessageRow(
+                    if (loading) {
+                        "Radyolar yükleniyor…"
+                    } else {
+                        "Radyo bulunamadı."
+                    }
+                )
+            )
+
+            return
+        }
+
+        stations.forEach { station ->
+
+            container.addView(
+                createRadioRow(station) {
+                    playRadioStation(station)
+                }
+            )
+        }
+    }
+
+    /*
+     * ============================================================
+     * OYNATMA SEÇİMİ
+     * ============================================================
+     */
+
+    private fun playLiveTvChannel(
+        channel: ProjectionListItem
+    ) {
+
+        hideYoutube()
+
+        Log.d(
+            TAG,
+            "Projection channel selected ${channel.title}"
+        )
+
+        CarMediaService.playProjectionChannel(
+            channel.id
+        )
+
+        showScreen(CarScreen.CHANNEL_PLAYER)
+    }
+
+    private fun playRadioStation(
+        station: ProjectionListItem
+    ) {
+
+        Log.d(
+            TAG,
+            "Projection radio selected ${station.title}"
+        )
+
+        CarMediaService.playProjectionRadio(
+            station.id
+        )
+
+        /*
+         * Radyo, navigasyon ağacında MAIN_MENU'nün doğrudan altında
+         * bir yapraktır (CHANNEL_PLAYER gibi ayrı bir alt ekranı
+         * yok); seçim yapıldıktan sonra kullanıcı RADIO_LIST
+         * ekranında kalır, ses arka planda çalmaya başlar.
+         */
+    }
+
+    /*
+     * ============================================================
+     * YOUTUBE / GOOGLE (WebView, mevcut akış korunuyor)
+     * ============================================================
+     */
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun showYoutube(
+        screen: CarScreen,
+        url: String
+    ) {
+
+        CarVideoPlayerHolder.getPlayer()
+            ?.playWhenReady =
+            false
+
+        val parent =
+            (carSurfaceView?.parent as? ViewGroup)
+                ?: return
+
+        val webView =
+            youtubeWebView
+                ?: WebView(this).also { view ->
+
+                    view.layoutParams =
+                        FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+
+                    view.settings.javaScriptEnabled =
+                        true
+
+                    view.settings.domStorageEnabled =
+                        true
+
+                    view.settings.mediaPlaybackRequiresUserGesture =
+                        false
+
+                    view.settings.cacheMode =
+                        WebSettings.LOAD_DEFAULT
+
+                    view.webViewClient =
+                        WebViewClient()
+
+                    view.webChromeClient =
+                        WebChromeClient()
+
+                    youtubeWebView =
+                        view
+                }
+
+        if (webView.parent == null) {
+
+            parent.addView(
+                webView
+            )
+        }
+
+        webView.loadUrl(
+            url
+        )
+
+        showScreen(screen)
+
+        Log.d(
+            TAG,
+            "Projection web screen=$screen url=$url"
+        )
+    }
+
+    private fun hideYoutube() {
+
+        val webView =
+            youtubeWebView
+                ?: return
+
+        webView.visibility =
+            View.GONE
+
+        webView.loadUrl(
+            "about:blank"
+        )
+    }
+
+    /*
+     * ============================================================
+     * KANAL SATIRLARI (görsel, aauto MenuAdapter'a bağlı değil)
+     * ============================================================
+     */
+
+    private fun createChannelRow(
+        channel: ProjectionListItem,
+        onClick: () -> Unit
+    ): View {
+
+        val row =
+            getLayoutInflater().inflate(
+                R.layout.car_channel_row,
+                null,
+                false
+            )
+
+        val logo =
+            row.findViewById<ImageView>(
+                R.id.rowLogo
+            )
+
+        val title =
+            row.findViewById<TextView>(
+                R.id.rowTitle
+            )
+
+        title.text =
+            channel.title
+
+        requestChannelLogo(
+            channel,
+            logo
+        )
+
+        row.setOnClickListener {
+            onClick()
+        }
+
+        return row
+    }
+
+    private fun createRadioRow(
+        station: ProjectionListItem,
+        onClick: () -> Unit
+    ): View {
+
+        val row =
+            getLayoutInflater().inflate(
+                R.layout.car_channel_row,
+                null,
+                false
+            )
+
+        val logo =
+            row.findViewById<ImageView>(
+                R.id.rowLogo
+            )
+
+        logo.setImageDrawable(null)
+        logo.visibility =
+            View.INVISIBLE
+
+        val title =
+            row.findViewById<TextView>(
+                R.id.rowTitle
+            )
+
+        title.text =
+            "📻  ${station.title}"
+
+        row.setOnClickListener {
+            onClick()
+        }
+
+        return row
+    }
+
+    private fun createMessageRow(
+        message: String
+    ): View {
+
+        return TextView(this).apply {
+
+            text = message
+            setTextColor(Color.LTGRAY)
+            textSize = 18f
+
+            setPadding(
+                dp(28),
+                dp(28),
+                dp(28),
+                dp(28)
+            )
+        }
+    }
+
+    private fun requestChannelLogo(
+        channel: ProjectionListItem,
+        imageView: ImageView
+    ) {
+
+        logoCache[channel.id]?.let { cached ->
+            imageView.setImageBitmap(cached)
+        }
+
+        val logoUrl =
+            channel.logoUrl
+                ?.takeIf { url ->
+                    url.isNotBlank()
+                }
+                ?: return
+
+        if (logoCache.containsKey(channel.id)) {
+            return
+        }
+
+        channelLogoViews[channel.id] =
+            imageView
+
+        logoExecutor.execute {
+
+            val bitmap =
+                decodeLogo(logoUrl)
+                    ?: return@execute
+
+            logoCache.put(
+                channel.id,
+                bitmap
+            )
+
+            handler.post {
+
+                channelLogoViews[channel.id]
+                    ?.setImageBitmap(
+                        bitmap
+                    )
+            }
+        }
+    }
+
+    private fun decodeLogo(
+        logoUrl: String
+    ): Bitmap? {
+
+        return try {
+
+            val connection =
+                URL(logoUrl).openConnection()
+                    as HttpURLConnection
+
+            connection.connectTimeout =
+                5_000
+
+            connection.readTimeout =
+                5_000
+
+            try {
+
+                connection.inputStream.use { input ->
+
+                    val decoded =
+                        BitmapFactory.decodeStream(
+                            input
+                        )
+                            ?: return null
+
+                    Bitmap.createScaledBitmap(
+                        decoded,
+                        64,
+                        64,
+                        true
+                    )
+                }
+
+            } finally {
+
+                connection.disconnect()
+            }
+
+        } catch (exception: Exception) {
+
+            Log.w(
+                TAG,
+                "Channel logo failed $logoUrl: ${exception.message}"
+            )
+
+            null
+        }
     }
 }

@@ -5,6 +5,8 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -14,7 +16,7 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionError
-import androidx.media3.ui.PlayerView
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -25,6 +27,12 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+
+data class ProjectionListItem(
+    val id: String,
+    val title: String,
+    val logoUrl: String? = null
+)
 
 @UnstableApi
 class CarMediaService : MediaLibraryService() {
@@ -37,6 +45,11 @@ class CarMediaService : MediaLibraryService() {
             Executors.newSingleThreadExecutor()
         )
 
+    private val mainHandler =
+        Handler(
+            Looper.getMainLooper()
+        )
+
     /*
      * ============================================================
      * API
@@ -46,11 +59,21 @@ class CarMediaService : MediaLibraryService() {
     private val apiBaseUrl =
         "https://api.karadaglabs.com"
 
-    private val deviceUuid =
-        "CAR-TEST-001"
+    /*
+     * Gerçek aktivasyon bilgisi. Telefon tarafındaki
+     * RegistrationActivity/MainActivity ile aynı AppSession
+     * kaynağını kullanır; sabit test değeri kullanmaz.
+     *
+     * Eskiden burada sabit "CAR-TEST-001"/"KDG-TEST-2026-001"
+     * test değerleri vardı; bu, gerçek araçta IPTV API'sinin
+     * müşterinin gerçek lisansını göremeyip boş/lisanssız
+     * dönmesine (Canlı TV = 0) neden olabiliyordu.
+     */
+    private val deviceUuid: String
+        get() = AppSession.deviceUuid(this)
 
-    private val licenseKey =
-        "KDG-TEST-2026-001"
+    private val licenseKey: String
+        get() = AppSession.licenseKey(this)
 
     /*
      * ============================================================
@@ -172,6 +195,52 @@ class CarMediaService : MediaLibraryService() {
 
         CarVideoPlayerHolder.setPlayer(player)
 
+        projectionInstance =
+            this
+
+        if (pendingProjectionMediaId != null) {
+
+            startProjectionPlayback(
+                pendingProjectionMediaId
+            )
+        }
+
+        pendingRadioId?.let { radioId ->
+
+            pendingRadioId =
+                null
+
+            startProjectionRadio(
+                radioId
+            )
+        }
+
+        /*
+         * CarVideoActivity servis henüz oluşmadan
+         * prefetchProjectionLibrary çağırmış olabilir (gerçek
+         * araçta servis başlatma DHU'dan daha yavaş olabilir).
+         * Bu durumda callback kuyruğa alınmıştı; şimdi gerçekten
+         * çalıştır. Aksi halde "Canlı TV" listesi hiç veri
+         * gelmeden sessizce boş kalır.
+         */
+        val queuedPrefetchCallbacks =
+            synchronized(pendingPrefetchCallbacks) {
+
+                val copy =
+                    pendingPrefetchCallbacks.toList()
+
+                pendingPrefetchCallbacks.clear()
+
+                copy
+            }
+
+        queuedPrefetchCallbacks.forEach { callback ->
+
+            prefetchLibrary(
+                callback
+            )
+        }
+
         Log.d(
             TAG,
             "======================================"
@@ -215,6 +284,12 @@ class CarMediaService : MediaLibraryService() {
             "Karadag Car Media Service destroyed"
         )
 
+        if (projectionInstance === this) {
+
+            projectionInstance =
+                null
+        }
+
         CarVideoPlayerHolder.clearPlayer()
 
         if (::mediaLibrarySession.isInitialized) {
@@ -250,11 +325,6 @@ class CarMediaService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
-
-            Log.e(
-                "KARADAG_TEST",
-                "ON_GET_LIBRARY_ROOT ÇALIŞTI"
-            )
 
             val root =
                 MediaItem.Builder()
@@ -313,11 +383,6 @@ class CarMediaService : MediaLibraryService() {
         ): ListenableFuture<
                 LibraryResult<ImmutableList<MediaItem>>
                 > {
-
-            Log.e(
-                "KARADAG_TEST",
-                "ON_GET_CHILDREN ÇALIŞTI parentId=$parentId"
-            )
 
             /*
              * ====================================================
@@ -775,69 +840,109 @@ class CarMediaService : MediaLibraryService() {
             List<LiveTvStation> {
 
         Log.d(
-            TAG,
-            "======================================"
-        )
-
-        Log.d(
-            TAG,
-            "Android Auto IPTV yükleme başladı"
+            "KaradagCarVideo",
+            "IPTV LOAD START deviceUuid=$deviceUuid " +
+                "licenseKeyBlank=${licenseKey.isBlank()}"
         )
 
         /*
-         * Önce API
+         * Panelde müşteri için IPTV senkronizasyonu yeni yapılmışsa
+         * (veya cihaz ilk kez bağlanıyorsa) backend'in kanal listesini
+         * hazırlaması bir kaç saniye sürebilir; API bu sırada
+         * "licensed=true, channels=[]" dönebilir. Bunu tek seferde
+         * "0 kanal" kabul etmek yerine artan aralıklarla tekrar dene.
          */
+        val maxAttempts = 4
 
-        try {
-
-            val channels =
-                loadLiveTvFromApi()
-
-            if (channels.isNotEmpty()) {
-
-                saveLiveTvCache(
-                    channels
-                )
-
-                Log.d(
-                    TAG,
-                    "IPTV API başarılı: ${channels.size} kanal"
-                )
-
-                return channels
-            }
-
-            Log.w(
-                TAG,
-                "IPTV API boş liste döndürdü"
-            )
-
-        } catch (
-            exception: Exception
+        for (
+            attempt in 1..maxAttempts
         ) {
 
-            Log.e(
-                TAG,
-                "IPTV API başarısız",
-                exception
-            )
+            try {
+
+                val channels =
+                    loadLiveTvFromApi()
+
+                Log.d(
+                    "KaradagCarVideo",
+                    "IPTV CHANNEL COUNT (attempt $attempt/$maxAttempts) = " +
+                        "${channels.size}"
+                )
+
+                if (channels.isNotEmpty()) {
+
+                    saveLiveTvCache(
+                        channels
+                    )
+
+                    Log.d(
+                        TAG,
+                        "IPTV API başarılı: ${channels.size} kanal " +
+                            "(attempt $attempt)"
+                    )
+
+                    return channels
+                }
+
+                Log.w(
+                    TAG,
+                    "IPTV API boş liste döndürdü " +
+                        "(attempt $attempt/$maxAttempts)"
+                )
+
+            } catch (
+                exception: Exception
+            ) {
+
+                Log.e(
+                    "KaradagCarVideo",
+                    "IPTV LOAD ERROR = ${exception.message} " +
+                        "(attempt $attempt/$maxAttempts)",
+                    exception
+                )
+
+                Log.e(
+                    TAG,
+                    "IPTV API başarısız (attempt $attempt)",
+                    exception
+                )
+            }
+
+            if (attempt < maxAttempts) {
+
+                try {
+
+                    Thread.sleep(
+                        attempt * 2_500L
+                    )
+
+                } catch (
+                    interrupted: InterruptedException
+                ) {
+
+                    Thread.currentThread()
+                        .interrupt()
+
+                    break
+                }
+            }
         }
 
         /*
-         * API olmazsa kendi cache'i
+         * API tüm denemelerde boş/başarısız olduysa kendi cache'i
          */
 
         val cached =
             loadCachedLiveTv()
 
         Log.d(
-            TAG,
-            "Cache fallback: ${cached.size} kanal"
+            "KaradagCarVideo",
+            "IPTV CHANNEL COUNT (cache fallback) = ${cached.size}"
         )
 
         Log.d(
             TAG,
-            "======================================"
+            "Cache fallback: ${cached.size} kanal"
         )
 
         return cached
@@ -851,6 +956,25 @@ class CarMediaService : MediaLibraryService() {
 
     private fun loadLiveTvFromApi():
             List<LiveTvStation> {
+
+        if (licenseKey.isBlank()) {
+
+            /*
+             * Cihaz henüz aktive edilmemiş (RegistrationActivity'de
+             * lisans kaydedilmemiş). Boş license_key ile API'ye
+             * gitmenin bir anlamı yok; net bir hata fırlatıp
+             * cache fallback'e düşülsün.
+             */
+            Log.e(
+                "KaradagCarVideo",
+                "IPTV LOAD ERROR = license_key is blank; " +
+                    "device not activated (AppSession.licenseKey)"
+            )
+
+            throw IllegalStateException(
+                "Cihaz aktive edilmemiş: license_key boş"
+            )
+        }
 
         val connection =
             URL(
@@ -1515,6 +1639,194 @@ class CarMediaService : MediaLibraryService() {
 
     /*
      * ============================================================
+     * ANDROID AUTO PROJECTION PLAYBACK
+     * Telefon Activity'sine bağlı değildir.
+     * ============================================================
+     */
+
+    private fun menuChannels():
+            List<ProjectionListItem> {
+
+        return loadCachedLiveTv().map { channel ->
+
+            ProjectionListItem(
+                id = channel.mediaId,
+                title = channel.name,
+                logoUrl = channel.logoUrl
+            )
+        }
+    }
+
+    private fun menuRadios():
+            List<ProjectionListItem> {
+
+        return radios.map { radio ->
+
+            ProjectionListItem(
+                id = radio.id,
+                title = radio.name
+            )
+        }
+    }
+
+    private fun prefetchLibrary(
+        onDone: (() -> Unit)?
+    ) {
+
+        executor.submit {
+
+            loadLiveTvFromApiWithCacheFallback()
+
+            mainHandler.post {
+
+                onDone?.invoke()
+            }
+        }
+    }
+
+    private fun startProjectionRadio(
+        radioId: String
+    ) {
+
+        val radio =
+            radios.firstOrNull { station ->
+
+                station.id ==
+                        radioId
+            }
+                ?: return
+
+        mainHandler.post {
+
+            val mediaItem =
+                createRadioMediaItem(
+                    radio
+                )
+
+            player.setMediaItem(
+                mediaItem
+            )
+
+            player.prepare()
+
+            player.playWhenReady =
+                true
+
+            Log.d(
+                TAG,
+                "Projection radio ${radio.name} " +
+                        radio.url
+            )
+
+            CarVideoPlayerHolder.logPlayback(
+                "radio-started"
+            )
+        }
+    }
+
+    private fun startProjectionPlayback(
+        mediaId: String?
+    ) {
+
+        if (mediaId.isNullOrBlank()) {
+
+            Log.d(
+                TAG,
+                "Projection playback skipped; no channel selected"
+            )
+
+            return
+        }
+
+        executor.submit {
+
+            val channels =
+                loadLiveTvFromApiWithCacheFallback()
+
+            mainHandler.post {
+
+                if (channels.isEmpty()) {
+
+                    Log.w(
+                        TAG,
+                        "Projection IPTV listesi boş"
+                    )
+
+                    return@post
+                }
+
+                val selected =
+                    mediaId
+                        ?.let { id ->
+
+                            channels.firstOrNull { channel ->
+
+                                channel.mediaId ==
+                                        id
+                            }
+                        }
+                        ?: channels.first()
+
+                val currentId =
+                    player.currentMediaItem
+                        ?.mediaId
+
+                if (
+                    currentId ==
+                        selected.mediaId &&
+                    player.playWhenReady &&
+                    player.playbackState !=
+                        androidx.media3.common.Player.STATE_IDLE
+                ) {
+
+                    player.playWhenReady =
+                        true
+
+                    CarVideoPlayerHolder.logPlayback(
+                        "already-playing"
+                    )
+
+                    return@post
+                }
+
+                val mediaItem =
+                    createLiveTvMediaItem(
+                        selected
+                    )
+
+                player.trackSelectionParameters =
+                    player.trackSelectionParameters
+                        .buildUpon()
+                        .setTrackTypeDisabled(
+                            C.TRACK_TYPE_VIDEO,
+                            false
+                        )
+                        .build()
+
+                player.setMediaItem(
+                    mediaItem
+                )
+
+                player.prepare()
+
+                player.playWhenReady =
+                    true
+
+                Log.d(
+                    TAG,
+                    "Projection playback ${selected.name} " +
+                            selected.streamUrl
+                )
+
+                CarVideoPlayerHolder.logPlayback(
+                    "started"
+                )
+            }
+        }
+    }
+
+    /*
+     * ============================================================
      * DATA
      * ============================================================
      */
@@ -1569,13 +1881,169 @@ class CarMediaService : MediaLibraryService() {
 
         private const val GOOGLE_ID =
             "karadag-google"
+
+        @Volatile
+        private var projectionInstance:
+            CarMediaService? = null
+
+        @Volatile
+        private var projectionRequested =
+            false
+
+        @Volatile
+        private var pendingProjectionMediaId:
+            String? = null
+
+        @Volatile
+        private var pendingRadioId:
+            String? = null
+
+        private val pendingPrefetchCallbacks =
+            mutableListOf<() -> Unit>()
+
+        fun playProjectionChannel(
+            mediaId: String? = null
+        ) {
+
+            if (mediaId.isNullOrBlank()) {
+
+                Log.d(
+                    TAG,
+                    "Projection channel requires explicit selection"
+                )
+
+                return
+            }
+
+            projectionRequested =
+                true
+
+            pendingProjectionMediaId =
+                mediaId
+
+            val instance =
+                projectionInstance
+
+            if (instance == null) {
+
+                Log.d(
+                    TAG,
+                    "CarMediaService not ready; projection playback pending"
+                )
+
+                return
+            }
+
+            instance.startProjectionPlayback(
+                mediaId
+            )
+        }
+
+        fun playProjectionRadio(
+            radioId: String
+        ) {
+
+            pendingRadioId =
+                radioId
+
+            val instance =
+                projectionInstance
+
+            if (instance == null) {
+
+                Log.d(
+                    TAG,
+                    "CarMediaService not ready; radio playback pending"
+                )
+
+                return
+            }
+
+            pendingRadioId =
+                null
+
+            instance.startProjectionRadio(
+                radioId
+            )
+        }
+
+        fun prefetchProjectionLibrary(
+            onDone: (() -> Unit)? = null
+        ) {
+
+            val instance =
+                projectionInstance
+
+            if (instance == null) {
+
+                /*
+                 * Servis henüz hazır değil (gerçek araçta soğuk
+                 * başlangıç DHU'dan daha yavaş olabilir). Callback'i
+                 * "başarılı ama boş" gibi hemen çağırmak yerine
+                 * kuyruğa al; CarMediaService.onCreate() gerçekten
+                 * çalıştığında IPTV API'den veri çekilip callback
+                 * o zaman tetiklenecek.
+                 */
+                if (onDone != null) {
+
+                    synchronized(pendingPrefetchCallbacks) {
+
+                        pendingPrefetchCallbacks.add(
+                            onDone
+                        )
+                    }
+                }
+
+                Log.d(
+                    TAG,
+                    "CarMediaService not ready; prefetch queued"
+                )
+
+                return
+            }
+
+            instance.prefetchLibrary(
+                onDone
+            )
+        }
+
+        fun projectionChannels():
+            List<ProjectionListItem> {
+
+            return projectionInstance
+                ?.menuChannels()
+                ?: emptyList()
+        }
+
+        fun projectionRadios():
+            List<ProjectionListItem> {
+
+            return projectionInstance
+                ?.menuRadios()
+                ?: emptyList()
+        }
     }
 }
 
+
+
 /**
- * CarMediaService ExoPlayer'ını CarVideoActivity PlayerView'ına
- * bağlar. Ses MediaLibrarySession üzerinden çalışmaya devam eder;
- * görüntü aauto CarActivity yüzeyindeki PlayerView'a gider.
+ * CarMediaService ExoPlayer video output'u, CarActivity
+ * penceresindeki bir SurfaceView'a gider.
+ *
+ * Önceki sürüm TextureView kullanıyordu (DHU'da ses+görüntü
+ * bağlanıyordu). Gerçek araç testinde ses geliyor ama görüntü
+ * gelmiyordu — TextureView, decode edilen video buffer'ını GPU
+ * texture olarak örnekleyebilmek için donanım hızlandırmasına ve
+ * GPU'nun o buffer formatını (renk uzayı/pixel format) örnekleyebilmesine
+ * ihtiyaç duyar; bazı gerçek cihaz/GPU/donanım video decoder
+ * kombinasyonlarında (özellikle otomotiv/orta segment SoC'lerde) bu
+ * örnekleme çalışmaz ve "ses var, görüntü yok" ile sonuçlanır — ses
+ * ExoPlayer'ın audio pipeline'ından ayrı gittiği için bundan etkilenmez.
+ * SurfaceView, decoder çıktısını donanım overlay katmanı üzerinden
+ * doğrudan gösterir; GPU texture örneklemesi gerektirmez, bu yüzden
+ * gerçek cihaz donanım video decode/GPU uyumsuzluklarına karşı daha
+ * güvenilirdir (ExoPlayer'ın kendi resmi önerisi de budur).
  */
 @UnstableApi
 object CarVideoPlayerHolder {
@@ -1592,40 +2060,157 @@ object CarVideoPlayerHolder {
     private var player: ExoPlayer? = null
 
     @Volatile
-    private var playerView: PlayerView? = null
+    private var carSurfaceView: SurfaceView? = null
+
+    private var carSurfaceCallback:
+        SurfaceHolder.Callback? = null
+
+    private var lastVideoDecoder: String? = null
+
+    private var lastVideoOutput: Any? = null
+
+    private val analyticsListener =
+
+        object : AnalyticsListener {
+
+            override fun onVideoDecoderInitialized(
+                eventTime: AnalyticsListener.EventTime,
+                decoderName: String,
+                initializedTimestampMs: Long,
+                initializationDurationMs: Long
+            ) {
+
+                lastVideoDecoder =
+                    decoderName
+
+                Log.d(
+                    TAG,
+                    "videoDecoder=$decoderName " +
+                        "initMs=$initializationDurationMs"
+                )
+
+                logPlayback(
+                    "decoder"
+                )
+            }
+
+            override fun onRenderedFirstFrame(
+                eventTime: AnalyticsListener.EventTime,
+                output: Any,
+                renderTimeMs: Long
+            ) {
+
+                lastVideoOutput =
+                    output
+
+                val surfaceView =
+                    carSurfaceView
+
+                Log.d(
+                    TAG,
+                    "PROJECTION FIRST FRAME " +
+                        "videoSurface=$output " +
+                        "surfaceViewSurface=${surfaceView?.holder?.surface} " +
+                        "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
+                        "renderTimeMs=$renderTimeMs"
+                )
+
+                logPlayback(
+                    "first-frame"
+                )
+            }
+
+            override fun onSurfaceSizeChanged(
+                eventTime: AnalyticsListener.EventTime,
+                width: Int,
+                height: Int
+            ) {
+
+                Log.d(
+                    TAG,
+                    "ExoPlayer videoSurfaceSize=${width}x${height}"
+                )
+            }
+        }
+
+    fun getPlayer(): ExoPlayer? {
+
+        return player
+    }
 
     fun setPlayer(
         player: ExoPlayer?
     ) {
 
-        this.player = player
+        runOnMainThread {
 
-        bindOnMainThread()
+            val previous =
+                this.player
+
+            if (previous !== player) {
+
+                previous?.removeAnalyticsListener(
+                    analyticsListener
+                )
+
+                player?.addAnalyticsListener(
+                    analyticsListener
+                )
+            }
+
+            this.player = player
+
+            bindLocked()
+        }
     }
 
-    fun setPlayerView(
-        playerView: PlayerView?
-    ) {
-
-        this.playerView = playerView
-
-        bindOnMainThread()
-    }
-
-    fun clearPlayerView(
-        playerView: PlayerView
+    fun setCarSurfaceView(
+        surfaceView: SurfaceView?
     ) {
 
         runOnMainThread {
 
             if (
-                this.playerView ===
-                    playerView
+                carSurfaceView ===
+                    surfaceView &&
+                surfaceView != null
             ) {
 
-                playerView.player = null
+                bindLocked()
 
-                this.playerView = null
+                return@runOnMainThread
+            }
+
+            unhookCarSurfaceCallback()
+
+            carSurfaceView =
+                surfaceView
+
+            hookCarSurfaceCallback(
+                surfaceView
+            )
+
+            bindLocked()
+        }
+    }
+
+    fun clearCarSurfaceView(
+        surfaceView: SurfaceView
+    ) {
+
+        runOnMainThread {
+
+            if (
+                carSurfaceView ===
+                    surfaceView
+            ) {
+
+                unhookCarSurfaceCallback()
+
+                player?.clearVideoSurface()
+
+                carSurfaceView =
+                    null
             }
         }
     }
@@ -1634,27 +2219,261 @@ object CarVideoPlayerHolder {
 
         runOnMainThread {
 
-            playerView?.player = null
+            unhookCarSurfaceCallback()
 
-            player = null
+            player?.clearVideoSurface()
+
+            carSurfaceView =
+                null
+
+            player?.removeAnalyticsListener(
+                analyticsListener
+            )
+
+            player =
+                null
+
+            lastVideoOutput =
+                null
         }
     }
 
-    private fun bindOnMainThread() {
+    fun logPlayback(
+        reason: String
+    ) {
 
         runOnMainThread {
 
-            val view =
-                playerView
-                    ?: return@runOnMainThread
+            val exoPlayer =
+                player
 
-            view.player = player
+            val surfaceView =
+                carSurfaceView
+
+            val surface =
+                surfaceView?.holder?.surface
 
             Log.d(
                 TAG,
-                "PlayerView bound, player=${player != null}"
+                "playback[" +
+                        reason +
+                        "] state=" +
+                        "${exoPlayer?.playbackState} " +
+                        "playWhenReady=" +
+                        "${exoPlayer?.playWhenReady} " +
+                        "media=" +
+                        "${exoPlayer?.currentMediaItem?.mediaId} " +
+                        "title=" +
+                        "${exoPlayer?.currentMediaItem?.mediaMetadata?.title} " +
+                        "videoSize=" +
+                        "${exoPlayer?.videoSize?.width}x" +
+                        "${exoPlayer?.videoSize?.height} " +
+                        "videoFormat=" +
+                        "${exoPlayer?.videoFormat} " +
+                        "videoDecoder=" +
+                        "$lastVideoDecoder " +
+                        "videoSurface=" +
+                        "$lastVideoOutput " +
+                        "surfaceView=" +
+                        "${surfaceView?.width}x${surfaceView?.height} " +
+                        "surfaceValid=" +
+                        "${surface?.isValid} " +
+                        "surface=" +
+                        "$surface"
             )
         }
+    }
+
+    private fun bindLocked() {
+
+        val exoPlayer =
+            player
+
+        val surfaceView =
+            carSurfaceView
+
+        if (
+            exoPlayer == null ||
+            surfaceView == null
+        ) {
+
+            Log.d(
+                TAG,
+                "Projection bind waiting " +
+                        "player=${exoPlayer != null} " +
+                        "surfaceView=${surfaceView != null}"
+            )
+
+            return
+        }
+
+        exoPlayer.trackSelectionParameters =
+            exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(
+                    C.TRACK_TYPE_VIDEO,
+                    false
+                )
+                .build()
+
+        val holder =
+            surfaceView.holder
+
+        val surface =
+            holder.surface
+
+        if (
+            surface != null &&
+            surface.isValid
+        ) {
+
+            exoPlayer.setVideoSurfaceHolder(
+                holder
+            )
+
+            lastVideoOutput =
+                surface
+
+            Log.d(
+                TAG,
+                "ExoPlayer.setVideoSurfaceHolder " +
+                    "${surfaceView.width}x${surfaceView.height} " +
+                    "videoSurface=$surface"
+            )
+        }
+
+        logPlayback(
+            "bound"
+        )
+    }
+
+    private fun hookCarSurfaceCallback(
+        surfaceView: SurfaceView?
+    ) {
+
+        if (surfaceView == null) {
+
+            return
+        }
+
+        val callback =
+
+            object : SurfaceHolder.Callback {
+
+                override fun surfaceCreated(
+                    holder: SurfaceHolder
+                ) {
+
+                    Log.d(
+                        TAG,
+                        "surfaceCreated surface=${holder.surface}"
+                    )
+
+                    val exoPlayer =
+                        player
+                        ?: return
+
+                    exoPlayer.setVideoSurfaceHolder(
+                        holder
+                    )
+
+                    lastVideoOutput =
+                        holder.surface
+
+                    exoPlayer.playWhenReady =
+                        true
+
+                    Log.d(
+                        TAG,
+                        "Projection SurfaceView available " +
+                                "videoSurface=${holder.surface} " +
+                                "boundToExoPlayer=true"
+                    )
+
+                    logPlayback(
+                        "surface-available"
+                    )
+                }
+
+                override fun surfaceChanged(
+                    holder: SurfaceHolder,
+                    format: Int,
+                    width: Int,
+                    height: Int
+                ) {
+
+                    Log.d(
+                        TAG,
+                        "surfaceChanged " +
+                            "${width}x${height} " +
+                            "surface=${holder.surface}"
+                    )
+
+                    player?.setVideoSurfaceHolder(
+                        holder
+                    )
+                }
+
+                override fun surfaceDestroyed(
+                    holder: SurfaceHolder
+                ) {
+
+                    Log.d(
+                        TAG,
+                        "surfaceDestroyed surface=${holder.surface}"
+                    )
+
+                    if (
+                        carSurfaceView ===
+                            surfaceView
+                    ) {
+
+                        player?.clearVideoSurface()
+                    }
+                }
+            }
+
+        carSurfaceCallback =
+            callback
+
+        surfaceView.holder.addCallback(
+            callback
+        )
+
+        val existingSurface =
+            surfaceView.holder.surface
+
+        if (
+            existingSurface != null &&
+            existingSurface.isValid
+        ) {
+
+            callback.surfaceCreated(
+                surfaceView.holder
+            )
+        }
+    }
+
+    private fun unhookCarSurfaceCallback() {
+
+        val surfaceView =
+            carSurfaceView
+
+        val callback =
+            carSurfaceCallback
+
+        if (
+            surfaceView != null &&
+            callback != null
+        ) {
+
+            surfaceView.holder.removeCallback(
+                callback
+            )
+        }
+
+        carSurfaceCallback =
+            null
     }
 
     private fun runOnMainThread(
