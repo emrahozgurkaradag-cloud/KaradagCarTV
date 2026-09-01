@@ -1,6 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <uses name="media" />
+    <!--
+        CarMirrorService androidx.car.app.CarAppService'i (Mirror /
+        MediaProjection ekranı) kullanıyor. Android for Cars App
+        Library kullanan uygulamaların Android Auto tarafından
+        tanınması için "template" yeteneğinin de bildirilmesi gerekiyor.
+    -->
+    <uses name="template" />
     <uses
         name="service"
         tools:ignore="InvalidUsesTagAttribute" />

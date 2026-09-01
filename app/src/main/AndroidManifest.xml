@@ -36,6 +36,20 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
+        <!--
+            Android Auto (androidx.car.app / Car App Library) host,
+            CarAppService.onBind() sırasında bu değeri manifest'te
+            bulamazsa "Min API level not declared in manifest"
+            hatasıyla bağlanmayı reddediyor ve CarMirrorService
+            (Mirror / MediaProjection ekranı) hiç açılmıyordu.
+            Kullanılan tüm Car App Library API'leri (NavigationTemplate,
+            ActionStrip, SurfaceCallback) seviye 1'de mevcut olduğu için
+            en geniş uyumluluk için 1 olarak bırakıldı.
+        -->
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
         <!-- ====================================================== -->
         <!-- TELEFON UYGULAMASI                                    -->
         <!-- ====================================================== -->
