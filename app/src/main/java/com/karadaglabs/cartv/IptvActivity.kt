@@ -51,38 +51,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.media3.common.util.UnstableApi
 import com.karadaglabs.cartv.ui.theme.KaradagCarTVTheme
-import org.json.JSONArray
-import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
-
-data class IptvChannel(
-    val id: Int,
-    val name: String,
-    val streamUrl: String,
-    val logoUrl: String?,
-    val category: String?
-)
 
 @UnstableApi
 class IptvActivity : ComponentActivity() {
-
-    private val apiBaseUrl =
-        AppSession.API_BASE_URL
-
-    private val deviceUuid by lazy {
-        AppSession.deviceUuid(this)
-    }
-
-    private val licenseKey by lazy {
-        AppSession.licenseKey(this)
-    }
-
-    private val prefsName =
-        "karadag_car_tv_cache"
 
     private val logoCache =
         object : LruCache<String, Bitmap>(30) {}
@@ -141,7 +115,7 @@ class IptvActivity : ComponentActivity() {
 
         var lastUpdate by remember {
             mutableStateOf(
-                getLastIptvUpdate(this)
+                IptvRepository.lastUpdate(this)
             )
         }
 
@@ -159,7 +133,7 @@ class IptvActivity : ComponentActivity() {
                     refreshing = false
 
                     lastUpdate =
-                        getLastIptvUpdate(
+                        IptvRepository.lastUpdate(
                             this@IptvActivity
                         )
                 },
@@ -201,7 +175,7 @@ class IptvActivity : ComponentActivity() {
                                 refreshing = false
 
                                 lastUpdate =
-                                    getLastIptvUpdate(
+                                    IptvRepository.lastUpdate(
                                         this@IptvActivity
                                     )
                             },
@@ -291,7 +265,7 @@ class IptvActivity : ComponentActivity() {
                                     refreshing = false
 
                                     lastUpdate =
-                                        getLastIptvUpdate(
+                                        IptvRepository.lastUpdate(
                                             this@IptvActivity
                                         )
                                 },
@@ -330,66 +304,12 @@ class IptvActivity : ComponentActivity() {
 
             try {
 
-                if (licenseKey.isBlank()) {
-
-                    throw IllegalStateException(
-                        "Cihaz aktive edilmemiş: license_key boş"
-                    )
-                }
-
-                val response =
-                    postJson(
-                        url =
-                            "$apiBaseUrl/api/iptv",
-
-                        body =
-                            JSONObject().apply {
-
-                                put(
-                                    "device_uuid",
-                                    deviceUuid
-                                )
-
-                                put(
-                                    "license_key",
-                                    licenseKey
-                                )
-                            }
-                    )
-
-                if (
-                    !response.optBoolean(
-                        "licensed",
-                        false
-                    )
-                ) {
-
-                    throw IllegalStateException(
-                        response.optString(
-                            "message",
-                            "IPTV erişimi yok."
-                        )
-                    )
-                }
-
-                val channelArray =
-                    response.optJSONArray(
-                        "channels"
-                    )
-
                 val loadedChannels =
-                    parseIptvChannels(
-                        channelArray
+                    IptvRepository.fetchFromApi(
+                        context
                     )
 
-                if (loadedChannels.isEmpty()) {
-
-                    throw IllegalStateException(
-                        "IPTV kanal listesi boş."
-                    )
-                }
-
-                saveIptvCache(
+                IptvRepository.save(
                     context,
                     loadedChannels
                 )
@@ -405,13 +325,8 @@ class IptvActivity : ComponentActivity() {
                 exception: Exception
             ) {
 
-                /*
-                 * API başarısızsa son başarılı
-                 * IPTV listesini kullan.
-                 */
-
                 val cachedChannels =
-                    loadCachedIptv(
+                    IptvRepository.loadCached(
                         context
                     )
 
@@ -438,278 +353,6 @@ class IptvActivity : ComponentActivity() {
                 }
             }
         }.start()
-    }
-
-    private fun parseIptvChannels(
-        channelArray: JSONArray?
-    ): List<IptvChannel> {
-
-        val result =
-            mutableListOf<IptvChannel>()
-
-        if (channelArray == null) {
-            return result
-        }
-
-        for (
-        index in
-        0 until channelArray.length()
-        ) {
-
-            val item =
-                channelArray.getJSONObject(
-                    index
-                )
-
-            result.add(
-                IptvChannel(
-
-                    id =
-                        item.optInt(
-                            "id"
-                        ),
-
-                    name =
-                        item.optString(
-                            "name"
-                        ),
-
-                    streamUrl =
-                        item.optString(
-                            "stream_url"
-                        ),
-
-                    logoUrl =
-                        item.optString(
-                            "logo_url"
-                        ).ifBlank {
-                            null
-                        },
-
-                    category =
-                        item.optString(
-                            "category"
-                        ).ifBlank {
-                            null
-                        }
-                )
-            )
-        }
-
-        return result
-    }
-
-    private fun saveIptvCache(
-        context: Context,
-        channels: List<IptvChannel>
-    ) {
-
-        val array =
-            JSONArray()
-
-        channels.forEach { channel ->
-
-            array.put(
-                JSONObject().apply {
-
-                    put(
-                        "id",
-                        channel.id
-                    )
-
-                    put(
-                        "name",
-                        channel.name
-                    )
-
-                    put(
-                        "stream_url",
-                        channel.streamUrl
-                    )
-
-                    put(
-                        "logo_url",
-                        channel.logoUrl ?: ""
-                    )
-
-                    put(
-                        "category",
-                        channel.category ?: ""
-                    )
-                }
-            )
-        }
-
-        val updateTime =
-            SimpleDateFormat(
-                "dd.MM.yyyy HH:mm",
-                Locale("tr", "TR")
-            ).format(Date())
-
-        context
-            .getSharedPreferences(
-                prefsName,
-                Context.MODE_PRIVATE
-            )
-            .edit()
-            .putString(
-                "iptv_channels",
-                array.toString()
-            )
-            .putString(
-                "iptv_last_update",
-                updateTime
-            )
-            .apply()
-    }
-
-    private fun loadCachedIptv(
-        context: Context
-    ): List<IptvChannel> {
-
-        val json =
-            context
-                .getSharedPreferences(
-                    prefsName,
-                    Context.MODE_PRIVATE
-                )
-                .getString(
-                    "iptv_channels",
-                    null
-                )
-                ?: return emptyList()
-
-        return try {
-
-            parseIptvChannels(
-                JSONArray(json)
-            )
-
-        } catch (
-            _: Exception
-        ) {
-
-            emptyList()
-        }
-    }
-
-    private fun getLastIptvUpdate(
-        context: Context
-    ): String {
-
-        return context
-            .getSharedPreferences(
-                prefsName,
-                Context.MODE_PRIVATE
-            )
-            .getString(
-                "iptv_last_update",
-                ""
-            )
-            .orEmpty()
-    }
-
-    private fun postJson(
-        url: String,
-        body: JSONObject
-    ): JSONObject {
-
-        val connection =
-            URL(url)
-                .openConnection()
-                    as HttpURLConnection
-
-        try {
-
-            connection.requestMethod =
-                "POST"
-
-            connection.connectTimeout =
-                10_000
-
-            connection.readTimeout =
-                15_000
-
-            connection.doOutput =
-                true
-
-            connection.setRequestProperty(
-                "Content-Type",
-                "application/json"
-            )
-
-            connection.setRequestProperty(
-                "Accept",
-                "application/json"
-            )
-
-            connection.outputStream.use {
-                    output ->
-
-                output.write(
-                    body.toString()
-                        .toByteArray(
-                            Charsets.UTF_8
-                        )
-                )
-            }
-
-            val responseCode =
-                connection.responseCode
-
-            val responseText =
-                if (
-                    responseCode in 200..299
-                ) {
-
-                    connection.inputStream
-                        .bufferedReader()
-                        .use {
-                            it.readText()
-                        }
-
-                } else {
-
-                    connection.errorStream
-                        ?.bufferedReader()
-                        ?.use {
-                            it.readText()
-                        }
-                        ?: ""
-                }
-
-            if (
-                responseCode !in 200..299
-            ) {
-
-                throw IllegalStateException(
-
-                    try {
-
-                        JSONObject(
-                            responseText
-                        ).optString(
-                            "message",
-                            "IPTV API hatası: $responseCode"
-                        )
-
-                    } catch (
-                        _: Exception
-                    ) {
-
-                        "IPTV API hatası: $responseCode"
-                    }
-                )
-            }
-
-            return JSONObject(
-                responseText
-            )
-
-        } finally {
-
-            connection.disconnect()
-        }
     }
 
     @Composable

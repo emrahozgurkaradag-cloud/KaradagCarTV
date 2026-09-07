@@ -243,17 +243,17 @@ class AndroidAutoDiscoveryTest {
             )
         }
 
+        val repository = sourceFile(
+            "java/com/karadaglabs/cartv/IptvRepository.kt"
+        ).readText()
         val media = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
-        val iptv = sourceFile(
-            "java/com/karadaglabs/cartv/IptvActivity.kt"
-        ).readText()
 
-        assertTrue(media.contains("AppSession.deviceUuid"))
-        assertTrue(media.contains("AppSession.licenseKey"))
-        assertTrue(iptv.contains("AppSession.deviceUuid"))
-        assertTrue(iptv.contains("AppSession.licenseKey"))
+        assertTrue(repository.contains("AppSession.deviceUuid"))
+        assertTrue(repository.contains("AppSession.licenseKey"))
+        assertTrue(media.contains("IptvRepository.loadCached"))
+        assertTrue(media.contains("IptvRepository.loadFromApiWithCacheFallback"))
     }
 
     @Test
@@ -268,9 +268,13 @@ class AndroidAutoDiscoveryTest {
         assertTrue(activity.contains("SurfaceView"))
         assertTrue(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
+        assertTrue(activity.contains("Karadag Car TV"))
+        assertTrue(activity.contains("prepareChannel"))
         assertFalse(activity.contains("PlayerView"))
+        assertFalse(activity.contains("TextureView"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("TRACK_TYPE_VIDEO"))
+        assertTrue(holder.contains("prepareChannelLocked"))
     }
 
     @Test
