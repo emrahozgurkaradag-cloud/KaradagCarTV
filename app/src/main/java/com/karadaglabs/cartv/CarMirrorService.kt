@@ -163,6 +163,21 @@ private class CarMirrorScreen(
             surfaceContainer
         )
 
+        if (
+            !MirrorProjectionController.isProjectionActive()
+        ) {
+
+            /*
+             * Mirror gerçekten kullanılacak: telefon
+             * ekranında sistem paylaşım iznini iste.
+             * IPTV / YouTube / Radyo bu izne bağlı değil.
+             */
+            MirrorProjectionController
+                .requestConsentOnPhone(
+                    carContext
+                )
+        }
+
         /*
          * Projection servisine yeni Surface'in
          * hazır olduğunu bildir.

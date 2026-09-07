@@ -1,11 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        media: CarMediaService (MediaBrowserService / Radyo / IPTV).
-        template: CarMirrorService (androidx.car.app.CarAppService).
-        service + projection: CarVideoService (aauto.aar OEM projection).
-        video: gerçek araçta CAR.VALIDATOR / launcher görünürlüğü.
-        PR #3 template + minCarApiLevel düzeltmeleri korunur.
+        media: CarMediaService — resmi Android Auto medya menüsü
+        (Canlı TV, YouTube, Radyo, Google doğrudan kökte).
+        Sürüşte yalnızca ses; video host park/OEM projection
+        destekliyorsa CarVideoActivity SurfaceView yolundan gider.
+        template: CarMirrorService (izin yalnızca Mirror yüzeyinde).
+        service + projection: CarVideoService (aauto.aar OEM).
+        video: park halinde host video yeteneği bildirimi.
+        Kategori kısıtları bypass edilmez.
     -->
     <uses name="media" />
     <uses name="template" />

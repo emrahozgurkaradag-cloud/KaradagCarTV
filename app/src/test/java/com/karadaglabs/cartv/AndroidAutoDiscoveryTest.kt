@@ -127,6 +127,102 @@ class AndroidAutoDiscoveryTest {
     }
 
     @Test
+    fun androidAutoRootMenuExposesLiveTvYoutubeRadioGoogle() {
+        val media = sourceFile(
+            "java/com/karadaglabs/cartv/CarMediaService.kt"
+        ).readText()
+
+        assertTrue(media.contains("📺 Canlı TV"))
+        assertTrue(media.contains("▶️ YouTube"))
+        assertTrue(media.contains("📻 Canlı Radyo"))
+        assertTrue(media.contains("🔎 Google Arama"))
+        assertTrue(media.contains("CONTENT_STYLE_BROWSABLE_HINT"))
+        assertTrue(media.contains("YouTube telefonda açılır"))
+        assertTrue(media.contains("Google telefonda açılır"))
+        assertTrue(media.contains("Android Auto sürüşte video göstermez"))
+        assertFalse(
+            "YouTube browse must not return an empty list",
+            media.contains("if (parentId == YOUTUBE_ID)") &&
+                youtubeChildrenAreEmpty(media)
+        )
+    }
+
+    @Test
+    fun mediaProjectionConsentIsRequestedOnlyForMirror() {
+        val registration = sourceFile(
+            "java/com/karadaglabs/cartv/RegistrationActivity.kt"
+        ).readText()
+        val mirror = sourceFile(
+            "java/com/karadaglabs/cartv/CarMirrorService.kt"
+        ).readText()
+        val permission = sourceFile(
+            "java/com/karadaglabs/cartv/MediaProjectionPermissionActivity.kt"
+        ).readText()
+        val video = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
+
+        assertFalse(
+            registration.contains("createScreenCaptureIntent")
+        )
+        assertFalse(
+            registration.contains("requestMediaProjection")
+        )
+        assertTrue(
+            registration.contains("openMain()")
+        )
+        assertTrue(
+            mirror.contains("requestConsentOnPhone")
+        )
+        assertTrue(
+            permission.contains("createScreenCaptureIntent")
+        )
+        assertTrue(
+            permission.contains("MirrorProjectionService")
+        )
+        assertFalse(
+            "CarVideoActivity must not start MediaProjection",
+            video.contains("createScreenCaptureIntent")
+        )
+        assertTrue(video.contains("SurfaceView"))
+        assertTrue(video.contains("setZOrderMediaOverlay"))
+    }
+
+    @Test
+    fun carAppServiceAndMinCarApiLevelRemainDiscoverable() {
+        val manifest = sourceFile("AndroidManifest.xml").readText()
+
+        assertTrue(
+            manifest.contains("""android:name=".CarMirrorService"""")
+        )
+        assertTrue(
+            manifest.contains("androidx.car.app.category.NAVIGATION")
+        )
+        assertTrue(
+            manifest.contains("""android:name=".MediaProjectionPermissionActivity"""")
+        )
+        assertTrue(
+            manifest.contains("androidx.car.app.minCarApiLevel")
+        )
+        assertTrue(manifest.contains("""android:value="1""""))
+    }
+
+    private fun youtubeChildrenAreEmpty(media: String): Boolean {
+        val start = media.indexOf("if (parentId == YOUTUBE_ID)")
+        if (start < 0) {
+            return true
+        }
+
+        val google = media.indexOf("if (parentId == GOOGLE_ID)", start)
+        val block = media.substring(
+            start,
+            if (google > start) google else media.length
+        )
+
+        return block.contains("ImmutableList.of()")
+    }
+
+    @Test
     fun carMediaAndIptvDoNotUseHardcodedTestCredentials() {
         val root = sourceDir("java")
         val sources = root.walkTopDown()

@@ -404,7 +404,15 @@ class RegistrationActivitySourceTest {
 
         assertTrue(onCreate.contains("AppSession.email"))
         assertTrue(onCreate.contains("AppSession.licenseKey"))
-        assertTrue(onCreate.contains("requestMediaProjection()"))
+        assertTrue(onCreate.contains("openMain()"))
+        assertFalse(
+            "Licensed launch must not request MediaProjection",
+            onCreate.contains("requestMediaProjection()")
+        )
+        assertFalse(
+            "Licensed launch must not open screen-capture UI",
+            onCreate.contains("createScreenCaptureIntent")
+        )
         assertTrue(source.contains("AppSession.saveLicense"))
         assertTrue(source.contains("deviceUuid"))
         assertFalse(source.contains("CAR-TEST-001"))
@@ -431,7 +439,7 @@ class RegistrationActivitySourceTest {
 
     private fun onCreateBlock(source: String): String {
         val start = source.indexOf("override fun onCreate")
-        val end = source.indexOf("private fun requestMediaProjection")
+        val end = source.indexOf("private fun openMain")
 
         assertTrue(start >= 0)
         assertTrue(end > start)
