@@ -71,13 +71,15 @@ data class IptvChannel(
 class IptvActivity : ComponentActivity() {
 
     private val apiBaseUrl =
-        "https://api.karadaglabs.com"
+        AppSession.API_BASE_URL
 
-    private val deviceUuid =
-        "CAR-TEST-001"
+    private val deviceUuid by lazy {
+        AppSession.deviceUuid(this)
+    }
 
-    private val licenseKey =
-        "KDG-TEST-2026-001"
+    private val licenseKey by lazy {
+        AppSession.licenseKey(this)
+    }
 
     private val prefsName =
         "karadag_car_tv_cache"
@@ -327,6 +329,13 @@ class IptvActivity : ComponentActivity() {
         Thread {
 
             try {
+
+                if (licenseKey.isBlank()) {
+
+                    throw IllegalStateException(
+                        "Cihaz aktive edilmemiş: license_key boş"
+                    )
+                }
 
                 val response =
                     postJson(
