@@ -209,4 +209,56 @@ object MirrorProjectionController {
 
         return projectionActive
     }
+
+    /**
+     * Mirror yalnızca Android Auto template yüzeyi hazır
+     * olduğunda izin ister. Telefon uygulamasının normal
+     * açılışı bu diyaloga bağlı değildir.
+     */
+    @Synchronized
+    fun requestConsentOnPhone(
+        context: Context
+    ) {
+
+        if (projectionActive) {
+
+            Log.d(
+                TAG,
+                "Projection already active; consent not requested"
+            )
+
+            return
+        }
+
+        val appContext =
+            context.applicationContext
+
+        val intent =
+            Intent(
+                appContext,
+                MediaProjectionPermissionActivity::class.java
+            ).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
+            )
+
+        try {
+
+            appContext.startActivity(
+                intent
+            )
+
+            Log.d(
+                TAG,
+                "MediaProjection consent requested for Mirror"
+            )
+
+        } catch (exception: Exception) {
+
+            Log.e(
+                TAG,
+                "Unable to request MediaProjection consent",
+                exception
+            )
+        }
+    }
 }

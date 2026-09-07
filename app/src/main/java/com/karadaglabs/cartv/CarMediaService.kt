@@ -2,6 +2,7 @@
 
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -274,6 +275,25 @@ class CarMediaService : MediaLibraryService() {
                 "ON_GET_LIBRARY_ROOT"
             )
 
+            val extras =
+                Bundle().apply {
+
+                    putBoolean(
+                        "android.media.browse.CONTENT_STYLE_SUPPORTED",
+                        true
+                    )
+
+                    putInt(
+                        "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT",
+                        CONTENT_STYLE_GRID
+                    )
+
+                    putInt(
+                        "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT",
+                        CONTENT_STYLE_LIST
+                    )
+                }
+
             val root =
                 MediaItem.Builder()
 
@@ -299,6 +319,10 @@ class CarMediaService : MediaLibraryService() {
 
                             .setIsPlayable(
                                 false
+                            )
+
+                            .setExtras(
+                                extras
                             )
 
                             .build()
@@ -481,7 +505,16 @@ class CarMediaService : MediaLibraryService() {
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
-                        ImmutableList.of(),
+                        ImmutableList.of(
+                            createInfoItem(
+                                id = YOUTUBE_PHONE_ID,
+                                title = "YouTube telefonda açılır",
+                                subtitle =
+                                    "Android Auto sürüşte video göstermez. " +
+                                        "Park halinde araç ekranı video " +
+                                        "destekliyorsa Canlı TV kullanın."
+                            )
+                        ),
                         params
                     )
                 )
@@ -498,7 +531,15 @@ class CarMediaService : MediaLibraryService() {
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
-                        ImmutableList.of(),
+                        ImmutableList.of(
+                            createInfoItem(
+                                id = GOOGLE_PHONE_ID,
+                                title = "Google telefonda açılır",
+                                subtitle =
+                                    "Arama telefon uygulamasından kullanılır. " +
+                                        "Sürüşte web sayfası gösterilmez."
+                            )
+                        ),
                         params
                     )
                 )
@@ -641,6 +682,40 @@ class CarMediaService : MediaLibraryService() {
                             GOOGLE_ID,
                             "🔎 Google Arama",
                             "Web"
+                        ),
+
+                        null
+                    )
+                )
+            }
+
+            if (mediaId == YOUTUBE_PHONE_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItem(
+
+                        createInfoItem(
+                            YOUTUBE_PHONE_ID,
+                            "YouTube telefonda açılır",
+                            "Android Auto sürüşte video göstermez."
+                        ),
+
+                        null
+                    )
+                )
+            }
+
+            if (mediaId == GOOGLE_PHONE_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItem(
+
+                        createInfoItem(
+                            GOOGLE_PHONE_ID,
+                            "Google telefonda açılır",
+                            "Sürüşte web sayfası gösterilmez."
                         ),
 
                         null
@@ -1422,6 +1497,48 @@ class CarMediaService : MediaLibraryService() {
     }
 
     /*
+     * Sürüşte video/web zorlanmaz. Bu öğeler yalnızca
+     * Android Auto menüsünün boş görünmesini önler.
+     */
+    private fun createInfoItem(
+        id: String,
+        title: String,
+        subtitle: String
+    ): MediaItem {
+
+        return MediaItem.Builder()
+
+            .setMediaId(
+                id
+            )
+
+            .setMediaMetadata(
+
+                MediaMetadata.Builder()
+
+                    .setTitle(
+                        title
+                    )
+
+                    .setArtist(
+                        subtitle
+                    )
+
+                    .setIsBrowsable(
+                        false
+                    )
+
+                    .setIsPlayable(
+                        false
+                    )
+
+                    .build()
+            )
+
+            .build()
+    }
+
+    /*
      * ============================================================
      * RADIO MEDIA ITEM
      * ============================================================
@@ -1604,6 +1721,16 @@ class CarMediaService : MediaLibraryService() {
 
         private const val GOOGLE_ID =
             "karadag-google"
+
+        private const val YOUTUBE_PHONE_ID =
+            "karadag-youtube-phone"
+
+        private const val GOOGLE_PHONE_ID =
+            "karadag-google-phone"
+
+        private const val CONTENT_STYLE_LIST = 1
+
+        private const val CONTENT_STYLE_GRID = 2
     }
 }
 
