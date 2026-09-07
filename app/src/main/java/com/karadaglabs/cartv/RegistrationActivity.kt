@@ -335,6 +335,10 @@ class RegistrationActivity : ComponentActivity() {
             mutableStateOf("")
         }
 
+        var autoPolling by remember {
+            mutableStateOf(false)
+        }
+
         fun checkStatus() {
 
             val cleanEmail =
@@ -376,46 +380,44 @@ class RegistrationActivity : ComponentActivity() {
                         }
                     )
 
-                    val currentStatus =
-                        response.optString(
-                            "status",
-                            ""
+                    val snapshot =
+                        CustomerStatus.parse(
+                            httpCode,
+                            response
                         )
-
-                    val message =
-                        response.optString(
-                            "message",
-                            "Başvuru durumu alınamadı. HTTP $httpCode"
-                        )
-
-                    val license =
-                        response
-                            .optJSONObject("license")
-                            ?.optString("key")
-                            .orEmpty()
 
                     runOnUiThread {
 
                         statusCode =
-                            currentStatus
+                            snapshot.displayStatus
 
                         status =
-                            message
+                            snapshot.message
 
                         loading = false
 
-                        if (
-                            currentStatus == "active" &&
-                            license.isNotBlank()
-                        ) {
+                        if (snapshot.isActive) {
+
+                            autoPolling = false
 
                             AppSession.saveLicense(
-                                this,
+                                this@RegistrationActivity,
                                 cleanEmail,
-                                license
+                                snapshot.licenseKey
                             )
 
                             requestMediaProjection()
+                        } else if (snapshot.isTerminalFailure) {
+
+                            autoPolling = false
+                        } else if (
+                            snapshot.isDeviceNotFound
+                        ) {
+
+                            lastError =
+                                "Cihaz UUID'si henüz bulunamadı. " +
+                                    "Durumu tekrar kontrol edin veya " +
+                                    "yeniden başvuru yapın."
                         }
                     }
 
@@ -440,14 +442,18 @@ class RegistrationActivity : ComponentActivity() {
         }
 
         LaunchedEffect(
-            applicationSent
+            autoPolling
         ) {
 
-            if (applicationSent) {
+            if (autoPolling) {
 
                 while (true) {
 
                     delay(15_000)
+
+                    if (!autoPolling) {
+                        break
+                    }
 
                     checkStatus()
                 }
@@ -498,6 +504,18 @@ class RegistrationActivity : ComponentActivity() {
 
             Spacer(
                 Modifier.height(28.dp)
+            )
+
+            Text(
+                text = "Cihaz: $deviceUuid",
+                style =
+                    MaterialTheme
+                        .typography
+                        .bodySmall
+            )
+
+            Spacer(
+                Modifier.height(16.dp)
             )
 
             if (!applicationSent) {
@@ -626,17 +644,16 @@ class RegistrationActivity : ComponentActivity() {
                                     }
                                 )
 
-                                val currentStatus =
-                                    response.optString(
-                                        "status",
-                                        "pending"
+                                val snapshot =
+                                    CustomerStatus.parse(
+                                        httpCode,
+                                        response
                                     )
 
                                 val message =
-                                    response.optString(
-                                        "message",
+                                    snapshot.message.ifBlank {
                                         "Başvurunuz alındı. Yönetici onayı bekleniyor."
-                                    )
+                                    }
 
                                 runOnUiThread {
 
@@ -644,7 +661,9 @@ class RegistrationActivity : ComponentActivity() {
                                         cleanEmail
 
                                     statusCode =
-                                        currentStatus
+                                        snapshot.displayStatus.ifBlank {
+                                            "pending"
+                                        }
 
                                     status =
                                         message
@@ -652,13 +671,28 @@ class RegistrationActivity : ComponentActivity() {
                                     loading = false
 
                                     if (
-                                        httpCode in 200..299 ||
-                                        response.optString("code") ==
-                                        "APPLICATION_EXISTS"
+                                        CustomerStatus.applicationAccepted(
+                                            httpCode,
+                                            response
+                                        )
                                     ) {
 
                                         applicationSent =
                                             true
+
+                                        autoPolling =
+                                            true
+
+                                        if (snapshot.isActive) {
+
+                                            AppSession.saveLicense(
+                                                this@RegistrationActivity,
+                                                cleanEmail,
+                                                snapshot.licenseKey
+                                            )
+
+                                            requestMediaProjection()
+                                        }
 
                                     } else {
 
@@ -723,6 +757,9 @@ class RegistrationActivity : ComponentActivity() {
                             "rejected" ->
                                 "🔴 Reddedildi"
 
+                            CustomerStatus.DEVICE_NOT_FOUND ->
+                                "⚪ Cihaz henüz kayıtlı değil"
+
                             else ->
                                 "Başvuru durumu kontrol ediliyor"
                         },
@@ -750,6 +787,36 @@ class RegistrationActivity : ComponentActivity() {
                     Text(
                         "Durumu Kontrol Et"
                     )
+                }
+
+                if (
+                    statusCode == CustomerStatus.DEVICE_NOT_FOUND ||
+                    statusCode == CustomerStatus.REJECTED ||
+                    statusCode == CustomerStatus.CANCELLED
+                ) {
+
+                    Spacer(
+                        Modifier.height(12.dp)
+                    )
+
+                    Button(
+
+                        enabled = !loading,
+
+                        onClick = {
+                            autoPolling = false
+                            applicationSent = false
+                            statusCode = ""
+                            lastError = ""
+                            status = ""
+                        }
+
+                    ) {
+
+                        Text(
+                            "Yeniden Başvur"
+                        )
+                    }
                 }
 
                 if (loading) {

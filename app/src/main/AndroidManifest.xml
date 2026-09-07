@@ -21,6 +21,32 @@
     <uses-permission
         android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
 
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <uses-permission
+        android:name="android.permission.WAKE_LOCK" />
+
+    <!--
+        Android 11+ package visibility: uygulama Android Auto host
+        paketini görebilir. Host'un bu uygulamayı keşfetmesi exported
+        servisler + automotive_app_desc üzerinden olur.
+    -->
+    <queries>
+        <package android:name="com.google.android.projection.gearhead" />
+        <package android:name="com.google.android.gms" />
+        <intent>
+            <action android:name="androidx.car.app.CarAppService" />
+        </intent>
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -49,6 +75,10 @@
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
+
+        <meta-data
+            android:name="com.google.android.gms.car.notification.SmallIcon"
+            android:resource="@mipmap/ic_launcher" />
 
         <!-- ====================================================== -->
         <!-- TELEFON UYGULAMASI                                    -->
@@ -148,7 +178,8 @@
 
         <service
             android:name=".CarMirrorService"
-            android:exported="true">
+            android:exported="true"
+            android:label="Karadag Car TV">
 
             <intent-filter>
 

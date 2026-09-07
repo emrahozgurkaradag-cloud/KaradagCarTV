@@ -1,12 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
-    <uses name="media" />
     <!--
-        CarMirrorService androidx.car.app.CarAppService'i (Mirror /
-        MediaProjection ekranı) kullanıyor. Android for Cars App
-        Library kullanan uygulamaların Android Auto tarafından
-        tanınması için "template" yeteneğinin de bildirilmesi gerekiyor.
+        media: CarMediaService (MediaBrowserService / Radyo / IPTV).
+        template: CarMirrorService (androidx.car.app.CarAppService).
+        service + projection: CarVideoService (aauto.aar OEM projection).
+        video: gerçek araçta CAR.VALIDATOR / launcher görünürlüğü.
+        PR #3 template + minCarApiLevel düzeltmeleri korunur.
     -->
+    <uses name="media" />
     <uses name="template" />
     <uses
         name="service"
@@ -14,4 +15,5 @@
     <uses
         name="projection"
         tools:ignore="InvalidUsesTagAttribute" />
+    <uses name="video" />
 </automotiveApp>

@@ -44,13 +44,13 @@ class CarMediaService : MediaLibraryService() {
      */
 
     private val apiBaseUrl =
-        "https://api.karadaglabs.com"
+        AppSession.API_BASE_URL
 
-    private val deviceUuid =
-        "CAR-TEST-001"
+    private val deviceUuid: String
+        get() = AppSession.deviceUuid(this)
 
-    private val licenseKey =
-        "KDG-TEST-2026-001"
+    private val licenseKey: String
+        get() = AppSession.licenseKey(this)
 
     /*
      * ============================================================
@@ -168,7 +168,9 @@ class CarMediaService : MediaLibraryService() {
                 this,
                 player,
                 CarMediaLibraryCallback()
-            ).build()
+            )
+                .setId("karadag-car-tv")
+                .build()
 
         CarVideoPlayerHolder.setPlayer(player)
 
@@ -251,9 +253,9 @@ class CarMediaService : MediaLibraryService() {
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
 
-            Log.e(
-                "KARADAG_TEST",
-                "ON_GET_LIBRARY_ROOT ÇALIŞTI"
+            Log.d(
+                TAG,
+                "ON_GET_LIBRARY_ROOT"
             )
 
             val root =
@@ -314,9 +316,9 @@ class CarMediaService : MediaLibraryService() {
                 LibraryResult<ImmutableList<MediaItem>>
                 > {
 
-            Log.e(
-                "KARADAG_TEST",
-                "ON_GET_CHILDREN ÇALIŞTI parentId=$parentId"
+            Log.d(
+                TAG,
+                "ON_GET_CHILDREN parentId=$parentId"
             )
 
             /*
@@ -776,56 +778,71 @@ class CarMediaService : MediaLibraryService() {
 
         Log.d(
             TAG,
-            "======================================"
+            "Android Auto IPTV yükleme başladı " +
+                "deviceUuid=$deviceUuid " +
+                "licenseKeyBlank=${licenseKey.isBlank()}"
         )
 
-        Log.d(
-            TAG,
-            "Android Auto IPTV yükleme başladı"
-        )
+        val maxAttempts = 4
 
-        /*
-         * Önce API
-         */
+        for (attempt in 1..maxAttempts) {
 
-        try {
+            try {
 
-            val channels =
-                loadLiveTvFromApi()
+                val channels =
+                    loadLiveTvFromApi()
 
-            if (channels.isNotEmpty()) {
+                if (channels.isNotEmpty()) {
 
-                saveLiveTvCache(
-                    channels
-                )
+                    saveLiveTvCache(
+                        channels
+                    )
 
-                Log.d(
+                    Log.d(
+                        TAG,
+                        "IPTV API başarılı: ${channels.size} kanal " +
+                            "(attempt $attempt)"
+                    )
+
+                    return channels
+                }
+
+                Log.w(
                     TAG,
-                    "IPTV API başarılı: ${channels.size} kanal"
+                    "IPTV API boş liste döndürdü " +
+                        "(attempt $attempt/$maxAttempts)"
                 )
 
-                return channels
+            } catch (
+                exception: Exception
+            ) {
+
+                Log.e(
+                    TAG,
+                    "IPTV API başarısız (attempt $attempt)",
+                    exception
+                )
             }
 
-            Log.w(
-                TAG,
-                "IPTV API boş liste döndürdü"
-            )
+            if (attempt < maxAttempts) {
 
-        } catch (
-            exception: Exception
-        ) {
+                try {
 
-            Log.e(
-                TAG,
-                "IPTV API başarısız",
-                exception
-            )
+                    Thread.sleep(
+                        attempt * 2_500L
+                    )
+
+                } catch (
+                    interrupted: InterruptedException
+                ) {
+
+                    Thread.currentThread()
+                        .interrupt()
+
+                    break
+                }
+            }
         }
-
-        /*
-         * API olmazsa kendi cache'i
-         */
 
         val cached =
             loadCachedLiveTv()
@@ -833,11 +850,6 @@ class CarMediaService : MediaLibraryService() {
         Log.d(
             TAG,
             "Cache fallback: ${cached.size} kanal"
-        )
-
-        Log.d(
-            TAG,
-            "======================================"
         )
 
         return cached
@@ -851,6 +863,13 @@ class CarMediaService : MediaLibraryService() {
 
     private fun loadLiveTvFromApi():
             List<LiveTvStation> {
+
+        if (licenseKey.isBlank()) {
+
+            throw IllegalStateException(
+                "Cihaz aktive edilmemiş: license_key boş"
+            )
+        }
 
         val connection =
             URL(

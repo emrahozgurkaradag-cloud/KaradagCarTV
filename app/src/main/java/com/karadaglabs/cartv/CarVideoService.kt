@@ -8,4 +8,8 @@ class CarVideoService : CarActivityService() {
     override fun getCarActivity(): Class<out CarActivity> {
         return CarVideoActivity::class.java
     }
+
+    override fun getHandledConfigChanges(): Int {
+        return 0xFFFFFFFF.toInt()
+    }
 }

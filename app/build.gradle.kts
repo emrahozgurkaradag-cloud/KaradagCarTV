@@ -88,6 +88,9 @@ dependencies {
 
     implementation("androidx.car.app:app-projected:1.7.0")
 
+    // Jetifier rewrites aauto.aar onto AndroidX FragmentManager.
+    implementation("androidx.fragment:fragment-ktx:1.8.8")
+
     // ============================================================
     // MEDIA3 / EXOPLAYER
     // ============================================================
