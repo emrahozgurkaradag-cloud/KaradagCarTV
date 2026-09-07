@@ -9,12 +9,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -307,55 +310,47 @@ class RegistrationActivity : ComponentActivity() {
     @Composable
     private fun RegistrationScreen() {
 
-        var name by remember {
-            mutableStateOf("")
+        var ui by remember {
+            mutableStateOf(
+                RegistrationUiState.initial()
+            )
         }
 
-        var email by remember {
-            mutableStateOf("")
-        }
+        fun openLicensedSessionIfReady(
+            next: RegistrationUiState
+        ) {
 
-        var status by remember {
-            mutableStateOf("")
-        }
+            if (!next.shouldOpenLicensedSession) {
+                return
+            }
 
-        var statusCode by remember {
-            mutableStateOf("")
-        }
+            AppSession.saveLicense(
+                this@RegistrationActivity,
+                next.email,
+                next.licenseKey
+            )
 
-        var loading by remember {
-            mutableStateOf(false)
-        }
-
-        var applicationSent by remember {
-            mutableStateOf(false)
-        }
-
-        var lastError by remember {
-            mutableStateOf("")
-        }
-
-        var autoPolling by remember {
-            mutableStateOf(false)
+            requestMediaProjection()
         }
 
         fun checkStatus() {
 
-            val cleanEmail =
-                email
-                    .trim()
-                    .lowercase()
+            val started =
+                ui.beginStatusCheck()
 
-            if (cleanEmail.isBlank()) {
+            ui = started
 
-                status =
-                    "E-posta adresinizi girin."
-
+            if (
+                !started.mayCallStatusApi ||
+                !started.loading
+            ) {
                 return
             }
 
-            loading = true
-            lastError = ""
+            val cleanEmail =
+                started.email
+                    .trim()
+                    .lowercase()
 
             Thread {
 
@@ -388,39 +383,16 @@ class RegistrationActivity : ComponentActivity() {
 
                     runOnUiThread {
 
-                        statusCode =
-                            snapshot.displayStatus
-
-                        status =
-                            snapshot.message
-
-                        loading = false
-
-                        if (snapshot.isActive) {
-
-                            autoPolling = false
-
-                            AppSession.saveLicense(
-                                this@RegistrationActivity,
-                                cleanEmail,
-                                snapshot.licenseKey
+                        val next =
+                            ui.completeStatus(
+                                snapshot
                             )
 
-                            requestMediaProjection()
-                        } else if (snapshot.isTerminalFailure) {
+                        ui = next
 
-                            autoPolling = false
-                        } else if (
-                            snapshot.isDeviceNotFound
-                        ) {
-
-                            autoPolling = false
-
-                            lastError =
-                                "Cihaz UUID'si henüz bulunamadı. " +
-                                    "Durumu tekrar kontrol edin veya " +
-                                    "yeniden başvuru yapın."
-                        }
+                        openLicensedSessionIfReady(
+                            next
+                        )
                     }
 
                 } catch (
@@ -429,14 +401,10 @@ class RegistrationActivity : ComponentActivity() {
 
                     runOnUiThread {
 
-                        loading = false
-
-                        lastError =
+                        ui = ui.failStatus(
                             exception.message
                                 ?: "Bilinmeyen bağlantı hatası."
-
-                        status =
-                            "Başvuru durumu kontrol edilemedi."
+                        )
                     }
                 }
 
@@ -444,16 +412,16 @@ class RegistrationActivity : ComponentActivity() {
         }
 
         LaunchedEffect(
-            autoPolling
+            ui.autoPolling
         ) {
 
-            if (autoPolling) {
+            if (ui.autoPolling) {
 
                 while (true) {
 
                     delay(15_000)
 
-                    if (!autoPolling) {
+                    if (!ui.autoPolling) {
                         break
                     }
 
@@ -462,412 +430,395 @@ class RegistrationActivity : ComponentActivity() {
             }
         }
 
-        Column(
-
+        Box(
             modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(
-                        horizontal = 120.dp,
-                        vertical = 48.dp
-                    ),
-
-            horizontalAlignment =
-                Alignment.CenterHorizontally,
-
-            verticalArrangement =
-                Arrangement.Center
+                Modifier.fillMaxSize(),
+            contentAlignment =
+                Alignment.Center
         ) {
 
-            Text(
-                text = "KARADAG CAR TV",
-                style =
-                    MaterialTheme
-                        .typography
-                        .headlineLarge
-            )
+            Column(
 
-            Spacer(
-                Modifier.height(12.dp)
-            )
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(
+                            rememberScrollState()
+                        )
+                        .padding(
+                            horizontal = 120.dp,
+                            vertical = 48.dp
+                        ),
 
-            Text(
-                text =
-                    if (applicationSent) {
-                        "Başvurunuz alındı. Yönetici onayı bekleniyor."
-                    } else {
-                        "Kullanıma başlamak için başvuru yapın."
-                    },
-                style =
-                    MaterialTheme
-                        .typography
-                        .titleMedium
-            )
+                horizontalAlignment =
+                    Alignment.CenterHorizontally,
 
-            Spacer(
-                Modifier.height(28.dp)
-            )
+                verticalArrangement =
+                    Arrangement.Center
+            ) {
 
-            Text(
-                text = "Cihaz: $deviceUuid",
-                style =
-                    MaterialTheme
-                        .typography
-                        .bodySmall
-            )
-
-            Spacer(
-                Modifier.height(16.dp)
-            )
-
-            if (!applicationSent) {
-
-                OutlinedTextField(
-
-                    value = name,
-
-                    onValueChange = {
-                        name = it
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    label = {
-                        Text("Ad Soyad")
-                    },
-
-                    singleLine = true
+                Text(
+                    text = "KARADAG CAR TV",
+                    style =
+                        MaterialTheme
+                            .typography
+                            .headlineLarge
                 )
 
                 Spacer(
                     Modifier.height(12.dp)
                 )
 
-                OutlinedTextField(
-
-                    value = email,
-
-                    onValueChange = {
-                        email = it
-                    },
-
-                    modifier =
-                        Modifier.fillMaxWidth(),
-
-                    label = {
-                        Text("E-posta")
-                    },
-
-                    keyboardOptions =
-                        KeyboardOptions(
-                            keyboardType =
-                                KeyboardType.Email
-                        ),
-
-                    singleLine = true
-                )
-
-                Spacer(
-                    Modifier.height(20.dp)
-                )
-
-                Button(
-
-                    enabled =
-                        !loading &&
-                                name.trim().length >= 2 &&
-                                email.contains("@"),
-
-                    onClick = {
-
-                        loading = true
-                        lastError = ""
-
-                        Thread {
-
-                            try {
-
-                                val cleanName =
-                                    name.trim()
-
-                                val cleanEmail =
-                                    email
-                                        .trim()
-                                        .lowercase()
-
-                                val (
-                                    httpCode,
-                                    response
-                                ) = request(
-
-                                    "/api/customer/apply",
-
-                                    JSONObject().apply {
-
-                                        put(
-                                            "name",
-                                            cleanName
-                                        )
-
-                                        put(
-                                            "email",
-                                            cleanEmail
-                                        )
-
-                                        put(
-                                            "device_uuid",
-                                            deviceUuid
-                                        )
-
-                                        put(
-                                            "device_name",
-                                            Settings.Global.getString(
-                                                contentResolver,
-                                                "device_name"
-                                            )
-                                                ?: android.os.Build.MODEL
-                                        )
-
-                                        put(
-                                            "device_model",
-                                            android.os.Build.MODEL
-                                        )
-
-                                        put(
-                                            "android_version",
-                                            android.os.Build.VERSION.RELEASE
-                                        )
-
-                                        put(
-                                            "app_version",
-                                            "1.0"
-                                        )
-                                    }
-                                )
-
-                                val snapshot =
-                                    CustomerStatus.parse(
-                                        httpCode,
-                                        response
-                                    )
-
-                                val message =
-                                    snapshot.message.ifBlank {
-                                        "Başvurunuz alındı. Yönetici onayı bekleniyor."
-                                    }
-
-                                runOnUiThread {
-
-                                    email =
-                                        cleanEmail
-
-                                    statusCode =
-                                        snapshot.displayStatus.ifBlank {
-                                            "pending"
-                                        }
-
-                                    status =
-                                        message
-
-                                    loading = false
-
-                                    if (
-                                        CustomerStatus.applicationAccepted(
-                                            httpCode,
-                                            response
-                                        )
-                                    ) {
-
-                                        applicationSent =
-                                            true
-
-                                        autoPolling =
-                                            true
-
-                                        if (snapshot.isActive) {
-
-                                            AppSession.saveLicense(
-                                                this@RegistrationActivity,
-                                                cleanEmail,
-                                                snapshot.licenseKey
-                                            )
-
-                                            requestMediaProjection()
-                                        }
-
-                                    } else {
-
-                                        lastError =
-                                            "Sunucu HTTP $httpCode döndürdü."
-                                    }
-                                }
-
-                            } catch (
-                                exception: Exception
-                            ) {
-
-                                runOnUiThread {
-
-                                    loading = false
-
-                                    lastError =
-                                        exception.message
-                                            ?: "Başvuru gönderilemedi."
-
-                                    status =
-                                        "Başvuru gönderilemedi. İnternet bağlantınızı kontrol edin."
-                                }
-                            }
-
-                        }.start()
-                    }
-
-                ) {
-
-                    if (loading) {
-
-                        CircularProgressIndicator(
-                            modifier =
-                                Modifier.height(18.dp)
-                        )
-
-                    } else {
-
-                        Text(
-                            "Başvuru Yap"
-                        )
-                    }
-                }
-
-            } else {
-
                 Text(
-
                     text =
-                        when (statusCode) {
-
-                            "pending" ->
-                                "🟡 Onay bekleniyor"
-
-                            "active" ->
-                                "🟢 Aktif"
-
-                            "cancelled" ->
-                                "⛔ İptal edildi"
-
-                            "rejected" ->
-                                "🔴 Reddedildi"
-
-                            CustomerStatus.DEVICE_NOT_FOUND ->
-                                "⚪ Cihaz henüz kayıtlı değil"
-
-                            else ->
-                                "Başvuru durumu kontrol ediliyor"
+                        if (ui.applicationSent) {
+                            "Başvurunuz alındı. Yönetici onayı bekleniyor."
+                        } else {
+                            "Kullanıma başlamak için başvuru yapın."
                         },
-
                     style =
                         MaterialTheme
                             .typography
-                            .titleLarge
+                            .titleMedium
                 )
 
                 Spacer(
-                    Modifier.height(18.dp)
+                    Modifier.height(28.dp)
                 )
 
-                Button(
+                Text(
+                    text = "Cihaz: $deviceUuid",
+                    style =
+                        MaterialTheme
+                            .typography
+                            .bodySmall
+                )
 
-                    enabled = !loading,
+                Spacer(
+                    Modifier.height(16.dp)
+                )
 
-                    onClick = {
-                        checkStatus()
-                    }
+                if (ui.showApplyButton) {
 
-                ) {
+                    OutlinedTextField(
 
-                    Text(
-                        "Durumu Kontrol Et"
+                        value = ui.name,
+
+                        onValueChange = {
+                            ui = ui.withName(it)
+                        },
+
+                        enabled =
+                            ui.fieldsEditable,
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        label = {
+                            Text("Ad Soyad")
+                        },
+
+                        singleLine = true
                     )
-                }
-
-                if (
-                    statusCode == CustomerStatus.DEVICE_NOT_FOUND ||
-                    statusCode == CustomerStatus.REJECTED ||
-                    statusCode == CustomerStatus.CANCELLED
-                ) {
 
                     Spacer(
                         Modifier.height(12.dp)
                     )
 
+                    OutlinedTextField(
+
+                        value = ui.email,
+
+                        onValueChange = {
+                            ui = ui.withEmail(it)
+                        },
+
+                        enabled =
+                            ui.fieldsEditable,
+
+                        modifier =
+                            Modifier.fillMaxWidth(),
+
+                        label = {
+                            Text("E-posta")
+                        },
+
+                        keyboardOptions =
+                            KeyboardOptions(
+                                keyboardType =
+                                    KeyboardType.Email
+                            ),
+
+                        singleLine = true
+                    )
+
+                    Spacer(
+                        Modifier.height(20.dp)
+                    )
+
                     Button(
 
-                        enabled = !loading,
+                        enabled =
+                            ui.applyButtonEnabled,
 
                         onClick = {
-                            autoPolling = false
-                            applicationSent = false
-                            statusCode = ""
-                            lastError = ""
-                            status = ""
+
+                            val started =
+                                ui.beginApply()
+
+                            ui = started
+
+                            if (!started.loading) {
+                                return@Button
+                            }
+
+                            val cleanName =
+                                started.name.trim()
+
+                            val cleanEmail =
+                                started.email
+                                    .trim()
+                                    .lowercase()
+
+                            Thread {
+
+                                try {
+
+                                    val (
+                                        httpCode,
+                                        response
+                                    ) = request(
+
+                                        "/api/customer/apply",
+
+                                        JSONObject().apply {
+
+                                            put(
+                                                "name",
+                                                cleanName
+                                            )
+
+                                            put(
+                                                "email",
+                                                cleanEmail
+                                            )
+
+                                            put(
+                                                "device_uuid",
+                                                deviceUuid
+                                            )
+
+                                            put(
+                                                "device_name",
+                                                Settings.Global.getString(
+                                                    contentResolver,
+                                                    "device_name"
+                                                )
+                                                    ?: android.os.Build.MODEL
+                                            )
+
+                                            put(
+                                                "device_model",
+                                                android.os.Build.MODEL
+                                            )
+
+                                            put(
+                                                "android_version",
+                                                android.os.Build.VERSION.RELEASE
+                                            )
+
+                                            put(
+                                                "app_version",
+                                                "1.0"
+                                            )
+                                        }
+                                    )
+
+                                    val snapshot =
+                                        CustomerStatus.parse(
+                                            httpCode,
+                                            response
+                                        )
+
+                                    val accepted =
+                                        CustomerStatus.applicationAccepted(
+                                            httpCode,
+                                            response
+                                        )
+
+                                    runOnUiThread {
+
+                                        val next =
+                                            ui.completeApply(
+                                                httpCode,
+                                                snapshot,
+                                                accepted
+                                            )
+
+                                        ui = next
+
+                                        openLicensedSessionIfReady(
+                                            next
+                                        )
+                                    }
+
+                                } catch (
+                                    exception: Exception
+                                ) {
+
+                                    runOnUiThread {
+
+                                        ui = ui.failApply(
+                                            exception.message
+                                                ?: "Başvuru gönderilemedi."
+                                        )
+                                    }
+                                }
+
+                            }.start()
                         }
 
                     ) {
 
-                        Text(
-                            "Yeniden Başvur"
+                        if (ui.loading) {
+
+                            CircularProgressIndicator(
+                                modifier =
+                                    Modifier.height(18.dp)
+                            )
+
+                        } else {
+
+                            Text(
+                                "Başvuru Yap"
+                            )
+                        }
+                    }
+
+                } else {
+
+                    Text(
+
+                        text =
+                            when (ui.statusCode) {
+
+                                "pending" ->
+                                    "🟡 Onay bekleniyor"
+
+                                "active" ->
+                                    "🟢 Aktif"
+
+                                "cancelled" ->
+                                    "⛔ İptal edildi"
+
+                                "rejected" ->
+                                    "🔴 Reddedildi"
+
+                                CustomerStatus.DEVICE_NOT_FOUND ->
+                                    "⚪ Cihaz henüz kayıtlı değil"
+
+                                else ->
+                                    "Başvuru durumu kontrol ediliyor"
+                            },
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .titleLarge
+                    )
+
+                    Spacer(
+                        Modifier.height(18.dp)
+                    )
+
+                    if (ui.showRecheckButton) {
+
+                        Button(
+
+                            enabled = !ui.loading,
+
+                            onClick = {
+                                checkStatus()
+                            }
+
+                        ) {
+
+                            Text(
+                                "Durumu Kontrol Et"
+                            )
+                        }
+                    }
+
+                    if (ui.showRetryButton) {
+
+                        Spacer(
+                            Modifier.height(12.dp)
                         )
+
+                        Button(
+
+                            enabled = !ui.loading,
+
+                            onClick = {
+                                ui = ui.retryApply()
+                            }
+
+                        ) {
+
+                            Text(
+                                "Yeniden Başvur"
+                            )
+                        }
+                    }
+
+                    if (ui.loading) {
+
+                        Spacer(
+                            Modifier.height(16.dp)
+                        )
+
+                        CircularProgressIndicator()
                     }
                 }
 
-                if (loading) {
+                Spacer(
+                    Modifier.height(20.dp)
+                )
+
+                if (ui.status.isNotBlank()) {
+
+                    Text(
+
+                        text = ui.status,
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .bodyLarge
+                    )
+                }
+
+                if (ui.lastError.isNotBlank()) {
 
                     Spacer(
-                        Modifier.height(16.dp)
+                        Modifier.height(10.dp)
                     )
 
-                    CircularProgressIndicator()
+                    Text(
+
+                        text = ui.lastError,
+
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .error,
+
+                        style =
+                            MaterialTheme
+                                .typography
+                                .bodyMedium
+                    )
                 }
-            }
-
-            Spacer(
-                Modifier.height(20.dp)
-            )
-
-            if (status.isNotBlank()) {
-
-                Text(
-
-                    text = status,
-
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodyLarge
-                )
-            }
-
-            if (lastError.isNotBlank()) {
-
-                Spacer(
-                    Modifier.height(10.dp)
-                )
-
-                Text(
-
-                    text = lastError,
-
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .error,
-
-                    style =
-                        MaterialTheme
-                            .typography
-                            .bodyMedium
-                )
             }
         }
     }
