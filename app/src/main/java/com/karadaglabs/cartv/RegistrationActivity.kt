@@ -414,6 +414,8 @@ class RegistrationActivity : ComponentActivity() {
                             snapshot.isDeviceNotFound
                         ) {
 
+                            autoPolling = false
+
                             lastError =
                                 "Cihaz UUID'si henüz bulunamadı. " +
                                     "Durumu tekrar kontrol edin veya " +

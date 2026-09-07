@@ -4,12 +4,22 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
-import android.view.ContextThemeWrapper
+import android.view.SurfaceView
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.ui.PlayerView
 import com.google.android.apps.auto.sdk.CarActivity
 
+/**
+ * aauto CarActivity window hosted by Android Auto.
+ *
+ * Video must render into a SurfaceView inside this hosted window.
+ * Phone-style player widgets and TextureView are not used here: on a
+ * real car the decoder overlay is not composited through that path,
+ * so audio plays and the screen stays black. setZOrderMediaOverlay
+ * keeps the video layer above the CarActivity chrome that the host
+ * actually captures.
+ */
 @UnstableApi
 class CarVideoActivity : CarActivity() {
 
@@ -17,7 +27,7 @@ class CarVideoActivity : CarActivity() {
         private const val TAG = "KaradagCarVideo"
     }
 
-    private var playerView: PlayerView? = null
+    private var surfaceView: SurfaceView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,27 +56,31 @@ class CarVideoActivity : CarActivity() {
             )
         }
 
-        val view = PlayerView(
-            ContextThemeWrapper(
-                this,
-                R.style.Theme_KaradagCarTV
-            )
-        ).apply {
+        val root = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.BLACK)
-            setShutterBackgroundColor(Color.BLACK)
-            useController = false
             keepScreenOn = true
         }
 
-        playerView = view
+        val view = SurfaceView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+            keepScreenOn = true
+        }
 
-        setContentView(view)
+        configureSurfaceZOrder(view)
 
-        CarVideoPlayerHolder.setPlayerView(view)
+        root.addView(view)
+        surfaceView = view
+
+        setContentView(root)
+
+        CarVideoPlayerHolder.setCarSurfaceView(view)
 
         try {
             startService(
@@ -84,14 +98,20 @@ class CarVideoActivity : CarActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+
+        Log.d(TAG, "CAR VIDEO ACTIVITY STARTED")
+
+        bindSurface()
+    }
+
     override fun onResume() {
         super.onResume()
 
         Log.d(TAG, "CAR VIDEO ACTIVITY RESUMED")
 
-        playerView?.let { view ->
-            CarVideoPlayerHolder.setPlayerView(view)
-        }
+        bindSurface()
     }
 
     override fun onPause() {
@@ -103,12 +123,36 @@ class CarVideoActivity : CarActivity() {
     override fun onDestroy() {
         Log.d(TAG, "CAR VIDEO ACTIVITY DESTROYED")
 
-        playerView?.let { view ->
-            CarVideoPlayerHolder.clearPlayerView(view)
+        surfaceView?.let { view ->
+            CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
 
-        playerView = null
+        surfaceView = null
 
         super.onDestroy()
+    }
+
+    private fun bindSurface() {
+        val view = surfaceView ?: return
+
+        configureSurfaceZOrder(view)
+        CarVideoPlayerHolder.setCarSurfaceView(view)
+    }
+
+    private fun configureSurfaceZOrder(view: SurfaceView) {
+        try {
+            view.setZOrderMediaOverlay(true)
+
+            Log.d(
+                TAG,
+                "SurfaceView setZOrderMediaOverlay=true"
+            )
+        } catch (exception: Exception) {
+            Log.e(
+                TAG,
+                "Unable to set SurfaceView z-order",
+                exception
+            )
+        }
     }
 }

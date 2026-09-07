@@ -42,7 +42,9 @@ object CustomerStatus {
             }
 
         val shouldContinueAutoPolling: Boolean
-            get() = !isActive && !isTerminalFailure
+            get() = !isActive &&
+                !isTerminalFailure &&
+                !isDeviceNotFound
     }
 
     fun parse(

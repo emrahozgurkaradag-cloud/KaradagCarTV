@@ -37,7 +37,7 @@ class CustomerStatusTest {
 
         assertFalse(snapshot.isActive)
         assertTrue(snapshot.isDeviceNotFound)
-        assertTrue(snapshot.shouldContinueAutoPolling)
+        assertFalse(snapshot.shouldContinueAutoPolling)
         assertEquals(
             CustomerStatus.DEVICE_NOT_FOUND,
             snapshot.displayStatus
@@ -128,6 +128,25 @@ class AndroidAutoDiscoveryTest {
 
     @Test
     fun carMediaAndIptvDoNotUseHardcodedTestCredentials() {
+        val root = sourceDir("java")
+        val sources = root.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .toList()
+
+        assertTrue(sources.isNotEmpty())
+
+        sources.forEach { file ->
+            val text = file.readText()
+            assertFalse(
+                "${file.name} still contains CAR-TEST-001",
+                text.contains("CAR-TEST-001")
+            )
+            assertFalse(
+                "${file.name} still contains KDG-TEST-2026-001",
+                text.contains("KDG-TEST-2026-001")
+            )
+        }
+
         val media = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
@@ -135,14 +154,27 @@ class AndroidAutoDiscoveryTest {
             "java/com/karadaglabs/cartv/IptvActivity.kt"
         ).readText()
 
-        assertFalse(media.contains("CAR-TEST-001"))
-        assertFalse(media.contains("KDG-TEST-2026-001"))
-        assertFalse(iptv.contains("CAR-TEST-001"))
-        assertFalse(iptv.contains("KDG-TEST-2026-001"))
         assertTrue(media.contains("AppSession.deviceUuid"))
         assertTrue(media.contains("AppSession.licenseKey"))
         assertTrue(iptv.contains("AppSession.deviceUuid"))
         assertTrue(iptv.contains("AppSession.licenseKey"))
+    }
+
+    @Test
+    fun carVideoActivityRendersToHostedSurfaceView() {
+        val activity = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
+        val holder = sourceFile(
+            "java/com/karadaglabs/cartv/CarMediaService.kt"
+        ).readText()
+
+        assertTrue(activity.contains("SurfaceView"))
+        assertTrue(activity.contains("setZOrderMediaOverlay"))
+        assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
+        assertFalse(activity.contains("PlayerView"))
+        assertTrue(holder.contains("setVideoSurfaceHolder"))
+        assertTrue(holder.contains("TRACK_TYPE_VIDEO"))
     }
 
     @Test
@@ -176,6 +208,28 @@ class AndroidAutoDiscoveryTest {
 
         throw IllegalStateException(
             "Source file not found: $relativeFromMain"
+        )
+    }
+
+    private fun sourceDir(relativeFromMain: String): File {
+        var dir = File(".").canonicalFile
+
+        repeat(8) {
+            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            if (appPath.isDirectory) {
+                return appPath
+            }
+
+            val modulePath = File(dir, "src/main/$relativeFromMain")
+            if (modulePath.isDirectory) {
+                return modulePath
+            }
+
+            dir = dir.parentFile ?: return appPath
+        }
+
+        throw IllegalStateException(
+            "Source dir not found: $relativeFromMain"
         )
     }
 }
