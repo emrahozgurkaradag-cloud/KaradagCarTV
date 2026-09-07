@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +44,12 @@ class RegistrationActivity : ComponentActivity() {
     private val deviceUuid by lazy {
         AppSession.deviceUuid(this)
     }
+
+    /*
+     * Stale HTTP cevaplarının idle formu tekrar
+     * loading'e çekmesini engeller.
+     */
+    private var registrationRequestSeq = 0
 
     /*
      * Android ekran yakalama izin sonucu.
@@ -307,55 +315,54 @@ class RegistrationActivity : ComponentActivity() {
     @Composable
     private fun RegistrationScreen() {
 
-        var name by remember {
-            mutableStateOf("")
+        var state by remember {
+            mutableStateOf(
+                RegistrationFormState()
+            )
         }
 
-        var email by remember {
-            mutableStateOf("")
+        fun activateLicense(
+            email: String,
+            licenseKey: String
+        ) {
+
+            AppSession.saveLicense(
+                this@RegistrationActivity,
+                email,
+                licenseKey
+            )
+
+            requestMediaProjection()
         }
 
-        var status by remember {
-            mutableStateOf("")
-        }
+        fun applyOutcome(
+            outcome: RegistrationStatusOutcome
+        ) {
 
-        var statusCode by remember {
-            mutableStateOf("")
-        }
+            state = outcome.state
 
-        var loading by remember {
-            mutableStateOf(false)
-        }
+            if (outcome.shouldActivateLicense) {
 
-        var applicationSent by remember {
-            mutableStateOf(false)
-        }
-
-        var lastError by remember {
-            mutableStateOf("")
-        }
-
-        var autoPolling by remember {
-            mutableStateOf(false)
+                activateLicense(
+                    outcome.email.orEmpty(),
+                    outcome.licenseKey.orEmpty()
+                )
+            }
         }
 
         fun checkStatus() {
 
-            val cleanEmail =
-                email
-                    .trim()
-                    .lowercase()
+            val attempt =
+                state.beginStatusCheck()
 
-            if (cleanEmail.isBlank()) {
+            state = attempt.state
 
-                status =
-                    "E-posta adresinizi girin."
+            val ready =
+                attempt.start as? RegistrationStatusStart.Ready
+                    ?: return
 
-                return
-            }
-
-            loading = true
-            lastError = ""
+            val requestId =
+                ++registrationRequestSeq
 
             Thread {
 
@@ -370,7 +377,7 @@ class RegistrationActivity : ComponentActivity() {
 
                             put(
                                 "email",
-                                cleanEmail
+                                ready.email
                             )
 
                             put(
@@ -388,38 +395,138 @@ class RegistrationActivity : ComponentActivity() {
 
                     runOnUiThread {
 
-                        statusCode =
-                            snapshot.displayStatus
+                        if (requestId != registrationRequestSeq) {
+                            return@runOnUiThread
+                        }
 
-                        status =
-                            snapshot.message
+                        applyOutcome(
+                            state.onStatusSnapshot(
+                                snapshot
+                            )
+                        )
+                    }
 
-                        loading = false
+                } catch (
+                    exception: Exception
+                ) {
 
-                        if (snapshot.isActive) {
+                    runOnUiThread {
 
-                            autoPolling = false
+                        if (requestId != registrationRequestSeq) {
+                            return@runOnUiThread
+                        }
 
-                            AppSession.saveLicense(
-                                this@RegistrationActivity,
-                                cleanEmail,
-                                snapshot.licenseKey
+                        state =
+                            state.onStatusError(
+                                exception.message
+                                    ?: "Bilinmeyen bağlantı hatası."
+                            )
+                    }
+                }
+
+            }.start()
+        }
+
+        fun submitApplication() {
+
+            val attempt =
+                state.beginApply()
+
+            state = attempt.state
+
+            val ready =
+                attempt.start as? RegistrationApplyStart.Ready
+                    ?: return
+
+            val requestId =
+                ++registrationRequestSeq
+
+            Thread {
+
+                try {
+
+                    val (
+                        httpCode,
+                        response
+                    ) = request(
+
+                        "/api/customer/apply",
+
+                        JSONObject().apply {
+
+                            put(
+                                "name",
+                                ready.name
                             )
 
-                            requestMediaProjection()
-                        } else if (snapshot.isTerminalFailure) {
+                            put(
+                                "email",
+                                ready.email
+                            )
 
-                            autoPolling = false
-                        } else if (
-                            snapshot.isDeviceNotFound
+                            put(
+                                "device_uuid",
+                                deviceUuid
+                            )
+
+                            put(
+                                "device_name",
+                                Settings.Global.getString(
+                                    contentResolver,
+                                    "device_name"
+                                )
+                                    ?: android.os.Build.MODEL
+                            )
+
+                            put(
+                                "device_model",
+                                android.os.Build.MODEL
+                            )
+
+                            put(
+                                "android_version",
+                                android.os.Build.VERSION.RELEASE
+                            )
+
+                            put(
+                                "app_version",
+                                "1.0"
+                            )
+                        }
+                    )
+
+                    val snapshot =
+                        CustomerStatus.parse(
+                            httpCode,
+                            response
+                        )
+
+                    runOnUiThread {
+
+                        if (requestId != registrationRequestSeq) {
+                            return@runOnUiThread
+                        }
+
+                        if (
+                            CustomerStatus.applicationAccepted(
+                                httpCode,
+                                response
+                            )
                         ) {
 
-                            autoPolling = false
+                            applyOutcome(
+                                state.onApplyAccepted(
+                                    snapshot
+                                )
+                            )
 
-                            lastError =
-                                "Cihaz UUID'si henüz bulunamadı. " +
-                                    "Durumu tekrar kontrol edin veya " +
-                                    "yeniden başvuru yapın."
+                        } else {
+
+                            state =
+                                state.onApplyRejected(
+                                    httpCode,
+                                    snapshot
+                                )
                         }
                     }
 
@@ -429,14 +536,15 @@ class RegistrationActivity : ComponentActivity() {
 
                     runOnUiThread {
 
-                        loading = false
+                        if (requestId != registrationRequestSeq) {
+                            return@runOnUiThread
+                        }
 
-                        lastError =
-                            exception.message
-                                ?: "Bilinmeyen bağlantı hatası."
-
-                        status =
-                            "Başvuru durumu kontrol edilemedi."
+                        state =
+                            state.onApplyError(
+                                exception.message
+                                    ?: "Başvuru gönderilemedi."
+                            )
                     }
                 }
 
@@ -444,21 +552,29 @@ class RegistrationActivity : ComponentActivity() {
         }
 
         LaunchedEffect(
-            autoPolling
+            state.autoPolling,
+            state.applicationSent
         ) {
 
-            if (autoPolling) {
+            if (
+                !state.autoPolling ||
+                !state.applicationSent
+            ) {
+                return@LaunchedEffect
+            }
 
-                while (true) {
+            while (true) {
 
-                    delay(15_000)
+                delay(15_000)
 
-                    if (!autoPolling) {
-                        break
-                    }
-
-                    checkStatus()
+                if (
+                    !state.autoPolling ||
+                    !state.applicationSent
+                ) {
+                    break
                 }
+
+                checkStatus()
             }
         }
 
@@ -467,6 +583,9 @@ class RegistrationActivity : ComponentActivity() {
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .verticalScroll(
+                        rememberScrollState()
+                    )
                     .padding(
                         horizontal = 120.dp,
                         vertical = 48.dp
@@ -493,7 +612,7 @@ class RegistrationActivity : ComponentActivity() {
 
             Text(
                 text =
-                    if (applicationSent) {
+                    if (state.applicationSent) {
                         "Başvurunuz alındı. Yönetici onayı bekleniyor."
                     } else {
                         "Kullanıma başlamak için başvuru yapın."
@@ -520,18 +639,22 @@ class RegistrationActivity : ComponentActivity() {
                 Modifier.height(16.dp)
             )
 
-            if (!applicationSent) {
+            if (state.applyButtonVisible) {
 
                 OutlinedTextField(
 
-                    value = name,
+                    value = state.name,
 
                     onValueChange = {
-                        name = it
+                        state = state.updateName(it)
                     },
 
                     modifier =
                         Modifier.fillMaxWidth(),
+
+                    enabled = state.fieldsEnabled,
+
+                    readOnly = state.fieldsReadOnly,
 
                     label = {
                         Text("Ad Soyad")
@@ -546,14 +669,18 @@ class RegistrationActivity : ComponentActivity() {
 
                 OutlinedTextField(
 
-                    value = email,
+                    value = state.email,
 
                     onValueChange = {
-                        email = it
+                        state = state.updateEmail(it)
                     },
 
                     modifier =
                         Modifier.fillMaxWidth(),
+
+                    enabled = state.fieldsEnabled,
+
+                    readOnly = state.fieldsReadOnly,
 
                     label = {
                         Text("E-posta")
@@ -574,170 +701,17 @@ class RegistrationActivity : ComponentActivity() {
 
                 Button(
 
-                    enabled =
-                        !loading &&
-                                name.trim().length >= 2 &&
-                                email.contains("@"),
+                    enabled = state.applyButtonEnabled,
 
                     onClick = {
-
-                        loading = true
-                        lastError = ""
-
-                        Thread {
-
-                            try {
-
-                                val cleanName =
-                                    name.trim()
-
-                                val cleanEmail =
-                                    email
-                                        .trim()
-                                        .lowercase()
-
-                                val (
-                                    httpCode,
-                                    response
-                                ) = request(
-
-                                    "/api/customer/apply",
-
-                                    JSONObject().apply {
-
-                                        put(
-                                            "name",
-                                            cleanName
-                                        )
-
-                                        put(
-                                            "email",
-                                            cleanEmail
-                                        )
-
-                                        put(
-                                            "device_uuid",
-                                            deviceUuid
-                                        )
-
-                                        put(
-                                            "device_name",
-                                            Settings.Global.getString(
-                                                contentResolver,
-                                                "device_name"
-                                            )
-                                                ?: android.os.Build.MODEL
-                                        )
-
-                                        put(
-                                            "device_model",
-                                            android.os.Build.MODEL
-                                        )
-
-                                        put(
-                                            "android_version",
-                                            android.os.Build.VERSION.RELEASE
-                                        )
-
-                                        put(
-                                            "app_version",
-                                            "1.0"
-                                        )
-                                    }
-                                )
-
-                                val snapshot =
-                                    CustomerStatus.parse(
-                                        httpCode,
-                                        response
-                                    )
-
-                                val message =
-                                    snapshot.message.ifBlank {
-                                        "Başvurunuz alındı. Yönetici onayı bekleniyor."
-                                    }
-
-                                runOnUiThread {
-
-                                    email =
-                                        cleanEmail
-
-                                    statusCode =
-                                        snapshot.displayStatus.ifBlank {
-                                            "pending"
-                                        }
-
-                                    status =
-                                        message
-
-                                    loading = false
-
-                                    if (
-                                        CustomerStatus.applicationAccepted(
-                                            httpCode,
-                                            response
-                                        )
-                                    ) {
-
-                                        applicationSent =
-                                            true
-
-                                        autoPolling =
-                                            true
-
-                                        if (snapshot.isActive) {
-
-                                            AppSession.saveLicense(
-                                                this@RegistrationActivity,
-                                                cleanEmail,
-                                                snapshot.licenseKey
-                                            )
-
-                                            requestMediaProjection()
-                                        }
-
-                                    } else {
-
-                                        lastError =
-                                            "Sunucu HTTP $httpCode döndürdü."
-                                    }
-                                }
-
-                            } catch (
-                                exception: Exception
-                            ) {
-
-                                runOnUiThread {
-
-                                    loading = false
-
-                                    lastError =
-                                        exception.message
-                                            ?: "Başvuru gönderilemedi."
-
-                                    status =
-                                        "Başvuru gönderilemedi. İnternet bağlantınızı kontrol edin."
-                                }
-                            }
-
-                        }.start()
+                        submitApplication()
                     }
 
                 ) {
 
-                    if (loading) {
-
-                        CircularProgressIndicator(
-                            modifier =
-                                Modifier.height(18.dp)
-                        )
-
-                    } else {
-
-                        Text(
-                            "Başvuru Yap"
-                        )
-                    }
+                    Text(
+                        "Başvuru Yap"
+                    )
                 }
 
             } else {
@@ -745,7 +719,7 @@ class RegistrationActivity : ComponentActivity() {
                 Text(
 
                     text =
-                        when (statusCode) {
+                        when (state.statusCode) {
 
                             "pending" ->
                                 "🟡 Onay bekleniyor"
@@ -778,7 +752,7 @@ class RegistrationActivity : ComponentActivity() {
 
                 Button(
 
-                    enabled = !loading,
+                    enabled = !state.loading,
 
                     onClick = {
                         checkStatus()
@@ -791,11 +765,7 @@ class RegistrationActivity : ComponentActivity() {
                     )
                 }
 
-                if (
-                    statusCode == CustomerStatus.DEVICE_NOT_FOUND ||
-                    statusCode == CustomerStatus.REJECTED ||
-                    statusCode == CustomerStatus.CANCELLED
-                ) {
+                if (state.showRetryApplyButton) {
 
                     Spacer(
                         Modifier.height(12.dp)
@@ -803,14 +773,10 @@ class RegistrationActivity : ComponentActivity() {
 
                     Button(
 
-                        enabled = !loading,
+                        enabled = !state.loading,
 
                         onClick = {
-                            autoPolling = false
-                            applicationSent = false
-                            statusCode = ""
-                            lastError = ""
-                            status = ""
+                            state = state.retryApply()
                         }
 
                     ) {
@@ -820,26 +786,29 @@ class RegistrationActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
 
-                if (loading) {
+            if (
+                state.showProgressIndicator &&
+                state.applicationSent
+            ) {
 
-                    Spacer(
-                        Modifier.height(16.dp)
-                    )
+                Spacer(
+                    Modifier.height(16.dp)
+                )
 
-                    CircularProgressIndicator()
-                }
+                CircularProgressIndicator()
             }
 
             Spacer(
                 Modifier.height(20.dp)
             )
 
-            if (status.isNotBlank()) {
+            if (state.status.isNotBlank()) {
 
                 Text(
 
-                    text = status,
+                    text = state.status,
 
                     style =
                         MaterialTheme
@@ -848,7 +817,7 @@ class RegistrationActivity : ComponentActivity() {
                 )
             }
 
-            if (lastError.isNotBlank()) {
+            if (state.lastError.isNotBlank()) {
 
                 Spacer(
                     Modifier.height(10.dp)
@@ -856,7 +825,7 @@ class RegistrationActivity : ComponentActivity() {
 
                 Text(
 
-                    text = lastError,
+                    text = state.lastError,
 
                     color =
                         MaterialTheme
