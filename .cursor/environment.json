@@ -1,0 +1,8 @@
+{
+  "name": "Karadag Car TV",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "install": "./gradlew :app:assembleDebug"
+}
