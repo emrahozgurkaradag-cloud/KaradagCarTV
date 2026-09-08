@@ -451,8 +451,11 @@ class CarVideoActivity : CarActivity() {
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
-            Log.d(TAG, "surfaceDestroyed")
+            Log.d(TAG, "CAR VIDEO SURFACE DESTROYED")
             state = state.copy(surfaceReady = false)
+            surfaceView?.let { view ->
+                CarVideoPlayerHolder.clearCarSurfaceView(view)
+            }
         }
     }
 

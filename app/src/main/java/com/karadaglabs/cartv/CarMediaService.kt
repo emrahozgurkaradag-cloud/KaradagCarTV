@@ -1400,7 +1400,7 @@ object CarVideoPlayerHolder {
                     holder: SurfaceHolder
                 ) {
 
-                    Log.d(TAG, "surfaceDestroyed")
+                    Log.d(TAG, "CAR VIDEO SURFACE DESTROYED")
 
                     if (carSurfaceView === surfaceView) {
 

@@ -34,7 +34,7 @@ object HostedNavigation {
         } catch (exception: Exception) {
             Log.e(
                 TAG,
-                "Unable to open hosted ${destination.name}",
+                "CAR HOST NAVIGATION FAILED destination=${destination.name}",
                 exception
             )
         }

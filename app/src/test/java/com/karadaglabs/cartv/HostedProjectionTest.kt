@@ -51,6 +51,7 @@ class HostedProjectionDestinationTest {
         assertTrue(nav.contains("CarVideoActivity::class.java.name"))
         assertTrue(nav.contains("CarYouTubeActivity::class.java.name"))
         assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
+        assertTrue(nav.contains("CAR HOST NAVIGATION FAILED"))
         assertTrue(nav.contains("startCarActivity"))
     }
 
@@ -143,6 +144,8 @@ class HostedProjectionSourceTest {
         val google = source("java/com/karadaglabs/cartv/CarGoogleActivity.kt")
         val holder = source("java/com/karadaglabs/cartv/CarMediaService.kt")
 
+        assertTrue(video.contains("onDestroy()"))
+        assertTrue(video.contains("CAR VIDEO SURFACE DESTROYED"))
         assertTrue(video.contains("onDestroy()"))
         assertTrue(video.contains("clearCarSurfaceView"))
         assertTrue(video.contains("removeCallback"))
