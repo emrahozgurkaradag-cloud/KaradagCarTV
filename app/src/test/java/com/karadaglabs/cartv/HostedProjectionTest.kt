@@ -1,0 +1,195 @@
+package com.karadaglabs.cartv
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+class HostedProjectionDestinationTest {
+
+    @Test
+    fun liveTvYoutubeAndGoogleAreDistinctDestinations() {
+        assertEquals("LIVE_TV", ProjectionDestination.LIVE_TV.name)
+        assertEquals("YOUTUBE", ProjectionDestination.YOUTUBE.name)
+        assertEquals("GOOGLE", ProjectionDestination.GOOGLE.name)
+        assertEquals("RADIO", ProjectionDestination.RADIO.name)
+        assertEquals("Canlı TV", ProjectionDestination.LIVE_TV.label)
+        assertEquals("YouTube", ProjectionDestination.YOUTUBE.label)
+        assertEquals("Google", ProjectionDestination.GOOGLE.label)
+        assertEquals("Canlı Radyo", ProjectionDestination.RADIO.label)
+    }
+
+    @Test
+    fun extraParsesKnownDestinationsAndDefaultsToLiveTv() {
+        assertEquals(
+            ProjectionDestination.YOUTUBE,
+            ProjectionDestination.fromExtra("YOUTUBE")
+        )
+        assertEquals(
+            ProjectionDestination.GOOGLE,
+            ProjectionDestination.fromExtra("GOOGLE")
+        )
+        assertEquals(
+            ProjectionDestination.RADIO,
+            ProjectionDestination.fromExtra("RADIO")
+        )
+        assertEquals(
+            ProjectionDestination.LIVE_TV,
+            ProjectionDestination.fromExtra(null)
+        )
+        assertEquals(
+            ProjectionDestination.LIVE_TV,
+            ProjectionDestination.fromExtra("unknown")
+        )
+    }
+
+    @Test
+    fun hostedClassNamesStayOnCarActivities() {
+        val nav = source("java/com/karadaglabs/cartv/HostedNavigation.kt")
+
+        assertTrue(nav.contains("CarVideoActivity::class.java.name"))
+        assertTrue(nav.contains("CarYouTubeActivity::class.java.name"))
+        assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
+        assertTrue(nav.contains("startCarActivity"))
+    }
+
+    private fun source(relativeFromMain: String): String {
+        var dir = File(".").canonicalFile
+
+        repeat(8) {
+            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            if (appPath.isFile) {
+                return appPath.readText()
+            }
+
+            dir = dir.parentFile ?: return appPath.readText()
+        }
+
+        throw IllegalStateException("Source file not found: $relativeFromMain")
+    }
+}
+
+class HostedProjectionSourceTest {
+
+    @Test
+    fun liveTvBindsExoPlayerToHostedSurfaceView() {
+        val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
+        val holder = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+
+        assertTrue(video.contains("CAR VIDEO ACTIVITY AÇILDI"))
+        assertTrue(video.contains("CAR VIDEO SURFACE CREATED"))
+        assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
+        assertTrue(video.contains("setCarSurfaceView"))
+        assertTrue(video.contains("SurfaceHolder.Callback"))
+        assertTrue(holder.contains("setVideoSurfaceHolder"))
+        assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
+        assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
+        assertTrue(holder.contains("onRenderedFirstFrame"))
+        assertFalse(video.contains("PlayerView"))
+        assertFalse(video.contains("IptvActivity"))
+    }
+
+    @Test
+    fun youtubeInitializesHostedWebViewWithoutPhoneActivity() {
+        val youtube = source("java/com/karadaglabs/cartv/CarYouTubeActivity.kt")
+        val phone = source("java/com/karadaglabs/cartv/YouTubeActivity.kt")
+
+        assertTrue(youtube.contains("CAR YOUTUBE ACTIVITY AÇILDI"))
+        assertTrue(youtube.contains("CAR YOUTUBE WEBVIEW READY"))
+        assertTrue(youtube.contains("CAR YOUTUBE URL LOADED"))
+        assertTrue(youtube.contains("javaScriptEnabled = true"))
+        assertTrue(youtube.contains("mediaPlaybackRequiresUserGesture = false"))
+        assertTrue(youtube.contains("view.destroy()"))
+        assertTrue(youtube.contains("canGoBack()"))
+        assertFalse(youtube.contains("YouTubeActivity::class"))
+        assertTrue(phone.contains("class YouTubeActivity"))
+    }
+
+    @Test
+    fun googleInitializesHostedWebViewWithoutPhoneIntent() {
+        val google = source("java/com/karadaglabs/cartv/CarGoogleActivity.kt")
+
+        assertTrue(google.contains("CAR GOOGLE ACTIVITY AÇILDI"))
+        assertTrue(google.contains("CAR GOOGLE WEBVIEW READY"))
+        assertTrue(google.contains("CAR GOOGLE URL LOADED"))
+        assertTrue(google.contains("WebView"))
+        assertTrue(google.contains("https://www.google.com/"))
+        assertTrue(google.contains("javaScriptEnabled = true"))
+        assertTrue(google.contains("view.destroy()"))
+        assertTrue(google.contains("canGoBack()"))
+        assertFalse(google.contains("ACTION_VIEW"))
+        assertFalse(google.contains("MainActivity"))
+    }
+
+    @Test
+    fun backNavigationReturnsFromPlaybackAndWebHistory() {
+        val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
+        val youtube = source("java/com/karadaglabs/cartv/CarYouTubeActivity.kt")
+        val google = source("java/com/karadaglabs/cartv/CarGoogleActivity.kt")
+
+        assertTrue(video.contains("showChannelList()"))
+        assertTrue(video.contains("KEYCODE_BACK"))
+        assertTrue(youtube.contains("navigateBack()"))
+        assertTrue(google.contains("navigateBack()"))
+        assertTrue(youtube.contains("ProjectionDestination.LIVE_TV"))
+        assertTrue(google.contains("ProjectionDestination.LIVE_TV"))
+    }
+
+    @Test
+    fun projectionLifecycleCleansSurfaceAndWebView() {
+        val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
+        val youtube = source("java/com/karadaglabs/cartv/CarYouTubeActivity.kt")
+        val google = source("java/com/karadaglabs/cartv/CarGoogleActivity.kt")
+        val holder = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+
+        assertTrue(video.contains("onDestroy()"))
+        assertTrue(video.contains("clearCarSurfaceView"))
+        assertTrue(video.contains("removeCallback"))
+        assertTrue(holder.contains("clearVideoSurface()"))
+        assertTrue(youtube.contains("onDestroy()"))
+        assertTrue(youtube.contains("view.destroy()"))
+        assertTrue(google.contains("onDestroy()"))
+        assertTrue(google.contains("view.destroy()"))
+        assertTrue(youtube.contains("onPause()"))
+        assertTrue(google.contains("onPause()"))
+    }
+
+    @Test
+    fun mediaSessionDoesNotPlayLiveTvYoutubeOrGoogle() {
+        val media = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+
+        assertTrue(media.contains("Canlı TV araç ekranında açılır"))
+        assertTrue(media.contains("YouTube araç ekranında açılır"))
+        assertTrue(media.contains("Google araç ekranında açılır"))
+        assertTrue(media.contains("createRadioMediaItem"))
+        assertFalse(media.contains("YouTube telefonda açılır"))
+        val addStart = media.indexOf("override fun onAddMediaItems")
+        val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
+        assertFalse(addBlock.contains("createLiveTvMediaItem"))
+    }
+
+    @Test
+    fun radioCatalogIsSharedWithHostedMenu() {
+        assertTrue(RadioStations.all.isNotEmpty())
+        assertTrue(RadioStations.all.any { it.id == "power-fm" })
+        val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
+        assertTrue(video.contains("RadioStations.all"))
+        assertTrue(video.contains("prepareAudio"))
+    }
+
+    private fun source(relativeFromMain: String): String {
+        var dir = File(".").canonicalFile
+
+        repeat(8) {
+            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            if (appPath.isFile) {
+                return appPath.readText()
+            }
+
+            dir = dir.parentFile ?: return appPath.readText()
+        }
+
+        throw IllegalStateException("Source file not found: $relativeFromMain")
+    }
+}

@@ -30,7 +30,7 @@ class ProjectionPlaybackTest {
 
         assertEquals(10, state.selectedId)
         assertEquals(10, state.lastSelectedId)
-        assertEquals(ProjectionMode.PLAYING, state.mode)
+        assertEquals(ProjectionMode.LIST, state.mode)
         assertEquals("live-tv-10", state.selected?.mediaId)
     }
 
@@ -43,7 +43,7 @@ class ProjectionPlaybackTest {
 
         assertEquals(20, state.selectedId)
         assertEquals("ATV", state.selected?.name)
-        assertEquals(ProjectionMode.PLAYING, state.mode)
+        assertEquals(ProjectionMode.LIST, state.mode)
     }
 
     @Test
@@ -88,6 +88,7 @@ class ProjectionPlaybackTest {
             channels = listOf(channel(3, "Show TV")),
             lastSelectedId = 3
         ).resolveInitial()
+            .select(3)
 
         val plan = state.bindPlan()
 
@@ -104,6 +105,7 @@ class ProjectionPlaybackTest {
             channels = listOf(channel(3, "Show TV")),
             lastSelectedId = 3
         ).resolveInitial()
+            .select(3)
             .surfaceChanged(true)
 
         val plan = state.bindPlan()
@@ -139,6 +141,7 @@ class ProjectionPlaybackTest {
             channels = listOf(channel(5)),
             lastSelectedId = 5
         ).resolveInitial()
+            .select(5)
             .surfaceChanged(true)
 
         val listed = playing.showList()
@@ -177,6 +180,7 @@ class ProjectionPlaybackTest {
             channels = listOf(channel(7, "Star")),
             lastSelectedId = 7
         ).resolveInitial()
+            .select(7)
             .surfaceChanged(true)
             .videoFocusResult(false)
 
@@ -317,10 +321,25 @@ class ProjectionSourceContractTest {
         assertTrue(youtubeCar.contains("class CarYouTubeActivity"))
         assertTrue(youtubeCar.contains("WebView"))
         assertTrue(youtubeCar.contains("www.youtube.com"))
+        assertTrue(youtubeCar.contains("CAR YOUTUBE ACTIVITY AÇILDI"))
+        assertTrue(youtubeCar.contains("CAR YOUTUBE WEBVIEW READY"))
+        assertTrue(youtubeCar.contains("CAR YOUTUBE URL LOADED"))
         assertTrue(youtubeCar.contains("view.destroy()"))
-        assertTrue(video.contains("CarYouTubeActivity"))
+        assertFalse(youtubeCar.contains("YouTubeActivity::class"))
+        assertTrue(video.contains("HostedNavigation"))
         assertTrue(service.contains("CarVideoActivity::class.java"))
         assertFalse(service.contains("CarYouTubeActivity"))
+        val google = source(
+            "java/com/karadaglabs/cartv/CarGoogleActivity.kt"
+        )
+        assertTrue(google.contains("class CarGoogleActivity"))
+        assertTrue(google.contains("WebView"))
+        assertTrue(google.contains("www.google.com"))
+        assertTrue(google.contains("CAR GOOGLE ACTIVITY AÇILDI"))
+        assertTrue(google.contains("CAR GOOGLE WEBVIEW READY"))
+        assertTrue(google.contains("CAR GOOGLE URL LOADED"))
+        assertTrue(google.contains("view.destroy()"))
+        assertFalse(google.contains("ACTION_VIEW"))
         assertTrue(
             manifest.contains(
                 "com.google.android.gms.car.category.CATEGORY_PROJECTION"
@@ -333,6 +352,7 @@ class ProjectionSourceContractTest {
         )
         assertTrue(manifest.contains("""android:name=".CarVideoService""""))
         assertFalse(manifest.contains("CarYouTubeActivity"))
+        assertFalse(manifest.contains("CarGoogleActivity"))
     }
 
     @Test

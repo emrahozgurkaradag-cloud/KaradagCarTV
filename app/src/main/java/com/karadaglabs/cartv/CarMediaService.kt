@@ -42,86 +42,8 @@ class CarMediaService : MediaLibraryService() {
      * ============================================================
      */
 
-    private val radios = listOf(
-
-        RadioStation(
-            "power-fm",
-            "Power FM",
-            "https://listen.powerapp.com.tr/powerfm/mpeg/icecast.audio"
-        ),
-
-        RadioStation(
-            "radyo-fenomen",
-            "Radyo Fenomen",
-            "https://fenomen.listen2myradio.com/"
-        ),
-
-        RadioStation(
-            "best-fm",
-            "Best FM",
-            "https://bestfm.turkhosted.com/stream"
-        ),
-
-        RadioStation(
-            "kral-pop",
-            "Kral Pop",
-            "https://kralpopwmp.radyotvonline.com/"
-        ),
-
-        RadioStation(
-            "radyo-turkuvaz",
-            "Radyo Turkuvaz",
-            "https://turkuvaz.radyotvonline.com/"
-        ),
-
-        RadioStation(
-            "show-radyo",
-            "Show Radyo",
-            "https://radyo.showradyo.com.tr/"
-        ),
-
-        RadioStation(
-            "kral-fm",
-            "Kral FM",
-            "https://kralfmp3.radyotvonline.com/"
-        ),
-
-        RadioStation(
-            "trt-radyo-1",
-            "TRT Radyo 1",
-            "https://rd-trtradyo1.medya.trt.com.tr/master.m3u8"
-        ),
-
-        RadioStation(
-            "trt-fm",
-            "TRT-FM",
-            "https://rd-trtfm.medya.trt.com.tr/master.m3u8"
-        ),
-
-        RadioStation(
-            "radyo-3",
-            "Radyo 3",
-            "https://rd-trtradyo3.medya.trt.com.tr/master.m3u8"
-        ),
-
-        RadioStation(
-            "trt-turku",
-            "TRT Türkü",
-            "https://rd-trtturku.medya.trt.com.tr/master.m3u8"
-        ),
-
-        RadioStation(
-            "park-fm",
-            "Park FM",
-            "http://yayin.netradyom.com:8050/PARKFM/"
-        ),
-
-        RadioStation(
-            "radyo-seymen",
-            "Radyo Seymen",
-            "https://yayin.radyoseymen.com.tr:1070/stream"
-        )
-    )
+    private val radios =
+        RadioStations.all
 
     /*
      * ============================================================
@@ -447,31 +369,22 @@ class CarMediaService : MediaLibraryService() {
 
             if (parentId == LIVE_TV_ID) {
 
-                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
-
-                    val channels =
-                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
-
-                    Log.d(
-                        TAG,
-                        "LIVE TV IPTV count = ${channels.size}"
-                    )
-
-                    val items =
-                        channels.map { channel ->
-
-                            createLiveTvMediaItem(
-                                channel
-                            )
-                        }
+                return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
-                        ImmutableList.copyOf(
-                            items
+                        ImmutableList.of(
+                            createInfoItem(
+                                id = LIVE_TV_HOSTED_ID,
+                                title = "Canlı TV araç ekranında açılır",
+                                subtitle =
+                                    "Kanal listesi ve IPTV videosu " +
+                                        "projection penceresinde. " +
+                                        "MediaSession Now Playing kullanılmaz."
+                            )
                         ),
                         params
                     )
-                }
+                )
             }
 
             /*
@@ -488,11 +401,10 @@ class CarMediaService : MediaLibraryService() {
                         ImmutableList.of(
                             createInfoItem(
                                 id = YOUTUBE_PHONE_ID,
-                                title = "YouTube telefonda açılır",
+                                title = "YouTube araç ekranında açılır",
                                 subtitle =
-                                    "Android Auto sürüşte video göstermez. " +
-                                        "Park halinde araç ekranı video " +
-                                        "destekliyorsa Canlı TV kullanın."
+                                    "YouTube hosted WebView projection " +
+                                        "penceresinde gösterilir."
                             )
                         ),
                         params
@@ -514,10 +426,10 @@ class CarMediaService : MediaLibraryService() {
                         ImmutableList.of(
                             createInfoItem(
                                 id = GOOGLE_PHONE_ID,
-                                title = "Google telefonda açılır",
+                                title = "Google araç ekranında açılır",
                                 subtitle =
-                                    "Arama telefon uygulamasından kullanılır. " +
-                                        "Sürüşte web sayfası gösterilmez."
+                                    "Arama hosted WebView projection " +
+                                        "penceresinde gösterilir."
                             )
                         ),
                         params
@@ -677,8 +589,8 @@ class CarMediaService : MediaLibraryService() {
 
                         createInfoItem(
                             YOUTUBE_PHONE_ID,
-                            "YouTube telefonda açılır",
-                            "Android Auto sürüşte video göstermez."
+                            "YouTube araç ekranında açılır",
+                            "YouTube hosted WebView projection penceresinde."
                         ),
 
                         null
@@ -694,8 +606,25 @@ class CarMediaService : MediaLibraryService() {
 
                         createInfoItem(
                             GOOGLE_PHONE_ID,
-                            "Google telefonda açılır",
-                            "Sürüşte web sayfası gösterilmez."
+                            "Google araç ekranında açılır",
+                            "Arama hosted WebView projection penceresinde."
+                        ),
+
+                        null
+                    )
+                )
+            }
+
+            if (mediaId == LIVE_TV_HOSTED_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItem(
+
+                        createInfoItem(
+                            LIVE_TV_HOSTED_ID,
+                            "Canlı TV araç ekranında açılır",
+                            "IPTV videosu projection penceresinde."
                         ),
 
                         null
@@ -730,25 +659,19 @@ class CarMediaService : MediaLibraryService() {
             }
 
             /*
-             * IPTV
+             * IPTV kanalları MediaSession'da oynatılmaz.
              */
 
-            val channel =
-                IptvRepository.loadCached(this@CarMediaService)
-                    .firstOrNull {
-
-                        it.mediaId ==
-                                mediaId
-                    }
-
-            if (channel != null) {
+            if (mediaId.startsWith("live-tv-")) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
-                        createLiveTvMediaItem(
-                            channel
+                        createInfoItem(
+                            LIVE_TV_HOSTED_ID,
+                            "Canlı TV araç ekranında açılır",
+                            "MediaSession Now Playing kullanılmaz."
                         ),
 
                         null
@@ -808,23 +731,6 @@ class CarMediaService : MediaLibraryService() {
                             it
                         )
                     }
-
-                    /*
-                     * IPTV
-                     */
-
-                        ?: IptvRepository.loadCached(this@CarMediaService)
-                            .firstOrNull {
-
-                                it.mediaId ==
-                                        requested.mediaId
-
-                            }?.let {
-
-                                createLiveTvMediaItem(
-                                    it
-                                )
-                            }
                 }
 
             Log.d(
@@ -1053,18 +959,6 @@ class CarMediaService : MediaLibraryService() {
 
     /*
      * ============================================================
-     * DATA
-     * ============================================================
-     */
-
-    private data class RadioStation(
-        val id: String,
-        val name: String,
-        val url: String
-    )
-
-    /*
-     * ============================================================
      * CONSTANTS
      * ============================================================
      */
@@ -1079,6 +973,9 @@ class CarMediaService : MediaLibraryService() {
 
         private const val LIVE_TV_ID =
             "karadag-live-tv"
+
+        private const val LIVE_TV_HOSTED_ID =
+            "karadag-live-tv-hosted"
 
         private const val RADIO_ID =
             "karadag-live-radio"
@@ -1130,6 +1027,9 @@ object CarVideoPlayerHolder {
     @Volatile
     private var pendingChannel: IptvChannel? = null
 
+    @Volatile
+    private var requireSurface: Boolean = true
+
     private var carSurfaceCallback: SurfaceHolder.Callback? = null
 
     private val playerListener =
@@ -1143,7 +1043,7 @@ object CarVideoPlayerHolder {
 
                 Log.d(
                     TAG,
-                    "PROJECTION FIRST_FRAME " +
+                    "CAR VIDEO FIRST FRAME " +
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "surface=${surfaceView?.holder?.surface}"
                 )
@@ -1209,7 +1109,27 @@ object CarVideoPlayerHolder {
 
     fun prepareChannel(channel: IptvChannel) {
         runOnMainThread {
+            requireSurface = true
             prepareChannelLocked(channel)
+        }
+    }
+
+    fun prepareAudio(
+        mediaId: String,
+        title: String,
+        streamUrl: String
+    ) {
+        runOnMainThread {
+            requireSurface = false
+            prepareChannelLocked(
+                IptvChannel(
+                    id = mediaId.hashCode(),
+                    name = title,
+                    streamUrl = streamUrl,
+                    logoUrl = null,
+                    category = "Radyo"
+                )
+            )
         }
     }
 
@@ -1375,7 +1295,7 @@ object CarVideoPlayerHolder {
         val surfaceValid =
             carSurfaceView?.holder?.surface?.isValid == true
 
-        if (!surfaceValid) {
+        if (requireSurface && !surfaceValid) {
             Log.d(
                 TAG,
                 "play deferred: surface not valid"
@@ -1421,7 +1341,7 @@ object CarVideoPlayerHolder {
 
             Log.d(
                 TAG,
-                "ExoPlayer.setVideoSurfaceHolder " +
+                "CAR VIDEO SURFACE BOUND " +
                     "${surfaceView.width}x${surfaceView.height} " +
                     "surface=$surface"
             )
@@ -1446,7 +1366,7 @@ object CarVideoPlayerHolder {
 
                     Log.d(
                         TAG,
-                        "surfaceCreated surface=${holder.surface}"
+                        "CAR VIDEO SURFACE CREATED surface=${holder.surface}"
                     )
 
                     val exoPlayer =
@@ -1470,7 +1390,7 @@ object CarVideoPlayerHolder {
 
                     Log.d(
                         TAG,
-                        "surfaceChanged ${width}x${height}"
+                        "CAR VIDEO SURFACE CHANGED width=$width height=$height"
                     )
 
                     player?.setVideoSurfaceHolder(holder)

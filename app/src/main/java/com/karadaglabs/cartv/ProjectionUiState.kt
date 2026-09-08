@@ -89,7 +89,7 @@ data class ProjectionUiState(
         return copy(
             selectedId = channel.id,
             lastSelectedId = channel.id,
-            mode = ProjectionMode.PLAYING
+            mode = ProjectionMode.LIST
         )
     }
 
