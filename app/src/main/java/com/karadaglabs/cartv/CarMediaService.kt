@@ -1,6 +1,5 @@
 ﻿package com.karadaglabs.cartv
 
-import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -24,10 +23,6 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.ListeningExecutorService
 import com.google.common.util.concurrent.MoreExecutors
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.Executors
 
 @UnstableApi
@@ -40,21 +35,6 @@ class CarMediaService : MediaLibraryService() {
         MoreExecutors.listeningDecorator(
             Executors.newSingleThreadExecutor()
         )
-
-    /*
-     * ============================================================
-     * API
-     * ============================================================
-     */
-
-    private val apiBaseUrl =
-        AppSession.API_BASE_URL
-
-    private val deviceUuid: String
-        get() = AppSession.deviceUuid(this)
-
-    private val licenseKey: String
-        get() = AppSession.licenseKey(this)
 
     /*
      * ============================================================
@@ -207,7 +187,7 @@ class CarMediaService : MediaLibraryService() {
         )
 
         val cached =
-            loadCachedLiveTv()
+            IptvRepository.loadCached(this)
 
         Log.d(
             TAG,
@@ -380,7 +360,7 @@ class CarMediaService : MediaLibraryService() {
                 return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
 
                     val channels =
-                        loadLiveTvFromApiWithCacheFallback()
+                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
 
                     Log.d(
                         TAG,
@@ -470,7 +450,7 @@ class CarMediaService : MediaLibraryService() {
                 return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
 
                     val channels =
-                        loadLiveTvFromApiWithCacheFallback()
+                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
 
                     Log.d(
                         TAG,
@@ -609,7 +589,7 @@ class CarMediaService : MediaLibraryService() {
             if (mediaId == LIVE_TV_ID) {
 
                 val channels =
-                    loadCachedLiveTv()
+                    IptvRepository.loadCached(this@CarMediaService)
 
                 return Futures.immediateFuture(
 
@@ -754,7 +734,7 @@ class CarMediaService : MediaLibraryService() {
              */
 
             val channel =
-                loadCachedLiveTv()
+                IptvRepository.loadCached(this@CarMediaService)
                     .firstOrNull {
 
                         it.mediaId ==
@@ -833,7 +813,7 @@ class CarMediaService : MediaLibraryService() {
                      * IPTV
                      */
 
-                        ?: loadCachedLiveTv()
+                        ?: IptvRepository.loadCached(this@CarMediaService)
                             .firstOrNull {
 
                                 it.mediaId ==
@@ -856,600 +836,6 @@ class CarMediaService : MediaLibraryService() {
                 resolved
             )
         }
-    }
-
-    /*
-     * ============================================================
-     * IPTV API + CACHE
-     * ============================================================
-     */
-
-    private fun loadLiveTvFromApiWithCacheFallback():
-            List<LiveTvStation> {
-
-        Log.d(
-            TAG,
-            "Android Auto IPTV yükleme başladı " +
-                "deviceUuid=$deviceUuid " +
-                "licenseKeyBlank=${licenseKey.isBlank()}"
-        )
-
-        val maxAttempts = 4
-
-        for (attempt in 1..maxAttempts) {
-
-            try {
-
-                val channels =
-                    loadLiveTvFromApi()
-
-                if (channels.isNotEmpty()) {
-
-                    saveLiveTvCache(
-                        channels
-                    )
-
-                    Log.d(
-                        TAG,
-                        "IPTV API başarılı: ${channels.size} kanal " +
-                            "(attempt $attempt)"
-                    )
-
-                    return channels
-                }
-
-                Log.w(
-                    TAG,
-                    "IPTV API boş liste döndürdü " +
-                        "(attempt $attempt/$maxAttempts)"
-                )
-
-            } catch (
-                exception: Exception
-            ) {
-
-                Log.e(
-                    TAG,
-                    "IPTV API başarısız (attempt $attempt)",
-                    exception
-                )
-            }
-
-            if (attempt < maxAttempts) {
-
-                try {
-
-                    Thread.sleep(
-                        attempt * 2_500L
-                    )
-
-                } catch (
-                    interrupted: InterruptedException
-                ) {
-
-                    Thread.currentThread()
-                        .interrupt()
-
-                    break
-                }
-            }
-        }
-
-        val cached =
-            loadCachedLiveTv()
-
-        Log.d(
-            TAG,
-            "Cache fallback: ${cached.size} kanal"
-        )
-
-        return cached
-    }
-
-    /*
-     * ============================================================
-     * IPTV API
-     * ============================================================
-     */
-
-    private fun loadLiveTvFromApi():
-            List<LiveTvStation> {
-
-        if (licenseKey.isBlank()) {
-
-            throw IllegalStateException(
-                "Cihaz aktive edilmemiş: license_key boş"
-            )
-        }
-
-        val connection =
-            URL(
-                "$apiBaseUrl/api/iptv"
-            )
-                .openConnection()
-                    as HttpURLConnection
-
-        try {
-
-            connection.requestMethod =
-                "POST"
-
-            connection.connectTimeout =
-                10_000
-
-            connection.readTimeout =
-                15_000
-
-            connection.doOutput =
-                true
-
-            connection.setRequestProperty(
-                "Content-Type",
-                "application/json"
-            )
-
-            connection.setRequestProperty(
-                "Accept",
-                "application/json"
-            )
-
-            val body =
-                JSONObject().apply {
-
-                    put(
-                        "device_uuid",
-                        deviceUuid
-                    )
-
-                    put(
-                        "license_key",
-                        licenseKey
-                    )
-                }
-
-            connection.outputStream.use { output ->
-
-                output.write(
-                    body.toString()
-                        .toByteArray(
-                            Charsets.UTF_8
-                        )
-                )
-            }
-
-            val responseCode =
-                connection.responseCode
-
-            Log.d(
-                TAG,
-                "IPTV API responseCode=$responseCode"
-            )
-
-            val responseText =
-                if (
-                    responseCode in 200..299
-                ) {
-
-                    connection.inputStream
-                        .bufferedReader()
-                        .use {
-                            it.readText()
-                        }
-
-                } else {
-
-                    connection.errorStream
-                        ?.bufferedReader()
-                        ?.use {
-                            it.readText()
-                        }
-                        ?: ""
-                }
-
-            if (
-                responseCode !in 200..299
-            ) {
-
-                throw IllegalStateException(
-                    "IPTV API HTTP $responseCode: $responseText"
-                )
-            }
-
-            val response =
-                JSONObject(
-                    responseText
-                )
-
-            val licensed =
-                response.optBoolean(
-                    "licensed",
-                    false
-                )
-
-            if (!licensed) {
-
-                throw IllegalStateException(
-                    response.optString(
-                        "message",
-                        "IPTV lisansı geçersiz."
-                    )
-                )
-            }
-
-            val channelArray =
-                response.optJSONArray(
-                    "channels"
-                )
-                    ?: throw IllegalStateException(
-                        "API channels alanı yok."
-                    )
-
-            val result =
-                mutableListOf<LiveTvStation>()
-
-            for (
-            index in
-            0 until channelArray.length()
-            ) {
-
-                val item =
-                    channelArray.optJSONObject(
-                        index
-                    )
-                        ?: continue
-
-                val id =
-                    item.optInt(
-                        "id",
-                        -1
-                    )
-
-                val name =
-                    item.optString(
-                        "name",
-                        ""
-                    ).trim()
-
-                val streamUrl =
-                    firstNonBlank(
-
-                        item.optString(
-                            "streamUrl",
-                            ""
-                        ),
-
-                        item.optString(
-                            "stream_url",
-                            ""
-                        )
-                    )
-
-                val logoUrl =
-                    firstNonBlank(
-
-                        item.optString(
-                            "logoUrl",
-                            ""
-                        ),
-
-                        item.optString(
-                            "logo_url",
-                            ""
-                        )
-                    )
-
-                val category =
-                    item.optString(
-                        "category",
-                        ""
-                    ).trim()
-
-                if (
-                    id < 0 ||
-                    name.isBlank() ||
-                    streamUrl.isBlank()
-                ) {
-
-                    Log.w(
-                        TAG,
-                        "Geçersiz API kanalı index=$index"
-                    )
-
-                    continue
-                }
-
-                result.add(
-
-                    LiveTvStation(
-
-                        id =
-                            id,
-
-                        name =
-                            name,
-
-                        streamUrl =
-                            streamUrl,
-
-                        logoUrl =
-                            logoUrl
-                                .takeIf {
-                                    it.isNotBlank()
-                                },
-
-                        category =
-                            category
-                                .takeIf {
-                                    it.isNotBlank()
-                                }
-                    )
-                )
-            }
-
-            return result
-
-        } finally {
-
-            connection.disconnect()
-        }
-    }
-
-    /*
-     * ============================================================
-     * IPTV CACHE YAZ
-     * ============================================================
-     */
-
-    private fun saveLiveTvCache(
-        channels: List<LiveTvStation>
-    ) {
-
-        try {
-
-            val array =
-                JSONArray()
-
-            channels.forEach { channel ->
-
-                array.put(
-
-                    JSONObject().apply {
-
-                        put(
-                            "id",
-                            channel.id
-                        )
-
-                        put(
-                            "name",
-                            channel.name
-                        )
-
-                        put(
-                            "stream_url",
-                            channel.streamUrl
-                        )
-
-                        put(
-                            "logo_url",
-                            channel.logoUrl ?: ""
-                        )
-
-                        put(
-                            "category",
-                            channel.category ?: ""
-                        )
-                    }
-                )
-            }
-
-            getSharedPreferences(
-                PREFS_NAME,
-                Context.MODE_PRIVATE
-            )
-                .edit()
-                .putString(
-                    LIVE_TV_CHANNELS_KEY,
-                    array.toString()
-                )
-                .apply()
-
-            Log.d(
-                TAG,
-                "Android Auto IPTV cache kaydedildi: ${channels.size}"
-            )
-
-        } catch (
-            exception: Exception
-        ) {
-
-            Log.e(
-                TAG,
-                "IPTV cache yazılamadı",
-                exception
-            )
-        }
-    }
-
-    /*
-     * ============================================================
-     * IPTV CACHE OKUMA
-     * ============================================================
-     */
-
-    private fun loadCachedLiveTv():
-            List<LiveTvStation> {
-
-        return try {
-
-            val preferences =
-                getSharedPreferences(
-                    PREFS_NAME,
-                    Context.MODE_PRIVATE
-                )
-
-            val json =
-                preferences.getString(
-                    LIVE_TV_CHANNELS_KEY,
-                    null
-                )
-
-            if (json.isNullOrBlank()) {
-
-                Log.w(
-                    TAG,
-                    "Android Auto IPTV cache boş"
-                )
-
-                return emptyList()
-            }
-
-            Log.d(
-                TAG,
-                "Android Auto IPTV cache JSON length=${json.length}"
-            )
-
-            val array =
-                JSONArray(
-                    json
-                )
-
-            val result =
-                mutableListOf<LiveTvStation>()
-
-            for (
-            index in
-            0 until array.length()
-            ) {
-
-                val item =
-                    array.optJSONObject(
-                        index
-                    )
-                        ?: continue
-
-                val id =
-                    item.optInt(
-                        "id",
-                        -1
-                    )
-
-                val name =
-                    item.optString(
-                        "name",
-                        ""
-                    ).trim()
-
-                val streamUrl =
-                    firstNonBlank(
-
-                        item.optString(
-                            "streamUrl",
-                            ""
-                        ),
-
-                        item.optString(
-                            "stream_url",
-                            ""
-                        )
-                    )
-
-                val logoUrl =
-                    firstNonBlank(
-
-                        item.optString(
-                            "logoUrl",
-                            ""
-                        ),
-
-                        item.optString(
-                            "logo_url",
-                            ""
-                        )
-                    )
-
-                val category =
-                    item.optString(
-                        "category",
-                        ""
-                    ).trim()
-
-                if (
-                    id < 0 ||
-                    name.isBlank() ||
-                    streamUrl.isBlank()
-                ) {
-
-                    Log.w(
-                        TAG,
-                        "Geçersiz cache kanalı index=$index"
-                    )
-
-                    continue
-                }
-
-                result.add(
-
-                    LiveTvStation(
-
-                        id =
-                            id,
-
-                        name =
-                            name,
-
-                        streamUrl =
-                            streamUrl,
-
-                        logoUrl =
-                            logoUrl
-                                .takeIf {
-                                    it.isNotBlank()
-                                },
-
-                        category =
-                            category
-                                .takeIf {
-                                    it.isNotBlank()
-                                }
-                    )
-                )
-            }
-
-            Log.d(
-                TAG,
-                "Android Auto cache loaded: ${result.size} channels"
-            )
-
-            result
-
-        } catch (
-            exception: Exception
-        ) {
-
-            Log.e(
-                TAG,
-                "Unable to load IPTV cache",
-                exception
-            )
-
-            emptyList()
-        }
-    }
-
-    /*
-     * ============================================================
-     * JSON YARDIMCI
-     * ============================================================
-     */
-
-    private fun firstNonBlank(
-        vararg values: String
-    ): String {
-
-        return values.firstOrNull {
-            it.isNotBlank()
-        } ?: ""
     }
 
     /*
@@ -1599,7 +985,7 @@ class CarMediaService : MediaLibraryService() {
      */
 
     private fun createLiveTvMediaItem(
-        channel: LiveTvStation
+        channel: IptvChannel
     ): MediaItem {
 
         Log.d(
@@ -1677,19 +1063,6 @@ class CarMediaService : MediaLibraryService() {
         val url: String
     )
 
-    private data class LiveTvStation(
-        val id: Int,
-        val name: String,
-        val streamUrl: String,
-        val logoUrl: String?,
-        val category: String?
-    ) {
-
-        val mediaId: String
-            get() =
-                "live-tv-$id"
-    }
-
     /*
      * ============================================================
      * CONSTANTS
@@ -1700,12 +1073,6 @@ class CarMediaService : MediaLibraryService() {
 
         private const val TAG =
             "KaradagCarMedia"
-
-        private const val PREFS_NAME =
-            "karadag_car_tv_cache"
-
-        private const val LIVE_TV_CHANNELS_KEY =
-            "iptv_channels"
 
         private const val ROOT_ID =
             "karadag-car-tv-root"
@@ -1759,6 +1126,9 @@ object CarVideoPlayerHolder {
 
     @Volatile
     private var carSurfaceView: SurfaceView? = null
+
+    @Volatile
+    private var pendingChannel: IptvChannel? = null
 
     private var carSurfaceCallback: SurfaceHolder.Callback? = null
 
@@ -1829,7 +1199,63 @@ object CarVideoPlayerHolder {
 
             this.player = player
 
+            pendingChannel?.let { channel ->
+                prepareChannelLocked(channel)
+            }
+
             bindLocked()
+        }
+    }
+
+    fun prepareChannel(channel: IptvChannel) {
+        runOnMainThread {
+            prepareChannelLocked(channel)
+        }
+    }
+
+    fun setPlayWhenReady(play: Boolean) {
+        runOnMainThread {
+            setPlayWhenReadyLocked(play)
+        }
+    }
+
+    fun applyBindPlan(
+        plan: ProjectionBindPlan,
+        surfaceView: SurfaceView?
+    ) {
+        runOnMainThread {
+            if (
+                plan.shouldSetMediaItem &&
+                plan.mediaId != null &&
+                plan.streamUrl != null
+            ) {
+                val channel = IptvChannel(
+                    id = pendingChannel?.id
+                        ?: plan.mediaId.removePrefix("live-tv-")
+                            .toIntOrNull()
+                        ?: -1,
+                    name = plan.title ?: pendingChannel?.name.orEmpty(),
+                    streamUrl = plan.streamUrl,
+                    logoUrl = pendingChannel?.logoUrl,
+                    category = pendingChannel?.category
+                )
+
+                if (channel.id >= 0 && channel.streamUrl.isNotBlank()) {
+                    prepareChannelLocked(channel)
+                }
+            }
+
+            if (plan.shouldBindSurface && surfaceView != null) {
+                if (carSurfaceView !== surfaceView) {
+                    unhookCarSurfaceCallback()
+                    carSurfaceView = surfaceView
+                    hookCarSurfaceCallback(surfaceView)
+                }
+
+                bindLocked()
+            }
+
+            setPlayWhenReadyLocked(plan.shouldPlay)
         }
     }
 
@@ -1891,6 +1317,73 @@ object CarVideoPlayerHolder {
             carSurfaceView = null
             player = null
         }
+    }
+
+    private fun prepareChannelLocked(channel: IptvChannel) {
+        pendingChannel = channel
+
+        val exoPlayer = player
+
+        if (exoPlayer == null) {
+            Log.d(
+                TAG,
+                "prepareChannel waiting for player ${channel.mediaId}"
+            )
+            return
+        }
+
+        if (exoPlayer.currentMediaItem?.mediaId != channel.mediaId) {
+            exoPlayer.setMediaItem(
+                MediaItem.Builder()
+                    .setMediaId(channel.mediaId)
+                    .setUri(Uri.parse(channel.streamUrl))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(channel.name)
+                            .setArtist(channel.category ?: "Canlı TV")
+                            .setIsBrowsable(false)
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
+            )
+            exoPlayer.prepare()
+
+            Log.d(
+                TAG,
+                "Prepared projection channel ${channel.mediaId}"
+            )
+        }
+    }
+
+    private fun setPlayWhenReadyLocked(play: Boolean) {
+        val exoPlayer = player ?: return
+
+        if (!play) {
+            exoPlayer.playWhenReady = false
+            return
+        }
+
+        if (exoPlayer.currentMediaItem == null) {
+            Log.d(
+                TAG,
+                "play skipped: no currentMediaItem"
+            )
+            return
+        }
+
+        val surfaceValid =
+            carSurfaceView?.holder?.surface?.isValid == true
+
+        if (!surfaceValid) {
+            Log.d(
+                TAG,
+                "play deferred: surface not valid"
+            )
+            return
+        }
+
+        exoPlayer.playWhenReady = true
     }
 
     private fun bindLocked() {
