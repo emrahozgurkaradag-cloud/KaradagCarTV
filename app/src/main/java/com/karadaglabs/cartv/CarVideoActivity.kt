@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -18,7 +17,6 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.GridView
 import android.widget.ImageView
@@ -46,10 +44,14 @@ class CarVideoActivity : CarActivity() {
 
     private var surfaceView: SurfaceView? = null
     private var listContainer: View? = null
+    private var menuContainer: View? = null
+    private var rootColumn: LinearLayout? = null
     private var statusView: TextView? = null
     private var gridView: GridView? = null
     private var adapter: ChannelAdapter? = null
 
+    private var destination = ProjectionDestination.LIVE_TV
+    private var selectedRadioId: String? = null
     private var state = ProjectionUiState()
     private var destroyed = false
 
@@ -58,10 +60,15 @@ class CarVideoActivity : CarActivity() {
 
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
 
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        hideCarChrome()
+        destination = ProjectionDestination.fromExtra(
+            intent?.getStringExtra(ProjectionDestination.EXTRA)
+        )
 
-        val root = FrameLayout(this).apply {
+        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
+        HostedNavigation.hideChrome(this)
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -70,9 +77,25 @@ class CarVideoActivity : CarActivity() {
             keepScreenOn = true
         }
 
+        val menu = HostedNavigation.menuBar(this, destination) { next ->
+            onMenuSelected(next)
+        }
+        menuContainer = menu
+        root.addView(menu)
+        rootColumn = root
+
+        val content = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+            setBackgroundColor(Color.BLACK)
+        }
+
         val list = buildListUi()
         listContainer = list
-        root.addView(list)
+        content.addView(list)
 
         val view = SurfaceView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -85,9 +108,10 @@ class CarVideoActivity : CarActivity() {
 
         configureSurfaceZOrder(view)
         view.holder.addCallback(surfaceCallback)
-        root.addView(view)
+        content.addView(view)
         surfaceView = view
 
+        root.addView(content)
         setContentView(root)
 
         applyVideoFocus(request = true)
@@ -99,6 +123,7 @@ class CarVideoActivity : CarActivity() {
         }
 
         loadChannels()
+        applyState()
     }
 
     override fun onStart() {
@@ -131,7 +156,10 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onBackPressed() {
-        if (state.mode == ProjectionMode.PLAYING) {
+        if (
+            destination == ProjectionDestination.LIVE_TV &&
+            state.mode == ProjectionMode.PLAYING
+        ) {
             showChannelList()
             return
         }
@@ -142,6 +170,7 @@ class CarVideoActivity : CarActivity() {
     override fun onKeyUp(keyCode: Int, keyEvent: KeyEvent): Boolean {
         if (
             keyCode == KeyEvent.KEYCODE_BACK &&
+            destination == ProjectionDestination.LIVE_TV &&
             state.mode == ProjectionMode.PLAYING
         ) {
             showChannelList()
@@ -149,6 +178,42 @@ class CarVideoActivity : CarActivity() {
         }
 
         return super.onKeyUp(keyCode, keyEvent)
+    }
+
+    private fun onMenuSelected(next: ProjectionDestination) {
+        if (next == destination) {
+            if (next == ProjectionDestination.LIVE_TV) {
+                showChannelList()
+            }
+            return
+        }
+
+        if (
+            next == ProjectionDestination.YOUTUBE ||
+            next == ProjectionDestination.GOOGLE
+        ) {
+            HostedNavigation.open(this, next)
+            return
+        }
+
+        destination = next
+        if (next == ProjectionDestination.RADIO) {
+            state = state.showList()
+        }
+        refreshMenu()
+        applyState()
+    }
+
+    private fun refreshMenu() {
+        val root = rootColumn ?: return
+        val previous = menuContainer ?: return
+        val index = root.indexOfChild(previous)
+        val menu = HostedNavigation.menuBar(this, destination) { next ->
+            onMenuSelected(next)
+        }
+        root.removeView(previous)
+        root.addView(menu, index)
+        menuContainer = menu
     }
 
     private fun loadChannels() {
@@ -213,6 +278,11 @@ class CarVideoActivity : CarActivity() {
             return
         }
 
+        if (destination == ProjectionDestination.RADIO) {
+            applyRadioState()
+            return
+        }
+
         statusView?.text = state.statusText
         adapter?.update(state.channels, state.selectedId)
 
@@ -241,8 +311,42 @@ class CarVideoActivity : CarActivity() {
         CarVideoPlayerHolder.setPlayWhenReady(plan.shouldPlay)
     }
 
+    private fun applyRadioState() {
+        surfaceView?.let { view ->
+            view.visibility = View.GONE
+            CarVideoPlayerHolder.clearCarSurfaceView(view)
+        }
+        listContainer?.visibility = View.VISIBLE
+
+        val radios = RadioStations.all
+        statusView?.text = if (selectedRadioId == null) {
+            "${radios.size} radyo"
+        } else {
+            val name = radios.firstOrNull { it.id == selectedRadioId }?.name
+            "Oynatılıyor: ${name ?: selectedRadioId}"
+        }
+
+        adapter?.update(
+            radios.mapIndexed { index, radio ->
+                IptvChannel(
+                    id = index,
+                    name = radio.name,
+                    streamUrl = radio.url,
+                    logoUrl = null,
+                    category = "Radyo"
+                )
+            },
+            radios.indexOfFirst { it.id == selectedRadioId }.takeIf { it >= 0 }
+        )
+    }
+
     private fun bindIfPlaying() {
-        if (state.mode == ProjectionMode.PLAYING) {
+        if (
+            destination == ProjectionDestination.LIVE_TV &&
+            state.mode == ProjectionMode.PLAYING
+        ) {
+            applyState()
+        } else if (destination == ProjectionDestination.RADIO) {
             applyState()
         }
     }
@@ -253,26 +357,22 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun onChannelClicked(channel: IptvChannel) {
+        if (destination == ProjectionDestination.RADIO) {
+            val radio = RadioStations.all.getOrNull(channel.id) ?: return
+            selectedRadioId = radio.id
+            CarVideoPlayerHolder.prepareAudio(
+                mediaId = radio.id,
+                title = radio.name,
+                streamUrl = radio.url
+            )
+            CarVideoPlayerHolder.setPlayWhenReady(true)
+            applyState()
+            return
+        }
+
         state = state.select(channel.id)
         persistSelection()
         applyState()
-    }
-
-    private fun openHostedYoutube() {
-        try {
-            val intent = Intent()
-            intent.setClassName(
-                packageName,
-                CarYouTubeActivity::class.java.name
-            )
-            startCarActivity(intent)
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to open hosted YouTube", exception)
-            state = state.copy(
-                errorMessage = "YouTube host penceresi açılamadı"
-            )
-            statusView?.text = state.statusText
-        }
     }
 
     private fun applyVideoFocus(request: Boolean) {
@@ -290,16 +390,6 @@ class CarVideoActivity : CarActivity() {
         )
     }
 
-    private fun hideCarChrome() {
-        try {
-            val carUiController = getCarUiController()
-            carUiController.statusBarController.hideAppHeader()
-            carUiController.menuController.hideMenuButton()
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to hide car chrome", exception)
-        }
-    }
-
     private fun buildListUi(): LinearLayout {
         val density = resources.displayMetrics.density
 
@@ -312,14 +402,7 @@ class CarVideoActivity : CarActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
-        }
-
-        val title = TextView(this).apply {
-            text = "Karadag Car TV"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
-            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(16), dp(8), dp(16), dp(12))
         }
 
         statusView = TextView(this).apply {
@@ -327,22 +410,6 @@ class CarVideoActivity : CarActivity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setPadding(0, dp(4), 0, dp(8))
         }
-
-        val controls = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val backButton = button("Geri") {
-            onBackPressed()
-        }
-
-        val youtubeButton = button("YouTube") {
-            openHostedYoutube()
-        }
-
-        controls.addView(backButton)
-        controls.addView(youtubeButton)
 
         adapter = ChannelAdapter(
             density = density,
@@ -361,39 +428,17 @@ class CarVideoActivity : CarActivity() {
             )
         }
 
-        container.addView(title)
         container.addView(statusView)
-        container.addView(controls)
         container.addView(gridView)
 
         return container
     }
 
-    private fun button(
-        label: String,
-        onClick: () -> Unit
-    ): Button {
-        val density = resources.displayMetrics.density
-        val dp = { value: Int -> (value * density).toInt() }
-
-        return Button(this).apply {
-            text = label
-            setOnClickListener { onClick() }
-            val params = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            params.rightMargin = dp(12)
-            params.bottomMargin = dp(8)
-            layoutParams = params
-        }
-    }
-
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
-            Log.d(TAG, "surfaceCreated")
+            Log.d(TAG, "CAR VIDEO SURFACE CREATED")
             state = state.surfaceChanged(true)
-            CarVideoPlayerHolder.setPlayWhenReady(state.bindPlan().shouldPlay)
+            applyState()
         }
 
         override fun surfaceChanged(
@@ -402,12 +447,15 @@ class CarVideoActivity : CarActivity() {
             width: Int,
             height: Int
         ) {
-            Log.d(TAG, "surfaceChanged ${width}x${height}")
+            Log.d(TAG, "CAR VIDEO SURFACE CHANGED width=$width height=$height")
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
-            Log.d(TAG, "surfaceDestroyed")
+            Log.d(TAG, "CAR VIDEO SURFACE DESTROYED")
             state = state.copy(surfaceReady = false)
+            surfaceView?.let { view ->
+                CarVideoPlayerHolder.clearCarSurfaceView(view)
+            }
         }
     }
 

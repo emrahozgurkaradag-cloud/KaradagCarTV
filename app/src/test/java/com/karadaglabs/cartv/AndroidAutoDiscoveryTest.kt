@@ -137,9 +137,11 @@ class AndroidAutoDiscoveryTest {
         assertTrue(media.contains("📻 Canlı Radyo"))
         assertTrue(media.contains("🔎 Google Arama"))
         assertTrue(media.contains("CONTENT_STYLE_BROWSABLE_HINT"))
-        assertTrue(media.contains("YouTube telefonda açılır"))
-        assertTrue(media.contains("Google telefonda açılır"))
-        assertTrue(media.contains("Android Auto sürüşte video göstermez"))
+        assertTrue(media.contains("YouTube araç ekranında açılır"))
+        assertTrue(media.contains("Google araç ekranında açılır"))
+        assertTrue(media.contains("Canlı TV araç ekranında açılır"))
+        assertFalse(media.contains("YouTube telefonda açılır"))
+        assertFalse(media.contains("Google telefonda açılır"))
         assertFalse(
             "YouTube browse must not return an empty list",
             media.contains("if (parentId == YOUTUBE_ID)") &&
@@ -261,6 +263,12 @@ class AndroidAutoDiscoveryTest {
         val activity = sourceFile(
             "java/com/karadaglabs/cartv/CarVideoActivity.kt"
         ).readText()
+        val chrome = sourceFile(
+            "java/com/karadaglabs/cartv/HostedNavigation.kt"
+        ).readText()
+        val destinations = sourceFile(
+            "java/com/karadaglabs/cartv/ProjectionDestination.kt"
+        ).readText()
         val holder = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
@@ -268,13 +276,24 @@ class AndroidAutoDiscoveryTest {
         assertTrue(activity.contains("SurfaceView"))
         assertTrue(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
-        assertTrue(activity.contains("Karadag Car TV"))
+        assertTrue(chrome.contains("Karadag Car TV"))
+        assertTrue(destinations.contains("Canlı TV"))
+        assertTrue(destinations.contains("Canlı Radyo"))
+        assertTrue(destinations.contains("YouTube"))
+        assertTrue(destinations.contains("Google"))
+        assertTrue(chrome.contains("ProjectionDestination.entries"))
         assertTrue(activity.contains("prepareChannel"))
+        assertTrue(activity.contains("CAR VIDEO ACTIVITY AÇILDI"))
+        assertTrue(activity.contains("CAR VIDEO SURFACE CREATED"))
+        assertTrue(activity.contains("CarYouTubeActivity").not() || activity.contains("HostedNavigation"))
         assertFalse(activity.contains("PlayerView"))
         assertFalse(activity.contains("TextureView"))
+        assertFalse(activity.contains("YouTubeActivity"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("TRACK_TYPE_VIDEO"))
         assertTrue(holder.contains("prepareChannelLocked"))
+        assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
+        assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
     }
 
     @Test
