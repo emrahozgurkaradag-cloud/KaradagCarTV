@@ -1,5 +1,7 @@
 package com.karadaglabs.cartv
 
+import android.content.Context
+
 data class RadioStation(
     val id: String,
     val name: String,
@@ -7,6 +9,24 @@ data class RadioStation(
 )
 
 object RadioStations {
+
+    private const val LAST_RADIO_ID_KEY = "projection_last_radio_id"
+
+    fun lastSelectedId(context: Context): String? {
+        return AppSession.prefs(context)
+            .getString(LAST_RADIO_ID_KEY, null)
+            ?.takeIf { id -> all.any { it.id == id } }
+    }
+
+    fun saveLastSelectedId(
+        context: Context,
+        radioId: String
+    ) {
+        AppSession.prefs(context)
+            .edit()
+            .putString(LAST_RADIO_ID_KEY, radioId)
+            .apply()
+    }
 
     val all = listOf(
         RadioStation(

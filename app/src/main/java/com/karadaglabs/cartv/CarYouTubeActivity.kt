@@ -1,16 +1,10 @@
 package com.karadaglabs.cartv
 
-import android.annotation.SuppressLint
-import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import com.google.android.apps.auto.sdk.CarActivity
@@ -28,8 +22,9 @@ class CarYouTubeActivity : CarActivity() {
     }
 
     private var webView: WebView? = null
+    private var chromeClient: HostedWebChromeClient? = null
+    private var overlay: FrameLayout? = null
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -38,13 +33,21 @@ class CarYouTubeActivity : CarActivity() {
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
         HostedNavigation.hideChrome(this)
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val overlay = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            setBackgroundColor(Color.BLACK)
+        }
+        this.overlay = overlay
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            keepScreenOn = true
         }
 
         root.addView(
@@ -55,27 +58,19 @@ class CarYouTubeActivity : CarActivity() {
             }
         )
 
-        val view = WebView(this)
+        val view = CarProjectionWebView(HostedWebView.themedContext(this))
         webView = view
+        HostedWebView.configure(view, desktopUserAgent = true)
 
-        CookieManager.getInstance().setAcceptCookie(true)
-
-        view.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            mediaPlaybackRequiresUserGesture = false
-            loadWithOverviewMode = true
-            useWideViewPort = true
-            cacheMode = WebSettings.LOAD_DEFAULT
+        view.webViewClient = HostedWebViewClient {
+            Log.d(TAG, "CAR YOUTUBE URL LOADED")
         }
 
-        view.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(webView: WebView?, url: String?) {
-                Log.d(TAG, "CAR YOUTUBE URL LOADED")
-            }
+        val chrome = HostedWebChromeClient(overlay) {
+            applyVideoFocus(request = true)
         }
-        view.webChromeClient = WebChromeClient()
-        view.setBackgroundColor(Color.BLACK)
+        chromeClient = chrome
+        view.webChromeClient = chrome
         view.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0,
@@ -83,42 +78,36 @@ class CarYouTubeActivity : CarActivity() {
         )
 
         root.addView(view)
+        overlay.addView(root)
+        setContentView(overlay)
 
-        setContentView(
-            FrameLayout(this).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                addView(root)
-            }
-        )
+        applyVideoFocus(request = true)
 
         Log.d(TAG, "CAR YOUTUBE WEBVIEW READY")
         view.loadUrl(YOUTUBE_URL)
     }
 
     override fun onPause() {
+        applyVideoFocus(request = false)
         webView?.onPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        applyVideoFocus(request = true)
         webView?.onResume()
     }
 
     override fun onDestroy() {
+        applyVideoFocus(request = false)
+        chromeClient?.hideCustomViewIfPresent()
+        chromeClient = null
+        overlay = null
+
         val view = webView
         webView = null
-
-        if (view != null) {
-            view.stopLoading()
-            view.webChromeClient = null
-            view.webViewClient = WebViewClient()
-            (view.parent as? ViewGroup)?.removeView(view)
-            view.destroy()
-        }
+        HostedWebView.destroy(view)
 
         super.onDestroy()
     }
@@ -137,6 +126,10 @@ class CarYouTubeActivity : CarActivity() {
     }
 
     private fun navigateBack() {
+        if (chromeClient?.hideCustomViewIfPresent() == true) {
+            return
+        }
+
         val view = webView
 
         if (view != null && view.canGoBack()) {
@@ -145,5 +138,18 @@ class CarYouTubeActivity : CarActivity() {
         }
 
         HostedNavigation.open(this, ProjectionDestination.LIVE_TV)
+    }
+
+    private fun applyVideoFocus(request: Boolean) {
+        val result = if (request) {
+            CarVideoFocus.request(this)
+        } else {
+            CarVideoFocus.relinquish(this)
+        }
+
+        Log.d(
+            TAG,
+            "videoFocus request=$request granted=${result.granted} reason=${result.reason}"
+        )
     }
 }

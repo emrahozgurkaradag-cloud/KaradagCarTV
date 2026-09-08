@@ -63,6 +63,7 @@ class CarVideoActivity : CarActivity() {
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
         )
+        selectedRadioId = RadioStations.lastSelectedId(this)
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
         HostedNavigation.hideChrome(this)
@@ -145,6 +146,7 @@ class CarVideoActivity : CarActivity() {
     override fun onDestroy() {
         destroyed = true
         applyVideoFocus(request = false)
+        CarVideoPlayerHolder.setPlayWhenReady(false)
 
         surfaceView?.let { view ->
             view.holder.removeCallback(surfaceCallback)
@@ -199,6 +201,7 @@ class CarVideoActivity : CarActivity() {
         destination = next
         if (next == ProjectionDestination.RADIO) {
             state = state.showList()
+            CarVideoPlayerHolder.setPlayWhenReady(false)
         }
         refreshMenu()
         applyState()
@@ -319,11 +322,21 @@ class CarVideoActivity : CarActivity() {
         listContainer?.visibility = View.VISIBLE
 
         val radios = RadioStations.all
-        statusView?.text = if (selectedRadioId == null) {
+        val selected = radios.firstOrNull { it.id == selectedRadioId }
+
+        if (selected != null) {
+            CarVideoPlayerHolder.prepareAudio(
+                mediaId = selected.id,
+                title = selected.name,
+                streamUrl = selected.url
+            )
+            CarVideoPlayerHolder.setPlayWhenReady(true)
+        }
+
+        statusView?.text = if (selected == null) {
             "${radios.size} radyo"
         } else {
-            val name = radios.firstOrNull { it.id == selectedRadioId }?.name
-            "Oynatılıyor: ${name ?: selectedRadioId}"
+            "Oynatılıyor: ${selected.name}"
         }
 
         adapter?.update(
@@ -360,6 +373,7 @@ class CarVideoActivity : CarActivity() {
         if (destination == ProjectionDestination.RADIO) {
             val radio = RadioStations.all.getOrNull(channel.id) ?: return
             selectedRadioId = radio.id
+            RadioStations.saveLastSelectedId(this, radio.id)
             CarVideoPlayerHolder.prepareAudio(
                 mediaId = radio.id,
                 title = radio.name,
@@ -503,6 +517,8 @@ class CarVideoActivity : CarActivity() {
 
             text.text = channel.name
             row.isSelected = channel.id == selectedId
+            row.isClickable = true
+            row.isFocusable = true
             row.setBackgroundColor(
                 if (channel.id == selectedId) {
                     Color.rgb(24, 80, 110)
@@ -510,6 +526,19 @@ class CarVideoActivity : CarActivity() {
                     Color.rgb(28, 28, 28)
                 }
             )
+            row.setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus && channel.id != selectedId) {
+                    row.setBackgroundColor(Color.rgb(40, 60, 80))
+                } else {
+                    row.setBackgroundColor(
+                        if (channel.id == selectedId) {
+                            Color.rgb(24, 80, 110)
+                        } else {
+                            Color.rgb(28, 28, 28)
+                        }
+                    )
+                }
+            }
 
             bindLogo(logo, channel.logoUrl)
             row.setOnClickListener { onClick(channel) }

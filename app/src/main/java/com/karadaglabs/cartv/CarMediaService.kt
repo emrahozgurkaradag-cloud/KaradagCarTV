@@ -1028,6 +1028,9 @@ object CarVideoPlayerHolder {
     private var pendingChannel: IptvChannel? = null
 
     @Volatile
+    private var pendingAudio: AudioRequest? = null
+
+    @Volatile
     private var requireSurface: Boolean = true
 
     private var carSurfaceCallback: SurfaceHolder.Callback? = null
@@ -1099,6 +1102,10 @@ object CarVideoPlayerHolder {
 
             this.player = player
 
+            pendingAudio?.let {
+                prepareAudioLocked()
+            }
+
             pendingChannel?.let { channel ->
                 prepareChannelLocked(channel)
             }
@@ -1110,6 +1117,7 @@ object CarVideoPlayerHolder {
     fun prepareChannel(channel: IptvChannel) {
         runOnMainThread {
             requireSurface = true
+            pendingAudio = null
             prepareChannelLocked(channel)
         }
     }
@@ -1121,15 +1129,9 @@ object CarVideoPlayerHolder {
     ) {
         runOnMainThread {
             requireSurface = false
-            prepareChannelLocked(
-                IptvChannel(
-                    id = mediaId.hashCode(),
-                    name = title,
-                    streamUrl = streamUrl,
-                    logoUrl = null,
-                    category = "Radyo"
-                )
-            )
+            pendingChannel = null
+            pendingAudio = AudioRequest(mediaId, title, streamUrl)
+            prepareAudioLocked()
         }
     }
 
@@ -1236,6 +1238,44 @@ object CarVideoPlayerHolder {
 
             carSurfaceView = null
             player = null
+        }
+    }
+
+    private fun prepareAudioLocked() {
+        val request = pendingAudio ?: return
+        val exoPlayer = player
+
+        if (exoPlayer == null) {
+            Log.d(
+                TAG,
+                "prepareAudio waiting for player ${request.mediaId}"
+            )
+            return
+        }
+
+        exoPlayer.clearVideoSurface()
+
+        if (exoPlayer.currentMediaItem?.mediaId != request.mediaId) {
+            exoPlayer.setMediaItem(
+                MediaItem.Builder()
+                    .setMediaId(request.mediaId)
+                    .setUri(Uri.parse(request.streamUrl))
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(request.title)
+                            .setArtist("Karadag Car TV")
+                            .setIsBrowsable(false)
+                            .setIsPlayable(true)
+                            .build()
+                    )
+                    .build()
+            )
+            exoPlayer.prepare()
+
+            Log.d(
+                TAG,
+                "Prepared projection radio ${request.mediaId}"
+            )
         }
     }
 
@@ -1451,3 +1491,9 @@ object CarVideoPlayerHolder {
         }
     }
 }
+
+private data class AudioRequest(
+    val mediaId: String,
+    val title: String,
+    val streamUrl: String
+)

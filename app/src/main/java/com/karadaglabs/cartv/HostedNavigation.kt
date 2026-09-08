@@ -10,17 +10,21 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
 
 object HostedNavigation {
 
     private const val TAG = "KaradagHostedNav"
 
+    @OptIn(UnstableApi::class)
     fun open(
         from: CarActivity,
         destination: ProjectionDestination
     ) {
         try {
+            CarVideoPlayerHolder.setPlayWhenReady(false)
+
             val intent = Intent()
             intent.setClassName(
                 from.packageName,

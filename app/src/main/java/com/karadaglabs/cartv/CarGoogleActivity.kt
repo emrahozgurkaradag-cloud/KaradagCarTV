@@ -1,19 +1,15 @@
 package com.karadaglabs.cartv
 
-import android.annotation.SuppressLint
-import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
 import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.SearchCallback
+import com.google.android.apps.auto.sdk.SearchItem
 
 /**
  * Hosted Google search WebView inside the CarActivityHost window.
@@ -27,8 +23,9 @@ class CarGoogleActivity : CarActivity() {
     }
 
     private var webView: WebView? = null
+    private var chromeClient: HostedWebChromeClient? = null
+    private var overlay: FrameLayout? = null
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -36,14 +33,23 @@ class CarGoogleActivity : CarActivity() {
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
         HostedNavigation.hideChrome(this)
+        attachCarSearchBox()
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val overlay = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            setBackgroundColor(Color.BLACK)
+        }
+        this.overlay = overlay
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            keepScreenOn = true
         }
 
         root.addView(
@@ -54,27 +60,20 @@ class CarGoogleActivity : CarActivity() {
             }
         )
 
-        val view = WebView(this)
+        val view = CarProjectionWebView(HostedWebView.themedContext(this))
         webView = view
+        HostedWebView.configure(view, desktopUserAgent = false)
 
-        CookieManager.getInstance().setAcceptCookie(true)
-
-        view.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            mediaPlaybackRequiresUserGesture = false
-            loadWithOverviewMode = true
-            useWideViewPort = true
-            cacheMode = WebSettings.LOAD_DEFAULT
+        view.webViewClient = HostedWebViewClient {
+            Log.d(TAG, "CAR GOOGLE URL LOADED")
         }
 
-        view.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(webView: WebView?, url: String?) {
-                Log.d(TAG, "CAR GOOGLE URL LOADED")
-            }
+        val chrome = HostedWebChromeClient(overlay) {
+            applyVideoFocus(request = true)
         }
-        view.webChromeClient = WebChromeClient()
-        view.setBackgroundColor(Color.WHITE)
+        chromeClient = chrome
+        view.webChromeClient = chrome
+        view.setBackgroundColor(android.graphics.Color.WHITE)
         view.layoutParams = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             0,
@@ -82,32 +81,33 @@ class CarGoogleActivity : CarActivity() {
         )
 
         root.addView(view)
+        overlay.addView(root)
+        setContentView(overlay)
 
-        setContentView(
-            FrameLayout(this).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                addView(root)
-            }
-        )
+        applyVideoFocus(request = true)
 
         Log.d(TAG, "CAR GOOGLE WEBVIEW READY")
         view.loadUrl(GOOGLE_URL)
     }
 
     override fun onPause() {
+        applyVideoFocus(request = false)
         webView?.onPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
+        applyVideoFocus(request = true)
         webView?.onResume()
+        attachCarSearchBox()
     }
 
     override fun onDestroy() {
+        applyVideoFocus(request = false)
+        chromeClient?.hideCustomViewIfPresent()
+        chromeClient = null
+        overlay = null
         destroyWebView()
         super.onDestroy()
     }
@@ -126,6 +126,10 @@ class CarGoogleActivity : CarActivity() {
     }
 
     private fun navigateBack() {
+        if (chromeClient?.hideCustomViewIfPresent() == true) {
+            return
+        }
+
         val view = webView
 
         if (view != null && view.canGoBack()) {
@@ -136,16 +140,57 @@ class CarGoogleActivity : CarActivity() {
         HostedNavigation.open(this, ProjectionDestination.LIVE_TV)
     }
 
+    private fun attachCarSearchBox() {
+        try {
+            val ui = getCarUiController()
+            ui.statusBarController.showAppHeader()
+            ui.statusBarController.setTitle("Google")
+
+            val search = ui.searchController
+            search.setSearchHint("Google")
+            search.setSearchCallback(
+                object : SearchCallback() {
+                    override fun onSearchSubmitted(query: String): Boolean {
+                        Log.d(TAG, "CAR GOOGLE SEARCH SUBMITTED")
+                        webView?.loadUrl(HostedWebView.searchUrl(query))
+                        search.stopSearch()
+                        return true
+                    }
+
+                    override fun onSearchTextChanged(query: String) {
+                    }
+
+                    override fun onSearchItemSelected(item: SearchItem) {
+                        val title = item.title?.toString().orEmpty()
+
+                        if (title.isNotBlank()) {
+                            webView?.loadUrl(HostedWebView.searchUrl(title))
+                        }
+                    }
+                }
+            )
+            search.showSearchBox()
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to show car search box", exception)
+        }
+    }
+
+    private fun applyVideoFocus(request: Boolean) {
+        val result = if (request) {
+            CarVideoFocus.request(this)
+        } else {
+            CarVideoFocus.relinquish(this)
+        }
+
+        Log.d(
+            TAG,
+            "videoFocus request=$request granted=${result.granted} reason=${result.reason}"
+        )
+    }
+
     private fun destroyWebView() {
         val view = webView
         webView = null
-
-        if (view != null) {
-            view.stopLoading()
-            view.webChromeClient = null
-            view.webViewClient = WebViewClient()
-            (view.parent as? ViewGroup)?.removeView(view)
-            view.destroy()
-        }
+        HostedWebView.destroy(view)
     }
 }
