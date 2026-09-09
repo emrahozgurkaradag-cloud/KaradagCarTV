@@ -393,12 +393,15 @@ class CarVideoActivity : CarActivity() {
 
         listContainer?.visibility = if (playing) View.GONE else View.VISIBLE
 
+        HostedNavigation.closeDrawer(this)
+        HostedCarWindow.suppressHostPagedLists(this)
+
         if (playing) {
-            HostedNavigation.closeDrawer(this)
             showVideoSurface()
+            surfaceView?.bringToFront()
         } else {
             hideVideoSurface()
-            HostedNavigation.openDrawer(this)
+            listContainer?.bringToFront()
         }
 
         val plan = state.bindPlan()
@@ -431,7 +434,9 @@ class CarVideoActivity : CarActivity() {
         hideWebContainer()
         hideVideoSurface()
         listContainer?.visibility = View.VISIBLE
-        HostedNavigation.openDrawer(this)
+        listContainer?.bringToFront()
+        HostedNavigation.closeDrawer(this)
+        HostedCarWindow.suppressHostPagedLists(this)
 
         val radios = RadioStations.all
         val selected = radios.firstOrNull { it.id == selectedRadioId }
@@ -475,7 +480,10 @@ class CarVideoActivity : CarActivity() {
         hideVideoSurface()
         listContainer?.visibility = View.GONE
         webContainer?.visibility = View.VISIBLE
+        webContainer?.bringToFront()
+        webPane?.webView?.bringToFront()
         HostedNavigation.closeDrawer(this)
+        HostedCarWindow.suppressHostPagedLists(this)
         HostedCarWindow.logView("webContainer", webContainer)
         HostedCarWindow.logView("webView", webPane?.webView)
     }
@@ -541,6 +549,11 @@ class CarVideoActivity : CarActivity() {
         val pane = HostedWebPane(this, next)
         webPane = pane
         pane.attach(container)
+        if (next == ProjectionDestination.YOUTUBE) {
+            Log.d("KaradagCarYouTube", "CAR YOUTUBE ACTIVITY AÇILDI hostedIn=CarVideoActivity")
+        } else {
+            Log.d("KaradagCarGoogle", "CAR GOOGLE ACTIVITY AÇILDI hostedIn=CarVideoActivity")
+        }
         Log.d(TAG, "hosted WebView attached destination=${next.name}")
     }
 
@@ -705,7 +718,7 @@ class CarVideoActivity : CarActivity() {
             TAG,
             "$origin destination=${destination.name} " +
                 "channels=${state.channels.size} mode=${state.mode} " +
-                "gridCount=${adapter?.count}"
+                "listVis=${listContainer?.visibility}"
         )
     }
 
@@ -740,6 +753,7 @@ class CarVideoActivity : CarActivity() {
             horizontalSpacing = dp(10)
             verticalSpacing = dp(10)
             this.adapter = this@CarVideoActivity.adapter
+            emptyView = statusView
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0,

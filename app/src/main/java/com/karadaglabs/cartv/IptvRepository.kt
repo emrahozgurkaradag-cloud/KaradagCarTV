@@ -24,9 +24,12 @@ object IptvRepository {
                 .getString(CHANNELS_KEY, null)
 
             if (json.isNullOrBlank()) {
+                Log.d(TAG, "IPTV cache empty")
                 emptyList()
             } else {
-                IptvChannels.parse(JSONArray(json))
+                val parsed = IptvChannels.parse(JSONArray(json))
+                Log.d(TAG, "IPTV cache hit count=${parsed.size}")
+                parsed
             }
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to read IPTV cache", exception)
@@ -79,6 +82,12 @@ object IptvRepository {
 
     fun fetchFromApi(context: Context): List<IptvChannel> {
         val licenseKey = AppSession.licenseKey(context)
+
+        Log.d(
+            TAG,
+            "IPTV fetch licenseBlank=${licenseKey.isBlank()} " +
+                "uuid=${AppSession.deviceUuid(context)}"
+        )
 
         if (licenseKey.isBlank()) {
             throw IllegalStateException(

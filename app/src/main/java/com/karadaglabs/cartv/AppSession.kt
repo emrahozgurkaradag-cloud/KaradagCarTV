@@ -10,11 +10,13 @@ object AppSession {
     private const val KEY_LICENSE = "license_key"
 
     fun prefs(context: Context) =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        (context.applicationContext ?: context)
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun deviceUuid(context: Context): String {
+        val resolver = (context.applicationContext ?: context).contentResolver
         val androidId = Settings.Secure.getString(
-            context.contentResolver,
+            resolver,
             Settings.Secure.ANDROID_ID
         )
 

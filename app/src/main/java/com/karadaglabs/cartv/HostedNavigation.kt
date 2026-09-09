@@ -121,11 +121,12 @@ object HostedNavigation {
         try {
             val controller = activity.getCarUiController().menuController
             controller.setRootMenuAdapter(adapter)
-            controller.showMenuButton()
+            controller.hideMenuButton()
+            activity.getCarUiController().drawerController.closeDrawer()
             Log.d(
                 TAG,
                 "root MenuAdapter bound count=${adapter.menuItemCount} " +
-                    "title=${adapter.title}"
+                    "title=${adapter.title} drawer=closed menuButton=hidden"
             )
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to bind car MenuAdapter", exception)
@@ -141,11 +142,12 @@ object HostedNavigation {
     }
 
     fun openDrawer(activity: CarActivity) {
-        try {
-            activity.getCarUiController().drawerController.openDrawer()
-        } catch (exception: Exception) {
-            Log.w(TAG, "Unable to open car drawer", exception)
-        }
+        closeDrawer(activity)
+        Log.d(
+            TAG,
+            "openDrawer suppressed; Gearhead PagedListView empty state " +
+                "is the car-screen 'Öğe yok' placeholder"
+        )
     }
 
     fun menuBar(

@@ -102,8 +102,10 @@ object HostedCarWindow {
         view.minimumHeight = 1
         activity.setContentView(view)
         logView("setContentView", view)
+        suppressHostPagedLists(activity)
 
         view.post {
+            suppressHostPagedLists(activity)
             if (view.width <= 0 || view.height <= 0) {
                 val metrics = activity.resources.displayMetrics
                 view.minimumWidth = metrics.widthPixels.coerceAtLeast(1)
@@ -121,6 +123,64 @@ object HostedCarWindow {
             }
 
             logView("setContentView.posted", view)
+        }
+    }
+
+    /**
+     * Gearhead chrome inflates [PagedListView]. With no MenuAdapter
+     * items that list shows the localized empty placeholder
+     * ("Öğe yok"). Hide those host lists so setContentView content
+     * is what the car screen displays.
+     */
+    fun suppressHostPagedLists(hosted: Any?) {
+        val root = windowDecorView(hosted) ?: return
+        var hidden = 0
+
+        walk(root) { child ->
+            val name = child.javaClass.name
+            if (
+                name.contains("PagedListView") ||
+                name.contains("PagedRecycler") ||
+                name.endsWith("car_list_item_empty")
+            ) {
+                child.visibility = View.GONE
+                hidden += 1
+                Log.d(TAG, "hid host list view $name")
+            }
+        }
+
+        Log.d(TAG, "suppressHostPagedLists hidden=$hidden")
+    }
+
+    private fun windowDecorView(hosted: Any?): View? {
+        if (hosted == null) {
+            return null
+        }
+
+        return try {
+            val window = findMethod(hosted, "getWindow")?.invoke(hosted)
+                ?: findHost(hosted)?.let { host ->
+                    findMethod(host, "getWindow")?.invoke(host)
+                }
+                ?: return null
+
+            window.javaClass.methods.firstOrNull { method ->
+                method.name == "getDecorView" && method.parameterTypes.isEmpty()
+            }?.invoke(window) as? View
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private fun walk(
+        view: View,
+        visitor: (View) -> Unit
+    ) {
+        visitor(view)
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                walk(view.getChildAt(index), visitor)
+            }
         }
     }
 

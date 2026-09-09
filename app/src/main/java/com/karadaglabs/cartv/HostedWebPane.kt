@@ -62,11 +62,12 @@ class HostedWebPane(
         }
 
         view.webViewClient = LoggingWebViewClient(destination) { loaded ->
-            Log.d(
-                tag(),
-                "CAR ${destination.name} URL LOADED url=$loaded " +
-                    "size=${view.width}x${view.height}"
-            )
+            val size = "${view.width}x${view.height}"
+            if (destination == ProjectionDestination.YOUTUBE) {
+                Log.d(tag(), "CAR YOUTUBE PAGE FINISHED url=$loaded size=$size")
+            } else {
+                Log.d(tag(), "CAR GOOGLE PAGE FINISHED url=$loaded size=$size")
+            }
         }
 
         val chrome = HostedWebChromeClient(overlay) {
@@ -84,9 +85,16 @@ class HostedWebPane(
 
         overlay.addView(view)
         parent.addView(overlay)
+        overlay.bringToFront()
+        view.bringToFront()
         applyVideoFocus(true)
 
-        Log.d(tag(), "CAR ${destination.name} WEBVIEW READY url=$url")
+        val ready = if (destination == ProjectionDestination.YOUTUBE) {
+            "CAR YOUTUBE WEBVIEW READY"
+        } else {
+            "CAR GOOGLE WEBVIEW READY"
+        }
+        Log.d(tag(), "$ready url=$url size-pending")
         HostedCarWindow.logView("${destination.name}.overlay", overlay)
         HostedCarWindow.logView("${destination.name}.webview", view)
 
