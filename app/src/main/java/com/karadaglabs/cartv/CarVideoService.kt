@@ -13,6 +13,7 @@ class CarVideoService : CarActivityService() {
     }
 
     override fun getCarActivity(): Class<out CarActivity> {
+        Log.d(TAG, "getCarActivity=${CarVideoActivity::class.java.name}")
         return CarVideoActivity::class.java
     }
 

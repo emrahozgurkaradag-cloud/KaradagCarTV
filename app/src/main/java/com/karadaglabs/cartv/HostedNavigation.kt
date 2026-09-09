@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.MenuAdapter
 
 object HostedNavigation {
 
@@ -22,19 +23,62 @@ object HostedNavigation {
         from: CarActivity,
         destination: ProjectionDestination
     ) {
+        Log.d(
+            TAG,
+            "CAR HOST NAVIGATION start destination=${destination.name} " +
+                "from=${from.javaClass.simpleName}"
+        )
+
         try {
             CarVideoPlayerHolder.setPlayWhenReady(false)
+        } catch (_: Exception) {
+        }
 
-            val intent = Intent()
-            intent.setClassName(
-                from.packageName,
-                className(destination)
+        if (from is CarVideoActivity) {
+            from.showDestination(destination, launchedByHost = false)
+
+            if (
+                destination == ProjectionDestination.LIVE_TV ||
+                destination == ProjectionDestination.RADIO
+            ) {
+                return
+            }
+        }
+
+        val target = className(destination)
+        val intent = Intent()
+        intent.setClassName(from.packageName, target)
+        intent.putExtra(
+            ProjectionDestination.EXTRA,
+            destination.name
+        )
+
+        val projection = HostedCarWindow.startProjectionActivity(from, intent)
+        Log.d(
+            TAG,
+            "startCarProjectionActivity destination=${destination.name} " +
+                "target=$target " +
+                "attempted=${projection.attempted} " +
+                "succeeded=${projection.succeeded} " +
+                "reason=${projection.reason}"
+        )
+
+        if (from is CarVideoActivity) {
+            Log.d(
+                TAG,
+                "startCarActivity skipped; CarVideoActivity already hosts " +
+                    destination.name
             )
-            intent.putExtra(
-                ProjectionDestination.EXTRA,
-                destination.name
-            )
+            return
+        }
+
+        try {
             from.startCarActivity(intent)
+            Log.d(
+                TAG,
+                "startCarActivity dispatched destination=${destination.name} " +
+                    "component=${intent.component}"
+            )
         } catch (exception: Exception) {
             Log.e(
                 TAG,
@@ -63,8 +107,44 @@ object HostedNavigation {
             val carUiController = activity.getCarUiController()
             carUiController.statusBarController.hideAppHeader()
             carUiController.menuController.hideMenuButton()
+            carUiController.drawerController.closeDrawer()
+            Log.d(TAG, "car chrome hidden and drawer closed")
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to hide car chrome", exception)
+        }
+    }
+
+    fun bindList(
+        activity: CarActivity,
+        adapter: MenuAdapter
+    ) {
+        try {
+            val controller = activity.getCarUiController().menuController
+            controller.setRootMenuAdapter(adapter)
+            controller.showMenuButton()
+            Log.d(
+                TAG,
+                "root MenuAdapter bound count=${adapter.menuItemCount} " +
+                    "title=${adapter.title}"
+            )
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to bind car MenuAdapter", exception)
+        }
+    }
+
+    fun closeDrawer(activity: CarActivity) {
+        try {
+            activity.getCarUiController().drawerController.closeDrawer()
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to close car drawer", exception)
+        }
+    }
+
+    fun openDrawer(activity: CarActivity) {
+        try {
+            activity.getCarUiController().drawerController.openDrawer()
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to open car drawer", exception)
         }
     }
 

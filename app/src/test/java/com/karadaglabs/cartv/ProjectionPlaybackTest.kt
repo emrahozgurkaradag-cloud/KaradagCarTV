@@ -319,14 +319,27 @@ class ProjectionSourceContractTest {
         assertTrue(youtubePhone.contains("class YouTubeActivity"))
         assertTrue(youtubePhone.contains("WebView"))
         assertTrue(youtubeCar.contains("class CarYouTubeActivity"))
-        assertTrue(youtubeCar.contains("WebView"))
+        assertTrue(youtubeCar.contains("HostedWebPane"))
         assertTrue(youtubeCar.contains("www.youtube.com"))
         assertTrue(youtubeCar.contains("CAR YOUTUBE ACTIVITY AÇILDI"))
         assertTrue(youtubeCar.contains("CAR YOUTUBE WEBVIEW READY"))
-        assertTrue(youtubeCar.contains("CAR YOUTUBE URL LOADED"))
-        assertTrue(youtubeCar.contains("HostedWebView.destroy"))
-        assertTrue(youtubeCar.contains("CarVideoFocus.request"))
-        assertTrue(youtubeCar.contains("CarProjectionWebView"))
+        val pane = source(
+            "java/com/karadaglabs/cartv/HostedWebPane.kt"
+        )
+        val host = source(
+            "java/com/karadaglabs/cartv/HostedCarWindow.kt"
+        )
+        val nav = source(
+            "java/com/karadaglabs/cartv/HostedNavigation.kt"
+        )
+        assertTrue(pane.contains("HostedWebView.destroy"))
+        assertTrue(pane.contains("CarVideoFocus.request"))
+        assertTrue(pane.contains("CarProjectionWebView"))
+        assertTrue(host.contains("startCarProjectionActivity"))
+        assertTrue(nav.contains("startCarProjectionActivity"))
+        assertTrue(video.contains("HostedNavigation"))
+        assertTrue(video.contains("showDestination"))
+        assertTrue(video.contains("HostedWebPane"))
         assertFalse(youtubeCar.contains("YouTubeActivity::class"))
         assertFalse(youtubeCar.contains("ACTION_VIEW"))
         assertTrue(video.contains("HostedNavigation"))
@@ -338,14 +351,13 @@ class ProjectionSourceContractTest {
             "java/com/karadaglabs/cartv/CarGoogleActivity.kt"
         )
         assertTrue(google.contains("class CarGoogleActivity"))
-        assertTrue(google.contains("CarProjectionWebView"))
+        assertTrue(google.contains("HostedWebPane"))
         assertTrue(google.contains("www.google.com"))
         assertTrue(google.contains("CAR GOOGLE ACTIVITY AÇILDI"))
         assertTrue(google.contains("CAR GOOGLE WEBVIEW READY"))
-        assertTrue(google.contains("CAR GOOGLE URL LOADED"))
-        assertTrue(google.contains("HostedWebView.destroy"))
-        assertTrue(google.contains("searchController"))
-        assertTrue(google.contains("CarVideoFocus.request"))
+        assertTrue(pane.contains("HostedWebView.destroy"))
+        assertTrue(pane.contains("searchController"))
+        assertTrue(pane.contains("CarVideoFocus.request"))
         assertFalse(google.contains("ACTION_VIEW"))
         assertTrue(
             manifest.contains(
