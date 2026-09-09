@@ -12,6 +12,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.DrawerCallback
 import com.google.android.apps.auto.sdk.MenuAdapter
 
 object HostedNavigation {
@@ -36,13 +37,13 @@ object HostedNavigation {
 
         if (from is CarVideoActivity) {
             from.showDestination(destination, launchedByHost = false)
-
-            if (
-                destination == ProjectionDestination.LIVE_TV ||
-                destination == ProjectionDestination.RADIO
-            ) {
-                return
-            }
+            HostedCarWindow.revealHostedContent(from)
+            Log.d(
+                TAG,
+                "startCarProjectionActivity skipped; CarVideoActivity already hosts " +
+                    destination.name
+            )
+            return
         }
 
         val target = className(destination)
@@ -62,15 +63,6 @@ object HostedNavigation {
                 "succeeded=${projection.succeeded} " +
                 "reason=${projection.reason}"
         )
-
-        if (from is CarVideoActivity) {
-            Log.d(
-                TAG,
-                "startCarActivity skipped; CarVideoActivity already hosts " +
-                    destination.name
-            )
-            return
-        }
 
         try {
             from.startCarActivity(intent)
@@ -107,7 +99,22 @@ object HostedNavigation {
             val carUiController = activity.getCarUiController()
             carUiController.statusBarController.hideAppHeader()
             carUiController.menuController.hideMenuButton()
-            carUiController.drawerController.closeDrawer()
+            val drawer = carUiController.drawerController
+            drawer.closeDrawer()
+            drawer.setDrawerCallback(
+                object : DrawerCallback() {
+                    override fun onDrawerOpening() {
+                        Log.d(TAG, "host drawer opening; closing so PagedListView stays hidden")
+                        drawer.closeDrawer()
+                    }
+
+                    override fun onDrawerOpened() {
+                        drawer.closeDrawer()
+                        HostedCarWindow.suppressHostPagedLists(activity)
+                        HostedCarWindow.revealHostedContent(activity)
+                    }
+                }
+            )
             Log.d(TAG, "car chrome hidden and drawer closed")
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to hide car chrome", exception)

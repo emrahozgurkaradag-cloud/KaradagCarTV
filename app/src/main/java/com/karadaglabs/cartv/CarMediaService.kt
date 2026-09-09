@@ -1043,12 +1043,15 @@ object CarVideoPlayerHolder {
 
                 val surfaceView =
                     carSurfaceView
+                val video = player?.videoFormat
 
                 Log.d(
                     TAG,
                     "CAR VIDEO FIRST FRAME " +
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
-                        "surface=${surfaceView?.holder?.surface}"
+                        "surface=${surfaceView?.holder?.surface} " +
+                        "videoTrack=${video?.width ?: 0}x${video?.height ?: 0} " +
+                        "mime=${video?.sampleMimeType}"
                 )
             }
 
@@ -1334,11 +1337,16 @@ object CarVideoPlayerHolder {
 
         val surfaceValid =
             carSurfaceView?.holder?.surface?.isValid == true
+        val surfaceSized =
+            (carSurfaceView?.width ?: 0) > 0 &&
+                (carSurfaceView?.height ?: 0) > 0
 
-        if (requireSurface && !surfaceValid) {
+        if (requireSurface && (!surfaceValid || !surfaceSized)) {
             Log.d(
                 TAG,
-                "play deferred: surface not valid"
+                "play deferred: surface not valid " +
+                    "valid=$surfaceValid " +
+                    "size=${carSurfaceView?.width}x${carSurfaceView?.height}"
             )
             return
         }
@@ -1377,6 +1385,15 @@ object CarVideoPlayerHolder {
 
         if (surface != null && surface.isValid) {
 
+            if (surfaceView.width <= 0 || surfaceView.height <= 0) {
+                Log.d(
+                    TAG,
+                    "CAR VIDEO SURFACE wait bind size=" +
+                        "${surfaceView.width}x${surfaceView.height}"
+                )
+                return
+            }
+
             exoPlayer.setVideoSurfaceHolder(holder)
 
             Log.d(
@@ -1408,6 +1425,15 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CREATED surface=${holder.surface}"
                     )
+                    Log.d(
+                        TAG,
+                        "CAR VIDEO SURFACE SIZE=" +
+                            "${surfaceView.width}x${surfaceView.height}"
+                    )
+
+                    if (surfaceView.width <= 0 || surfaceView.height <= 0) {
+                        return
+                    }
 
                     val exoPlayer =
                         player
@@ -1432,6 +1458,11 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CHANGED width=$width height=$height"
                     )
+                    Log.d(TAG, "CAR VIDEO SURFACE SIZE=${width}x${height}")
+
+                    if (width <= 0 || height <= 0) {
+                        return
+                    }
 
                     player?.setVideoSurfaceHolder(holder)
                 }

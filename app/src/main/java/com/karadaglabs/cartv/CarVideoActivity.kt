@@ -104,8 +104,9 @@ class CarVideoActivity : CarActivity() {
                 1f
             )
             setBackgroundColor(Color.BLACK)
-            minimumWidth = 1
-            minimumHeight = 1
+            val metrics = resources.displayMetrics
+            minimumWidth = metrics.widthPixels.coerceAtLeast(1)
+            minimumHeight = (metrics.heightPixels / 2).coerceAtLeast(1)
         }
         contentFrame = content
 
@@ -119,6 +120,9 @@ class CarVideoActivity : CarActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             keepScreenOn = true
+            val metrics = resources.displayMetrics
+            minimumWidth = metrics.widthPixels.coerceAtLeast(1)
+            minimumHeight = (metrics.heightPixels / 2).coerceAtLeast(1)
             visibility = View.GONE
         }
 
@@ -168,6 +172,9 @@ class CarVideoActivity : CarActivity() {
     override fun onStart() {
         super.onStart()
         Log.d(TAG, "CAR VIDEO onStart destination=${destination.name}")
+        HostedNavigation.hideChrome(this)
+        HostedNavigation.closeDrawer(this)
+        HostedCarWindow.revealHostedContent(this, rootColumn)
         bindIfPlaying()
         webPane?.onResume()
     }
@@ -175,6 +182,8 @@ class CarVideoActivity : CarActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "CAR VIDEO onResume destination=${destination.name}")
+        HostedNavigation.closeDrawer(this)
+        HostedCarWindow.revealHostedContent(this, rootColumn)
         applyVideoFocus(request = true)
         bindIfPlaying()
         webPane?.onResume()
@@ -259,6 +268,8 @@ class CarVideoActivity : CarActivity() {
         destination = next
         refreshMenu()
         bindHostedMenu()
+        HostedNavigation.closeDrawer(this)
+        HostedCarWindow.revealHostedContent(this, rootColumn)
 
         if (
             next == ProjectionDestination.YOUTUBE ||
@@ -268,6 +279,7 @@ class CarVideoActivity : CarActivity() {
         }
 
         applyState()
+        HostedCarWindow.revealHostedContent(this, rootColumn)
     }
 
     private fun onMenuSelected(next: ProjectionDestination) {
@@ -275,14 +287,7 @@ class CarVideoActivity : CarActivity() {
             if (next == ProjectionDestination.LIVE_TV) {
                 showChannelList()
             }
-            return
-        }
-
-        if (
-            next == ProjectionDestination.YOUTUBE ||
-            next == ProjectionDestination.GOOGLE
-        ) {
-            HostedNavigation.open(this, next)
+            HostedCarWindow.revealHostedContent(this, rootColumn)
             return
         }
 
@@ -387,6 +392,9 @@ class CarVideoActivity : CarActivity() {
         statusView?.text = state.statusText
         adapter?.update(state.channels, state.selectedId)
 
+        Log.d(TAG, "CAR LIVE TV DESTINATION=${destination.name}")
+        Log.d(TAG, "CAR LIVE TV LIST SIZE=${state.channels.size}")
+
         val playing = state.mode == ProjectionMode.PLAYING &&
             state.hostAvailable &&
             state.selected != null
@@ -394,7 +402,7 @@ class CarVideoActivity : CarActivity() {
         listContainer?.visibility = if (playing) View.GONE else View.VISIBLE
 
         HostedNavigation.closeDrawer(this)
-        HostedCarWindow.suppressHostPagedLists(this)
+        HostedCarWindow.revealHostedContent(this, rootColumn)
 
         if (playing) {
             showVideoSurface()
@@ -407,6 +415,19 @@ class CarVideoActivity : CarActivity() {
         val plan = state.bindPlan()
         val selected = state.selected
         val view = surfaceView
+        val surfaceReadyToPlay = view != null &&
+            view.visibility == View.VISIBLE &&
+            view.width > 0 &&
+            view.height > 0 &&
+            view.holder.surface?.isValid == true
+
+        if (playing && !surfaceReadyToPlay) {
+            Log.d(
+                TAG,
+                "CAR VIDEO SURFACE waiting size=${view?.width}x${view?.height} " +
+                    "valid=${view?.holder?.surface?.isValid}"
+            )
+        }
 
         Log.d(
             TAG,
@@ -427,7 +448,7 @@ class CarVideoActivity : CarActivity() {
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
 
-        CarVideoPlayerHolder.setPlayWhenReady(plan.shouldPlay)
+        CarVideoPlayerHolder.setPlayWhenReady(plan.shouldPlay && surfaceReadyToPlay)
     }
 
     private fun applyRadioState() {
@@ -436,7 +457,7 @@ class CarVideoActivity : CarActivity() {
         listContainer?.visibility = View.VISIBLE
         listContainer?.bringToFront()
         HostedNavigation.closeDrawer(this)
-        HostedCarWindow.suppressHostPagedLists(this)
+        HostedCarWindow.revealHostedContent(this, rootColumn)
 
         val radios = RadioStations.all
         val selected = radios.firstOrNull { it.id == selectedRadioId }
@@ -483,7 +504,7 @@ class CarVideoActivity : CarActivity() {
         webContainer?.bringToFront()
         webPane?.webView?.bringToFront()
         HostedNavigation.closeDrawer(this)
-        HostedCarWindow.suppressHostPagedLists(this)
+        HostedCarWindow.revealHostedContent(this, rootColumn)
         HostedCarWindow.logView("webContainer", webContainer)
         HostedCarWindow.logView("webView", webPane?.webView)
     }
@@ -539,22 +560,44 @@ class CarVideoActivity : CarActivity() {
 
         if (webPane?.webView != null && destination == next) {
             container.visibility = View.VISIBLE
+            HostedCarWindow.revealHostedContent(this, rootColumn)
+            logWebSize(next)
             return
         }
 
         destroyWebPane()
         container.removeAllViews()
         container.visibility = View.VISIBLE
+        container.minimumWidth = 1
+        container.minimumHeight = 1
 
         val pane = HostedWebPane(this, next)
         webPane = pane
         pane.attach(container)
         if (next == ProjectionDestination.YOUTUBE) {
             Log.d("KaradagCarYouTube", "CAR YOUTUBE ACTIVITY AÇILDI hostedIn=CarVideoActivity")
+            Log.d("KaradagCarYouTube", "CAR YOUTUBE ATTACHED")
         } else {
             Log.d("KaradagCarGoogle", "CAR GOOGLE ACTIVITY AÇILDI hostedIn=CarVideoActivity")
+            Log.d("KaradagCarGoogle", "CAR GOOGLE ATTACHED")
         }
         Log.d(TAG, "hosted WebView attached destination=${next.name}")
+        HostedCarWindow.revealHostedContent(this, rootColumn)
+        container.post {
+            logWebSize(next)
+        }
+    }
+
+    private fun logWebSize(next: ProjectionDestination) {
+        val view = webPane?.webView
+        val size = "${view?.width ?: 0}x${view?.height ?: 0}"
+        if (next == ProjectionDestination.YOUTUBE) {
+            Log.d("KaradagCarYouTube", "CAR YOUTUBE SIZE=$size")
+        } else {
+            Log.d("KaradagCarGoogle", "CAR GOOGLE SIZE=$size")
+        }
+        HostedCarWindow.logView("${next.name}.webContainer", webContainer)
+        HostedCarWindow.logView("${next.name}.webView", view)
     }
 
     private fun destroyWebPane() {
@@ -572,17 +615,29 @@ class CarVideoActivity : CarActivity() {
         val view = surfaceView ?: return
         view.visibility = View.VISIBLE
         configureSurfaceZOrder(view)
+        view.bringToFront()
+
+        val width = view.width
+        val height = view.height
+        Log.d(TAG, "CAR VIDEO SURFACE SIZE=${width}x${height}")
 
         val surface = view.holder.surface
-        if (surface != null && surface.isValid) {
+        if (surface != null && surface.isValid && width > 0 && height > 0) {
             Log.d(
                 TAG,
                 "CAR VIDEO SURFACE ALREADY VALID " +
-                    "${view.width}x${view.height} surface=$surface"
+                    "${width}x${height} surface=$surface"
             )
             state = state.surfaceChanged(true)
         } else {
             Log.d(TAG, "CAR VIDEO SURFACE waiting for callback")
+            view.post {
+                Log.d(
+                    TAG,
+                    "CAR VIDEO SURFACE SIZE=${view.width}x${view.height}"
+                )
+                HostedCarWindow.logView("surface.posted", view)
+            }
         }
     }
 
@@ -642,7 +697,7 @@ class CarVideoActivity : CarActivity() {
         }
 
         val adapter = hostedMenu
-        if (adapter == null || hostedMenuDestination != destination) {
+        if (adapter == null) {
             val created = HostedListAdapter(
                 titleText = destination.label,
                 items = items,
@@ -654,6 +709,7 @@ class CarVideoActivity : CarActivity() {
             HostedNavigation.bindList(this, created)
         } else {
             adapter.replace(items, emptyTitle)
+            hostedMenuDestination = destination
         }
     }
 
@@ -709,11 +765,14 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun logContentSizes(origin: String) {
+        HostedCarWindow.logHostChrome(this, rootColumn)
         HostedCarWindow.logView("$origin.root", rootColumn)
         HostedCarWindow.logView("$origin.content", contentFrame)
         HostedCarWindow.logView("$origin.list", listContainer)
         HostedCarWindow.logView("$origin.surface", surfaceView)
         HostedCarWindow.logView("$origin.web", webContainer)
+        Log.d(TAG, "CAR LIVE TV DESTINATION=${destination.name}")
+        Log.d(TAG, "CAR LIVE TV LIST SIZE=${state.channels.size}")
         Log.d(
             TAG,
             "$origin destination=${destination.name} " +
@@ -769,13 +828,25 @@ class CarVideoActivity : CarActivity() {
 
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
+            val view = surfaceView
             Log.d(
                 TAG,
                 "CAR VIDEO SURFACE CREATED valid=${holder.surface?.isValid} " +
                     "surface=${holder.surface}"
             )
-            state = state.surfaceChanged(true)
-            applyState()
+            Log.d(
+                TAG,
+                "CAR VIDEO SURFACE SIZE=${view?.width ?: 0}x${view?.height ?: 0}"
+            )
+            if (
+                view != null &&
+                view.width > 0 &&
+                view.height > 0 &&
+                holder.surface?.isValid == true
+            ) {
+                state = state.surfaceChanged(true)
+                applyState()
+            }
         }
 
         override fun surfaceChanged(
@@ -789,6 +860,7 @@ class CarVideoActivity : CarActivity() {
                 "CAR VIDEO SURFACE CHANGED width=$width height=$height " +
                     "format=$format valid=${holder.surface?.isValid}"
             )
+            Log.d(TAG, "CAR VIDEO SURFACE SIZE=${width}x${height}")
 
             if (width > 0 && height > 0 && holder.surface?.isValid == true) {
                 state = state.surfaceChanged(true)

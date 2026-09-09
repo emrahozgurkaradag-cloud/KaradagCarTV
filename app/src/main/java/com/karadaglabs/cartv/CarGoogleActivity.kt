@@ -83,6 +83,9 @@ class CarGoogleActivity : CarActivity() {
     override fun onStart() {
         super.onStart()
         Log.d(TAG, "CAR GOOGLE onStart")
+        HostedNavigation.hideChrome(this)
+        HostedNavigation.closeDrawer(this)
+        HostedCarWindow.revealHostedContent(this, rootColumn)
     }
 
     override fun onPause() {
@@ -94,6 +97,7 @@ class CarGoogleActivity : CarActivity() {
     override fun onResume() {
         super.onResume()
         Log.d(TAG, "CAR GOOGLE onResume")
+        HostedCarWindow.revealHostedContent(this, rootColumn)
         webPane?.onResume()
         logSizes("onResume")
     }
@@ -127,7 +131,10 @@ class CarGoogleActivity : CarActivity() {
     }
 
     private fun logSizes(origin: String) {
+        HostedCarWindow.logHostChrome(this, rootColumn)
         HostedCarWindow.logView("$origin.root", rootColumn)
         HostedCarWindow.logView("$origin.webview", webPane?.webView)
+        val size = "${webPane?.webView?.width ?: 0}x${webPane?.webView?.height ?: 0}"
+        Log.d(TAG, "CAR GOOGLE SIZE=$size")
     }
 }

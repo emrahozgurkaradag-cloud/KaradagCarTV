@@ -65,8 +65,10 @@ class HostedWebPane(
             val size = "${view.width}x${view.height}"
             if (destination == ProjectionDestination.YOUTUBE) {
                 Log.d(tag(), "CAR YOUTUBE PAGE FINISHED url=$loaded size=$size")
+                Log.d(tag(), "CAR YOUTUBE SIZE=$size")
             } else {
                 Log.d(tag(), "CAR GOOGLE PAGE FINISHED url=$loaded size=$size")
+                Log.d(tag(), "CAR GOOGLE SIZE=$size")
             }
         }
 
@@ -89,23 +91,32 @@ class HostedWebPane(
         view.bringToFront()
         applyVideoFocus(true)
 
-        val ready = if (destination == ProjectionDestination.YOUTUBE) {
-            "CAR YOUTUBE WEBVIEW READY"
+        if (destination == ProjectionDestination.YOUTUBE) {
+            Log.d(tag(), "CAR YOUTUBE ATTACHED")
+            Log.d(tag(), "CAR YOUTUBE WEBVIEW READY url=$url size-pending")
         } else {
-            "CAR GOOGLE WEBVIEW READY"
+            Log.d(tag(), "CAR GOOGLE ATTACHED")
+            Log.d(tag(), "CAR GOOGLE WEBVIEW READY url=$url size-pending")
         }
-        Log.d(tag(), "$ready url=$url size-pending")
         HostedCarWindow.logView("${destination.name}.overlay", overlay)
         HostedCarWindow.logView("${destination.name}.webview", view)
 
         overlay.post {
             HostedCarWindow.logView("${destination.name}.overlay.posted", overlay)
             HostedCarWindow.logView("${destination.name}.webview.posted", view)
+            val size = "${view.width}x${view.height}"
+            if (destination == ProjectionDestination.YOUTUBE) {
+                Log.d(tag(), "CAR YOUTUBE SIZE=$size")
+            } else {
+                Log.d(tag(), "CAR GOOGLE SIZE=$size")
+            }
 
             if (view.width <= 0 || view.height <= 0) {
                 val metrics = activity.resources.displayMetrics
                 view.minimumWidth = metrics.widthPixels.coerceAtLeast(1)
                 view.minimumHeight = (metrics.heightPixels / 2).coerceAtLeast(1)
+                overlay.minimumWidth = view.minimumWidth
+                overlay.minimumHeight = view.minimumHeight
                 view.layoutParams = FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -118,6 +129,11 @@ class HostedWebPane(
             }
         }
 
+        if (destination == ProjectionDestination.YOUTUBE) {
+            Log.d(tag(), "CAR YOUTUBE REQUEST url=$url")
+        } else {
+            Log.d(tag(), "CAR GOOGLE REQUEST url=$url")
+        }
         view.loadUrl(url)
 
         if (destination == ProjectionDestination.GOOGLE) {
