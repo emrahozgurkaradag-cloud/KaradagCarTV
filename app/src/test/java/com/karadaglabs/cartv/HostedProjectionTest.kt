@@ -53,7 +53,38 @@ class HostedProjectionDestinationTest {
         assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
         assertTrue(nav.contains("CAR HOST NAVIGATION FAILED"))
         assertTrue(nav.contains("startCarActivity"))
+        assertTrue(nav.contains("startCarProjectionActivity"))
+        assertTrue(nav.contains("from.showDestination"))
+        assertTrue(nav.contains("drawer=closed"))
+        assertTrue(nav.contains("PagedListView empty state"))
         assertTrue(nav.contains("CarVideoPlayerHolder.setPlayWhenReady(false)"))
+        assertTrue(nav.contains("DrawerCallback"))
+        assertTrue(nav.contains("startCarProjectionActivity skipped"))
+    }
+
+    @Test
+    fun emptyHostedMenuAlwaysHasPlaceholderItem() {
+        val empty = HostedListAdapter.withPlaceholder(
+            emptyList(),
+            "Kanallar yükleniyor..."
+        )
+
+        assertEquals(1, empty.size)
+        assertTrue(empty.first().placeholder)
+        assertEquals("Kanallar yükleniyor...", empty.first().title)
+
+        val filled = HostedListAdapter.withPlaceholder(
+            listOf(
+                HostedListAdapter.Item(
+                    id = "live-tv-1",
+                    title = "TRT 1"
+                )
+            ),
+            "Kanal listesi yok"
+        )
+
+        assertEquals(1, filled.size)
+        assertFalse(filled.first().placeholder)
     }
 
     private fun source(relativeFromMain: String): String {
@@ -78,16 +109,30 @@ class HostedProjectionSourceTest {
     fun liveTvBindsExoPlayerToHostedSurfaceView() {
         val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
         val holder = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+        val host = source("java/com/karadaglabs/cartv/HostedCarWindow.kt")
 
         assertTrue(video.contains("CAR VIDEO ACTIVITY AÇILDI"))
         assertTrue(video.contains("CAR VIDEO SURFACE CREATED"))
         assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
+        assertTrue(video.contains("CAR VIDEO SURFACE SIZE="))
+        assertTrue(video.contains("CAR LIVE TV DESTINATION="))
+        assertTrue(video.contains("CAR LIVE TV LIST SIZE="))
+        assertTrue(host.contains("CAR HOST ROOT CHILDREN="))
+        assertTrue(host.contains("CAR NATIVE LIST VISIBILITY="))
         assertTrue(video.contains("setCarSurfaceView"))
         assertTrue(video.contains("SurfaceHolder.Callback"))
+        assertTrue(video.contains("showDestination"))
+        assertTrue(video.contains("HostedWebPane"))
+        assertTrue(video.contains("HostedListAdapter"))
+        assertTrue(video.contains("CAR VIDEO SURFACE ALREADY VALID"))
+        assertTrue(video.contains("revealHostedContent"))
+        assertTrue(video.contains("emptyView"))
+        assertFalse(video.contains("HostedNavigation.openDrawer"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
         assertTrue(holder.contains("onRenderedFirstFrame"))
+        assertTrue(holder.contains("videoTrack="))
         assertFalse(video.contains("PlayerView"))
         assertFalse(video.contains("IptvActivity"))
     }
@@ -95,17 +140,24 @@ class HostedProjectionSourceTest {
     @Test
     fun youtubeInitializesHostedWebViewWithoutPhoneActivity() {
         val youtube = source("java/com/karadaglabs/cartv/CarYouTubeActivity.kt")
+        val pane = source("java/com/karadaglabs/cartv/HostedWebPane.kt")
         val hosted = source("java/com/karadaglabs/cartv/HostedWebView.kt")
         val projection = source("java/com/karadaglabs/cartv/CarProjectionWebView.kt")
         val phone = source("java/com/karadaglabs/cartv/YouTubeActivity.kt")
+        val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
 
         assertTrue(youtube.contains("CAR YOUTUBE ACTIVITY AÇILDI"))
         assertTrue(youtube.contains("CAR YOUTUBE WEBVIEW READY"))
-        assertTrue(youtube.contains("CAR YOUTUBE URL LOADED"))
-        assertTrue(youtube.contains("CarProjectionWebView"))
-        assertTrue(youtube.contains("HostedWebView.configure"))
-        assertTrue(youtube.contains("CarVideoFocus.request"))
-        assertTrue(youtube.contains("canGoBack()"))
+        assertTrue(youtube.contains("HostedWebPane"))
+        assertTrue(pane.contains("CAR YOUTUBE REQUEST"))
+        assertTrue(pane.contains("CAR YOUTUBE ATTACHED"))
+        assertTrue(pane.contains("CAR YOUTUBE SIZE="))
+        assertTrue(pane.contains("CAR YOUTUBE PAGE FINISHED"))
+        assertTrue(pane.contains("CarProjectionWebView"))
+        assertTrue(pane.contains("HostedWebView.configure"))
+        assertTrue(pane.contains("CarVideoFocus.request"))
+        assertTrue(pane.contains("canGoBack()"))
+        assertTrue(video.contains("attachWebPane"))
         assertTrue(hosted.contains("javaScriptEnabled = true"))
         assertTrue(hosted.contains("mediaPlaybackRequiresUserGesture = false"))
         assertTrue(hosted.contains("view.destroy()"))
@@ -114,29 +166,36 @@ class HostedProjectionSourceTest {
         assertFalse(youtube.contains("YouTubeActivity::class"))
         assertFalse(youtube.contains("ACTION_VIEW"))
         assertFalse(youtube.contains("startActivity("))
+        assertFalse(pane.contains("ACTION_VIEW"))
         assertTrue(phone.contains("class YouTubeActivity"))
     }
 
     @Test
     fun googleInitializesHostedWebViewWithoutPhoneIntent() {
         val google = source("java/com/karadaglabs/cartv/CarGoogleActivity.kt")
+        val pane = source("java/com/karadaglabs/cartv/HostedWebPane.kt")
         val hosted = source("java/com/karadaglabs/cartv/HostedWebView.kt")
 
         assertTrue(google.contains("CAR GOOGLE ACTIVITY AÇILDI"))
         assertTrue(google.contains("CAR GOOGLE WEBVIEW READY"))
-        assertTrue(google.contains("CAR GOOGLE URL LOADED"))
-        assertTrue(google.contains("CarProjectionWebView"))
+        assertTrue(google.contains("HostedWebPane"))
         assertTrue(google.contains("https://www.google.com/"))
-        assertTrue(google.contains("searchController"))
-        assertTrue(google.contains("SearchCallback"))
-        assertTrue(google.contains("CarVideoFocus.request"))
-        assertTrue(google.contains("canGoBack()"))
+        assertTrue(pane.contains("searchController"))
+        assertTrue(pane.contains("SearchCallback"))
+        assertTrue(pane.contains("CAR GOOGLE REQUEST"))
+        assertTrue(pane.contains("CAR GOOGLE ATTACHED"))
+        assertTrue(pane.contains("CAR GOOGLE SIZE="))
+        assertTrue(pane.contains("CAR GOOGLE PAGE FINISHED"))
+        assertTrue(pane.contains("CarVideoFocus.request"))
+        assertTrue(pane.contains("canGoBack()"))
+        assertTrue(pane.contains("CarProjectionWebView"))
         assertTrue(hosted.contains("javaScriptEnabled = true"))
         assertTrue(hosted.contains("view.destroy()"))
         assertTrue(hosted.contains("shouldOverrideUrlLoading"))
         assertFalse(google.contains("ACTION_VIEW"))
         assertFalse(google.contains("MainActivity"))
         assertFalse(google.contains("startActivity("))
+        assertFalse(pane.contains("ACTION_VIEW"))
     }
 
     @Test
@@ -167,9 +226,11 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("removeCallback"))
         assertTrue(holder.contains("clearVideoSurface()"))
         assertTrue(youtube.contains("onDestroy()"))
-        assertTrue(youtube.contains("HostedWebView.destroy"))
+        assertTrue(youtube.contains("webPane?.destroy()"))
         assertTrue(google.contains("onDestroy()"))
-        assertTrue(google.contains("HostedWebView.destroy"))
+        assertTrue(google.contains("webPane?.destroy()"))
+        val pane = source("java/com/karadaglabs/cartv/HostedWebPane.kt")
+        assertTrue(pane.contains("HostedWebView.destroy"))
         assertTrue(youtube.contains("onPause()"))
         assertTrue(google.contains("onPause()"))
     }

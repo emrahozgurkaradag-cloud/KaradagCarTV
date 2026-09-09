@@ -12,6 +12,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.DrawerCallback
+import com.google.android.apps.auto.sdk.MenuAdapter
 
 object HostedNavigation {
 
@@ -22,19 +24,53 @@ object HostedNavigation {
         from: CarActivity,
         destination: ProjectionDestination
     ) {
+        Log.d(
+            TAG,
+            "CAR HOST NAVIGATION start destination=${destination.name} " +
+                "from=${from.javaClass.simpleName}"
+        )
+
         try {
             CarVideoPlayerHolder.setPlayWhenReady(false)
+        } catch (_: Exception) {
+        }
 
-            val intent = Intent()
-            intent.setClassName(
-                from.packageName,
-                className(destination)
+        if (from is CarVideoActivity) {
+            from.showDestination(destination, launchedByHost = false)
+            HostedCarWindow.revealHostedContent(from)
+            Log.d(
+                TAG,
+                "startCarProjectionActivity skipped; CarVideoActivity already hosts " +
+                    destination.name
             )
-            intent.putExtra(
-                ProjectionDestination.EXTRA,
-                destination.name
-            )
+            return
+        }
+
+        val target = className(destination)
+        val intent = Intent()
+        intent.setClassName(from.packageName, target)
+        intent.putExtra(
+            ProjectionDestination.EXTRA,
+            destination.name
+        )
+
+        val projection = HostedCarWindow.startProjectionActivity(from, intent)
+        Log.d(
+            TAG,
+            "startCarProjectionActivity destination=${destination.name} " +
+                "target=$target " +
+                "attempted=${projection.attempted} " +
+                "succeeded=${projection.succeeded} " +
+                "reason=${projection.reason}"
+        )
+
+        try {
             from.startCarActivity(intent)
+            Log.d(
+                TAG,
+                "startCarActivity dispatched destination=${destination.name} " +
+                    "component=${intent.component}"
+            )
         } catch (exception: Exception) {
             Log.e(
                 TAG,
@@ -63,9 +99,62 @@ object HostedNavigation {
             val carUiController = activity.getCarUiController()
             carUiController.statusBarController.hideAppHeader()
             carUiController.menuController.hideMenuButton()
+            val drawer = carUiController.drawerController
+            drawer.closeDrawer()
+            drawer.setDrawerCallback(
+                object : DrawerCallback() {
+                    override fun onDrawerOpening() {
+                        Log.d(TAG, "host drawer opening; closing so PagedListView stays hidden")
+                        drawer.closeDrawer()
+                    }
+
+                    override fun onDrawerOpened() {
+                        drawer.closeDrawer()
+                        HostedCarWindow.suppressHostPagedLists(activity)
+                        HostedCarWindow.revealHostedContent(activity)
+                    }
+                }
+            )
+            Log.d(TAG, "car chrome hidden and drawer closed")
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to hide car chrome", exception)
         }
+    }
+
+    fun bindList(
+        activity: CarActivity,
+        adapter: MenuAdapter
+    ) {
+        try {
+            val controller = activity.getCarUiController().menuController
+            controller.setRootMenuAdapter(adapter)
+            controller.hideMenuButton()
+            activity.getCarUiController().drawerController.closeDrawer()
+            Log.d(
+                TAG,
+                "root MenuAdapter bound count=${adapter.menuItemCount} " +
+                    "title=${adapter.title} drawer=closed menuButton=hidden"
+            )
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to bind car MenuAdapter", exception)
+        }
+    }
+
+    fun closeDrawer(activity: CarActivity) {
+        try {
+            activity.getCarUiController().drawerController.closeDrawer()
+        } catch (exception: Exception) {
+            Log.w(TAG, "Unable to close car drawer", exception)
+        }
+    }
+
+    fun openDrawer(activity: CarActivity) {
+        closeDrawer(activity)
+        Log.d(
+            TAG,
+            "openDrawer suppressed; Gearhead PagedListView empty state " +
+                "is the car-screen 'Öğe yok' placeholder"
+        )
     }
 
     fun menuBar(
