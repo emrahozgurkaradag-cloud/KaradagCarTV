@@ -146,6 +146,10 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         showHostedDestination(destination)
     }
 
+    fun getWindow(): android.view.Window {
+        return CarContentSlot.hostWindow(this)
+    }
+
     override fun showHostedDestination(destination: ProjectionDestination) {
         when (destination) {
             ProjectionDestination.LIVE_TV -> showLiveTv()

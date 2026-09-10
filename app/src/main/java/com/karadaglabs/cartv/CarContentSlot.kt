@@ -3,7 +3,6 @@ package com.karadaglabs.cartv
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewTreeObserver
 import android.view.Window
 import com.google.android.apps.auto.sdk.CarActivity
 import java.util.WeakHashMap
@@ -43,6 +42,8 @@ object CarContentSlot {
     private const val SLOT_FIELD = "g"
 
     private val lastBind = WeakHashMap<View, BindKey>()
+    private val hookedParents = WeakHashMap<ViewGroup, Boolean>()
+    private val followupDelays = longArrayOf(0L, 16L, 50L, 100L, 250L, 500L)
 
     fun attach(activity: CarActivity, root: View) {
         root.keepScreenOn = true
@@ -56,11 +57,13 @@ object CarContentSlot {
         activity.setContentView(root)
         bindIntoSlot(activity, root)
         watchHostLayout(activity, root)
+        scheduleFollowup(activity, root)
         dumpHost(activity, root)
     }
 
     fun rebind(activity: CarActivity, root: View) {
         bindIntoSlot(activity, root)
+        scheduleFollowup(activity, root)
         dumpHost(activity, root)
     }
 
@@ -106,6 +109,7 @@ object CarContentSlot {
         applyHostPixels(root, size.width, size.height)
         unclipAncestors(host, appLayout)
         promote(host, root)
+        watchHierarchy(activity, root, host)
         host.requestLayout()
         root.requestLayout()
 
@@ -397,19 +401,55 @@ object CarContentSlot {
     private fun watchHostLayout(activity: CarActivity, root: View) {
         val windowView = decor(activity) ?: root
 
-        windowView.viewTreeObserver.addOnGlobalLayoutListener(
-            object : ViewTreeObserver.OnGlobalLayoutListener {
-                override fun onGlobalLayout() {
-                    if (root.parent == null) {
-                        windowView.viewTreeObserver.removeOnGlobalLayoutListener(this)
+        windowView.viewTreeObserver.addOnGlobalLayoutListener {
+            bindIntoSlot(activity, root)
+        }
+
+        scheduleFollowup(activity, root)
+    }
+
+    private fun watchHierarchy(
+        activity: CarActivity,
+        root: View,
+        host: ViewGroup
+    ) {
+        if (hookedParents.containsKey(host)) {
+            return
+        }
+        hookedParents[host] = true
+
+        host.setOnHierarchyChangeListener(
+            object : ViewGroup.OnHierarchyChangeListener {
+                override fun onChildViewAdded(parent: View, child: View) {
+                    if (child === root) {
                         return
                     }
-                    bindIntoSlot(activity, root)
+                    root.post {
+                        if (root.parent === parent) {
+                            root.bringToFront()
+                        } else {
+                            bindIntoSlot(activity, root)
+                        }
+                    }
+                }
+
+                override fun onChildViewRemoved(parent: View, child: View) {
+                    if (child !== root) {
+                        return
+                    }
+                    parent.post { bindIntoSlot(activity, root) }
                 }
             }
         )
+    }
 
-        root.post { bindIntoSlot(activity, root) }
+    private fun scheduleFollowup(activity: CarActivity, root: View) {
+        followupDelays.forEach { delay ->
+            root.postDelayed(
+                { bindIntoSlot(activity, root) },
+                delay
+            )
+        }
     }
 
     private fun dumpHost(activity: CarActivity, root: View) {

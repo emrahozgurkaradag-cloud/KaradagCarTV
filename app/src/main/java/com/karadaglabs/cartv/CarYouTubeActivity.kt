@@ -91,6 +91,10 @@ class CarYouTubeActivity : CarActivity() {
         view.loadUrl(YOUTUBE_URL)
     }
 
+    fun getWindow(): android.view.Window {
+        return CarContentSlot.hostWindow(this)
+    }
+
     override fun onStart() {
         super.onStart()
         overlay?.let { CarContentSlot.rebind(this, it) }
