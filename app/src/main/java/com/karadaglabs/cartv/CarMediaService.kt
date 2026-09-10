@@ -329,24 +329,60 @@ class CarMediaService : MediaLibraryService() {
                 parentId == LIVE_TV_HOSTED_ID
             ) {
 
-                val items =
+                val cached =
                     IptvRepository.loadCached(this@CarMediaService)
-                        .map { channel ->
 
-                            createLiveTvMediaItem(
-                                channel
-                            )
-                        }
+                if (cached.isNotEmpty()) {
 
-                return Futures.immediateFuture(
+                    return Futures.immediateFuture(
 
-                    LibraryResult.ofItemList(
-                        ImmutableList.copyOf(
-                            items
-                        ),
-                        params
+                        LibraryResult.ofItemList(
+                            ImmutableList.copyOf(
+                                cached.map { channel ->
+
+                                    createLiveTvMediaItem(
+                                        channel
+                                    )
+                                }
+                            ),
+                            params
+                        )
                     )
-                )
+                }
+
+                return executor.submit<
+                    LibraryResult<ImmutableList<MediaItem>>
+                    > {
+
+                    val channels =
+                        IptvRepository.loadCachedOrFastApi(
+                            this@CarMediaService
+                        )
+
+                    if (channels.isEmpty()) {
+
+                        LibraryResult.ofError(
+                            SessionError.ERROR_IO
+                        )
+                    } else {
+
+                        notifyMediaTreeChanged(
+                            channels.size
+                        )
+
+                        LibraryResult.ofItemList(
+                            ImmutableList.copyOf(
+                                channels.map { channel ->
+
+                                    createLiveTvMediaItem(
+                                        channel
+                                    )
+                                }
+                            ),
+                            params
+                        )
+                    }
+                }
             }
 
             /*
@@ -408,6 +444,39 @@ class CarMediaService : MediaLibraryService() {
 
                 LibraryResult.ofError(
                     SessionError.ERROR_BAD_VALUE
+                )
+            )
+        }
+
+        override fun onSubscribe(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            params: MediaLibraryService.LibraryParams?
+        ): ListenableFuture<LibraryResult<Void>> {
+
+            if (
+                parentId == ROOT_ID ||
+                parentId == LIVE_TV_ID
+            ) {
+
+                executor.execute {
+
+                    val channels =
+                        IptvRepository.loadFromApiWithCacheFallback(
+                            this@CarMediaService,
+                            maxAttempts = 1
+                        )
+
+                    notifyMediaTreeChanged(
+                        channels.size
+                    )
+                }
+            }
+
+            return Futures.immediateFuture(
+                LibraryResult.ofVoid(
+                    params
                 )
             )
         }
