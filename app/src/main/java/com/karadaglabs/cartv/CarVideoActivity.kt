@@ -165,6 +165,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 .add(R.id.car_host_root, fragment, "hosted")
                 .detach(fragment)
                 .commitNow()
+            ensureHostedPage()
             true
         } catch (exception: Exception) {
             Log.e(TAG, "CAR STREAM FRAGMENT HOST FAILED", exception)
@@ -194,7 +195,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             if (fragment.isDetached) {
                 manager.beginTransaction()
                     .attach(fragment)
-                    .commit()
+                    .commitNow()
             }
             Log.d(TAG, "CAR STREAM FRAGMENT ATTACHED")
             true
@@ -206,7 +207,14 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     internal fun hostedPageIfPresent(): View? {
         val page = rootColumn ?: return null
-        (page.parent as? ViewGroup)?.removeView(page)
+        val parent = page.parent as? ViewGroup
+        if (parent != null && parent.id == R.id.car_host_root) {
+            // Leave Live TV / YouTube / Google in slot g. androidx
+            // Fragment.detach() destroys this view; stealing it here
+            // leaves Gearhead's empty list ("Öğe yok").
+            return null
+        }
+        parent?.removeView(page)
         return page
     }
 
@@ -287,11 +295,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         hostProjectionFragment()
         attachHostedFragment()
         queueHostedFragmentAttach()
-        val waitingForAttach = hostedFragmentWaiting()
-        if (!waitingForAttach) {
-            if (rootColumn == null || rootColumn?.parent == null) {
-                ensureHostedPage()
-            }
+        hostedFragmentWaiting()
+        if (rootColumn == null || rootColumn?.parent == null) {
+            ensureHostedPage()
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
         // bindDrawerMenu shows the Gearhead title/menu; hide them again
@@ -303,7 +309,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             CarContentSlot.hideMenu(this)
         }
         val page = rootColumn
-        if (page != null && !waitingForAttach) {
+        if (page != null) {
             CarContentSlot.keepInSlot(this, page)
             if (!hostedReady) {
                 hostedReady = true
