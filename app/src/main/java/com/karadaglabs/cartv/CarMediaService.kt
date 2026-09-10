@@ -852,7 +852,7 @@ class CarMediaService : MediaLibraryService() {
 
         val items =
             ArrayList<MediaItem>(
-                radios.size + 3
+                radios.size + channels.size + 3
             )
 
         if (channels.isNotEmpty()) {
@@ -883,6 +883,15 @@ class CarMediaService : MediaLibraryService() {
             )
         }
 
+        channels.forEach { channel ->
+
+            items.add(
+                createLiveTvMediaItem(
+                    channel
+                )
+            )
+        }
+
         return items
     }
 
@@ -897,7 +906,7 @@ class CarMediaService : MediaLibraryService() {
         val rootCount =
             radios.size + 2 +
                 if (channelCount > 0) {
-                    1
+                    channelCount + 1
                 } else {
                     0
                 }
@@ -1164,6 +1173,11 @@ class CarMediaService : MediaLibraryService() {
             metadataBuilder.setMediaType(
                 MediaMetadata.MEDIA_TYPE_FOLDER_TV_CHANNELS
             )
+            metadataBuilder.setExtras(
+                browseGroupExtras(
+                    "Canlı TV"
+                )
+            )
         }
 
         return MediaItem.Builder()
@@ -1213,6 +1227,12 @@ class CarMediaService : MediaLibraryService() {
                         true
                     )
 
+                    .setExtras(
+                        browseGroupExtras(
+                            "YouTube"
+                        )
+                    )
+
                     .build()
             )
 
@@ -1253,10 +1273,39 @@ class CarMediaService : MediaLibraryService() {
                         true
                     )
 
+                    .setExtras(
+                        browseGroupExtras(
+                            "Google"
+                        )
+                    )
+
                     .build()
             )
 
             .build()
+    }
+
+    private fun browseGroupExtras(
+        groupTitle: String
+    ): Bundle {
+
+        return Bundle().apply {
+
+            putBoolean(
+                "android.media.browse.CONTENT_STYLE_SUPPORTED",
+                true
+            )
+
+            putInt(
+                "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT",
+                CONTENT_STYLE_LIST
+            )
+
+            putString(
+                "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT",
+                groupTitle
+            )
+        }
     }
 
     private fun skipHostedWeb(
@@ -1385,6 +1434,12 @@ class CarMediaService : MediaLibraryService() {
 
                 .setMediaType(
                     MediaMetadata.MEDIA_TYPE_TV_CHANNEL
+                )
+
+                .setExtras(
+                    browseGroupExtras(
+                        "Canlı TV"
+                    )
                 )
 
         channel.logoUrl

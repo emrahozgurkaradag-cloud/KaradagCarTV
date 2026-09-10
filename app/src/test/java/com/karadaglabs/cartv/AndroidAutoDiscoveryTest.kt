@@ -169,6 +169,8 @@ class AndroidAutoDiscoveryTest {
         assertTrue(rootBlock.contains("createYouTubeMediaItem"))
         assertTrue(rootBlock.contains("createGoogleMediaItem"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertTrue(rootBlock.contains("createLiveTvMediaItem"))
+        assertTrue(media.contains("CONTENT_STYLE_GROUP_TITLE_HINT"))
         assertFalse(rootBlock.contains("createInfoItem"))
         assertTrue(rootBlock.contains("📺 Canlı TV"))
         val liveStart = media.indexOf("parentId == LIVE_TV_ID")
