@@ -31,17 +31,14 @@ class CarGoogleActivity : CarActivity() {
 
         Log.d(TAG, "CAR GOOGLE ACTIVITY AÇILDI")
 
-        CarContentSlot.prepareHost(this)
-        HostedNavigation.hideChrome(this)
-        attachCarSearchBox()
-
-        val overlay = FrameLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+        val overlay = CarContentSlot.install(this)
+        if (overlay == null) {
+            Log.e(TAG, "HOST INSTALL FAILED CarActivity.g")
+            return
         }
         this.overlay = overlay
+        HostedNavigation.hideChrome(this)
+        attachCarSearchBox()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

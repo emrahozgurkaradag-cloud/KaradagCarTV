@@ -69,21 +69,16 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
         Log.d(TAG, "HOST_ACTIVITY_CREATED class=${javaClass.name}")
 
-        CarContentSlot.prepareHost(this)
+        val root = CarContentSlot.install(this)
+        if (root == null) {
+            Log.e(TAG, "HOST INSTALL FAILED CarActivity.g")
+            return
+        }
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
-
-        val root = FrameLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.BLACK)
-            keepScreenOn = true
-        }
 
         val content = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(

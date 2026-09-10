@@ -30,16 +30,13 @@ class CarYouTubeActivity : CarActivity() {
 
         Log.d(TAG, "CAR YOUTUBE ACTIVITY AÇILDI")
 
-        CarContentSlot.prepareHost(this)
-        HostedNavigation.hideChrome(this)
-
-        val overlay = FrameLayout(this).apply {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+        val overlay = CarContentSlot.install(this)
+        if (overlay == null) {
+            Log.e(TAG, "HOST INSTALL FAILED CarActivity.g")
+            return
         }
         this.overlay = overlay
+        HostedNavigation.hideChrome(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

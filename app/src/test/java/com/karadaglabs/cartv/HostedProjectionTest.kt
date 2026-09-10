@@ -63,6 +63,8 @@ class HostedProjectionDestinationTest {
         assertTrue(slot.contains("fun prepareHost"))
         assertTrue(slot.contains("hideMenuButton"))
         assertTrue(slot.contains("activity.setContentView(root)"))
+        assertTrue(slot.contains("R.layout.car_host_root"))
+        assertTrue(slot.contains("fun install"))
         assertTrue(slot.contains("MATCH_PARENT"))
         assertFalse(slot.contains("closeDrawer"))
         assertFalse(slot.contains("chooseVisibleHost"))
@@ -105,8 +107,9 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
         assertTrue(video.contains("setCarSurfaceView"))
         assertTrue(video.contains("SurfaceHolder.Callback"))
-        assertTrue(video.contains("CarContentSlot.prepareHost"))
+        assertTrue(video.contains("CarContentSlot.prepareHost") || video.contains("CarContentSlot.install"))
         assertTrue(video.contains("FrameLayout(this)"))
+        assertTrue(video.contains("CarContentSlot.install"))
         assertTrue(video.contains("CarContentSlot.attach"))
         assertTrue(video.contains("CarContentSlot.rebind"))
         assertTrue(video.contains("fun getWindow()"))
@@ -247,6 +250,11 @@ class HostedProjectionSourceTest {
         val addStart = media.indexOf("override fun onAddMediaItems")
         val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
+        val infoStart = media.indexOf("private fun createInfoItem")
+        val infoBlock = media.substring(infoStart, media.indexOf("private fun createRadioMediaItem", infoStart))
+        assertTrue(infoBlock.contains("setIsPlayable"))
+        assertTrue(infoBlock.contains("true"))
+        assertFalse(infoBlock.contains("setIsPlayable(\n                        false"))
     }
 
     @Test

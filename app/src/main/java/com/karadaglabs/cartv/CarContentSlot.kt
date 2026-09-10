@@ -4,32 +4,28 @@ import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.widget.FrameLayout
 import com.google.android.apps.auto.sdk.CarActivity
 
 /**
- * Fermata / aauto.aar hosted content path, from bytecode:
+ * Fermata / CarStream / aauto.aar hosted content path, from bytecode:
  *
  * CarActivity.onCreate:
  *   super.setContentView(CarUiController.d())  // Gearhead getAppLayout()
  *   g = (ViewGroup) findViewById(CarUiController.c())  // getContentContainerId()
  *
- * CarActivity.setContentView(View):
- *   g.removeAllViews(); g.addView(view);
+ * CarActivity.setContentView(int):
+ *   g.removeAllViews(); inflate(layout, g, true);
  *
- * Fermata MainCarActivity.initCarActivity:
- *   setIgnoreConfigChanges(0xFFFFFFFF);
- *   hideAppHeader(); hideMenuButton();
- *   getWindow() { return c(); }
- * then MainActivityDelegate.init() calls setContentView(layout).
+ * CarStream MainCarActivity.onCreate:
+ *   super.onCreate(bundle);
+ *   setContentView(R.layout.activity_car_main); // MATCH_PARENT FrameLayout
+ *   then hideAppHeader.
  *
- * App content stays in field CarActivity.g. This binder does not
- * change g's LayoutParams, z-order, or clip flags — Gearhead owns
- * that container. Window.setContentView is not called. The empty
- * PagedListView is not GONE; hideMenuButton is the public API that
- * keeps that list from being the visible pane.
- * After onStart, CarUiController.a() (Gearhead onStart) can restore
- * chrome, so prepareHost runs again and setContentView is repeated
- * only if our root was detached.
+ * Fermata hides chrome then later setContentView(layout). Filling g
+ * first keeps Gearhead from laying out the empty PagedListView as the
+ * only pane. App content stays in field CarActivity.g. Window.setContentView
+ * is not called. The empty PagedListView is not GONE.
  */
 object CarContentSlot {
 
@@ -56,19 +52,75 @@ object CarContentSlot {
         }
     }
 
-    fun attach(activity: CarActivity, root: View) {
-        root.keepScreenOn = true
-        fillParent(root)
+    fun install(activity: CarActivity): FrameLayout? {
+        try {
+            activity.setContentView(R.layout.car_host_root)
+        } catch (exception: Exception) {
+            Log.e(
+                TAG,
+                "setContentView(R.layout.car_host_root) into g failed",
+                exception
+            )
+            return null
+        }
+
         prepareHost(activity)
-        putInSlot(activity, root)
+
+        val root = activity.findViewById(R.id.car_host_root) as? FrameLayout
+        if (root == null) {
+            Log.e(TAG, "car_host_root missing after inflate into CarActivity.g")
+            return null
+        }
+
+        root.keepScreenOn = true
+        logChosen(activity, root)
         dumpHost(activity, root)
         scheduleDump(activity, root)
+        return root
+    }
+
+    fun attach(activity: CarActivity, root: View) {
+        root.keepScreenOn = true
+        val slot = resolveSlot(activity)
+        if (root.parent === slot || root.parent?.parent === slot) {
+            prepareHost(activity)
+            dumpHost(activity, root)
+            scheduleDump(activity, root)
+            return
+        }
+
+        val host = install(activity)
+        if (host != null && root !== host) {
+            (root.parent as? ViewGroup)?.removeView(root)
+            fillParent(root)
+            host.addView(
+                root,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+            dumpHost(activity, host)
+            scheduleDump(activity, host)
+            return
+        }
+
+        if (host == null) {
+            fillParent(root)
+            putInSlot(activity, root)
+            dumpHost(activity, root)
+            scheduleDump(activity, root)
+        }
     }
 
     fun rebind(activity: CarActivity, root: View) {
-        fillParent(root)
         prepareHost(activity)
-        if (root.parent == null || root.parent !== resolveSlot(activity)) {
+        val slot = resolveSlot(activity)
+        val attached =
+            root.parent === slot ||
+                root.parent?.parent === slot ||
+                root.parent != null
+        if (!attached) {
             putInSlot(activity, root)
         }
         dumpHost(activity, root)
@@ -103,6 +155,10 @@ object CarContentSlot {
             return
         }
 
+        logChosen(activity, root)
+    }
+
+    private fun logChosen(activity: CarActivity, root: View) {
         val attached = resolveSlot(activity)
         Log.d(
             TAG,

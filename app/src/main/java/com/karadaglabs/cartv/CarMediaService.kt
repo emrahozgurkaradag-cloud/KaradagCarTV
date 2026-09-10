@@ -821,7 +821,7 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     .setIsPlayable(
-                        false
+                        true
                     )
 
                     .build()
