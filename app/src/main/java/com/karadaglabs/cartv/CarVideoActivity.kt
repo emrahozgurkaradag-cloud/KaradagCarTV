@@ -147,7 +147,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             attachHostedFragment()
             ensureHostedPage()
             val page = rootColumn
-            if (page != null && !CarContentSlot.isInLiveSlot(this, page)) {
+            if (page != null) {
                 CarContentSlot.putPage(this, page)
                 hostRoot = page as? FrameLayout
             }

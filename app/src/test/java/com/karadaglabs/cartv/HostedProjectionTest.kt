@@ -133,7 +133,6 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("BoundCarHost.unbind"))
         assertTrue(video.contains("CAR STREAM FRAGMENT ATTACHED"))
         assertTrue(video.contains("CarContentSlot.putPage"))
-        assertTrue(video.contains("CarContentSlot.isInLiveSlot"))
         assertTrue(video.contains("CarContentSlot.attach"))
         assertTrue(video.contains("HostedProjectionFragment"))
         assertTrue(video.contains("getSupportFragmentManager") || video.contains("supportFragmentManager"))
