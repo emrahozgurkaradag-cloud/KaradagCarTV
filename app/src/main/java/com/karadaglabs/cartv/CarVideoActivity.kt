@@ -391,7 +391,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private fun fillHostedViews(page: View) {
         val metrics = resources.displayMetrics
         val slot = try {
-            findViewById<View>(carUiController.c())
+            findViewById(carUiController.c())
         } catch (_: Exception) {
             null
         }
