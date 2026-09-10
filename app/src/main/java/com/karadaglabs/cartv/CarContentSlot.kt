@@ -31,6 +31,12 @@ import com.google.android.apps.auto.sdk.CarActivity
  * CarStream attaches the hosted fragment after CarActivity.onStart
  * (Gearhead CarUiController.onStart). Attaching in onCreate lets
  * that restore cover the slot with the empty list.
+ *
+ * CarActivity.setContentView always writes field g, assigned once in
+ * onCreate from findViewById(getContentContainerId()). If Gearhead
+ * onStart replaces the window layout, g can point at a detached
+ * view. bindLiveSlotField reassigns g to the live window container
+ * from the same public ID before inflate.
  */
 object CarContentSlot {
 
@@ -71,6 +77,7 @@ object CarContentSlot {
     }
 
     fun install(activity: CarActivity): FrameLayout {
+        bindLiveSlotField(activity)
         try {
             activity.setContentView(R.layout.car_host_root)
         } catch (exception: Exception) {
@@ -107,8 +114,9 @@ object CarContentSlot {
 
     fun attach(activity: CarActivity, root: View) {
         root.keepScreenOn = true
+        bindLiveSlotField(activity)
         val slot = resolveSlot(activity)
-        if (root.parent === slot || root.parent?.parent === slot) {
+        if (slot != null && isUnder(slot, root)) {
             prepareHost(activity)
             dumpHost(activity, root)
             scheduleDump(activity, root)
@@ -133,11 +141,9 @@ object CarContentSlot {
 
     fun rebind(activity: CarActivity, root: View) {
         prepareHost(activity)
+        bindLiveSlotField(activity)
         val slot = resolveSlot(activity)
-        val attached =
-            root.parent === slot ||
-                root.parent?.parent === slot ||
-                root.parent != null
+        val attached = slot != null && isUnder(slot, root)
         if (!attached) {
             putInSlot(activity, root)
         }
@@ -156,7 +162,7 @@ object CarContentSlot {
     }
 
     private fun hostRootFromSlot(activity: CarActivity): FrameLayout? {
-        val slot = readCarActivitySlot(activity) ?: return null
+        val slot = resolveSlot(activity) ?: return null
         for (index in 0 until slot.childCount) {
             val child = slot.getChildAt(index)
             if (child.id == R.id.car_host_root && child is FrameLayout) {
@@ -170,6 +176,7 @@ object CarContentSlot {
     }
 
     private fun putInSlot(activity: CarActivity, root: View) {
+        bindLiveSlotField(activity)
         val slot = resolveSlot(activity)
         if (slot == null) {
             Log.e(
@@ -181,7 +188,19 @@ object CarContentSlot {
         try {
             (root.parent as? ViewGroup)?.removeView(root)
             fillParent(root)
-            activity.setContentView(root)
+            val field = readCarActivitySlot(activity)
+            if (slot != null && slot !== field) {
+                slot.removeAllViews()
+                slot.addView(
+                    root,
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+            } else {
+                activity.setContentView(root)
+            }
         } catch (exception: Exception) {
             Log.e(TAG, "CarActivity.setContentView into g failed", exception)
             return
@@ -218,32 +237,101 @@ object CarContentSlot {
 
     private fun resolveSlot(activity: CarActivity): ViewGroup? {
         val fromField = readCarActivitySlot(activity)
+        val fromId = contentContainerFromWindow(activity)
+        val fieldAttached = fromField?.isAttachedToWindow == true
+        val idAttached = fromId?.isAttachedToWindow == true
+        Log.d(
+            TAG,
+            "HOST_SLOT_LIVE same=${fromField === fromId} " +
+                "fieldAttached=$fieldAttached idAttached=$idAttached " +
+                "fieldG=${fromField?.javaClass?.name} " +
+                "fromId=${fromId?.javaClass?.name}"
+        )
+        return when {
+            idAttached && !fieldAttached -> fromId
+            idAttached && fromId !== fromField -> fromId
+            fieldAttached -> fromField
+            fromId != null -> fromId
+            else -> fromField
+        }
+    }
+
+    private fun contentContainerFromWindow(activity: CarActivity): ViewGroup? {
         val containerId = try {
             activity.carUiController.c()
         } catch (_: Exception) {
             0
         }
-        val fromId = if (containerId != 0) {
-            activity.findViewById(containerId) as? ViewGroup
-        } else {
-            null
+        if (containerId == 0) {
+            return null
         }
-        Log.d(
-            TAG,
-            "content slot fieldG=${fromField?.javaClass?.name} " +
-                "containerId=$containerId fromId=${fromId?.javaClass?.name}"
-        )
-        return fromField ?: fromId
+        return activity.findViewById(containerId) as? ViewGroup
+    }
+
+    private fun bindLiveSlotField(activity: CarActivity) {
+        val live = contentContainerFromWindow(activity) ?: return
+        val field = readCarActivitySlot(activity)
+        if (field === live && live.isAttachedToWindow) {
+            return
+        }
+        if (!live.isAttachedToWindow && field?.isAttachedToWindow == true) {
+            return
+        }
+        if (writeCarActivitySlot(activity, live)) {
+            Log.d(
+                TAG,
+                "HOST_SLOT_REBOUND attached=${live.isAttachedToWindow} " +
+                    "class=${live.javaClass.name}"
+            )
+        }
+    }
+
+    private fun isUnder(parent: ViewGroup, child: View): Boolean {
+        var current: View? = child
+        while (current != null) {
+            if (current === parent) {
+                return true
+            }
+            current = current.parent as? View
+        }
+        return false
     }
 
     private fun readCarActivitySlot(activity: CarActivity): ViewGroup? {
+        return carActivitySlotField(activity)?.let { field ->
+            try {
+                field.get(activity) as? ViewGroup
+            } catch (exception: Exception) {
+                Log.e(TAG, "CarActivity.$SLOT_FIELD unavailable", exception)
+                null
+            }
+        }
+    }
+
+    private fun writeCarActivitySlot(
+        activity: CarActivity,
+        slot: ViewGroup
+    ): Boolean {
+        val field = carActivitySlotField(activity) ?: return false
+        return try {
+            field.set(activity, slot)
+            true
+        } catch (exception: Exception) {
+            Log.e(TAG, "CarActivity.$SLOT_FIELD write failed", exception)
+            false
+        }
+    }
+
+    private fun carActivitySlotField(
+        activity: CarActivity
+    ): java.lang.reflect.Field? {
         var type: Class<*>? = activity.javaClass
         while (type != null && type != Any::class.java) {
             if (type.name == CAR_ACTIVITY_CLASS) {
                 return try {
                     val field = type.getDeclaredField(SLOT_FIELD)
                     field.isAccessible = true
-                    field.get(activity) as? ViewGroup
+                    field
                 } catch (exception: Exception) {
                     Log.e(TAG, "CarActivity.$SLOT_FIELD unavailable", exception)
                     null
@@ -324,7 +412,9 @@ object CarContentSlot {
         Log.d(
             TAG,
             "HOSTED_CONTENT_SIZE ${root.width}x${root.height} " +
-                "slot=${slot?.width ?: 0}x${slot?.height ?: 0}"
+                "slot=${slot?.width ?: 0}x${slot?.height ?: 0} " +
+                "slotAttached=${slot?.isAttachedToWindow == true} " +
+                "rootAttached=${root.isAttachedToWindow}"
         )
         dumpChildren(slot, "slot")
     }

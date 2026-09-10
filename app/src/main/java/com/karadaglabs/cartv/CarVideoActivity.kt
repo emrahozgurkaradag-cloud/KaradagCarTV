@@ -142,8 +142,11 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun revealHostedPage() {
-        attachHostedFragment()
-        ensureHostedPage()
+        if (!hostedReady) {
+            hostRoot = CarContentSlot.install(this)
+            attachHostedFragment()
+            ensureHostedPage()
+        }
         CarContentSlot.hideMenu(this)
         (rootColumn ?: hostRoot)?.let { root ->
             CarContentSlot.attach(this, root)
