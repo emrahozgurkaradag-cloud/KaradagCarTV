@@ -282,6 +282,7 @@ class AndroidAutoDiscoveryTest {
         assertTrue(destinations.contains("YouTube"))
         assertTrue(destinations.contains("Google"))
         assertTrue(chrome.contains("ProjectionDestination.entries"))
+        assertTrue(activity.contains("HostedCarWindow.install"))
         assertTrue(activity.contains("prepareChannel"))
         assertTrue(activity.contains("CAR VIDEO ACTIVITY AÇILDI"))
         assertTrue(activity.contains("CAR VIDEO SURFACE CREATED"))

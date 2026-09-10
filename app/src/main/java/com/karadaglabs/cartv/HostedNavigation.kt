@@ -1,6 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.util.Log
@@ -12,6 +11,10 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+
+interface HostedDestinationHost {
+    fun showHostedDestination(destination: ProjectionDestination)
+}
 
 object HostedNavigation {
 
@@ -25,16 +28,16 @@ object HostedNavigation {
         try {
             CarVideoPlayerHolder.setPlayWhenReady(false)
 
-            val intent = Intent()
-            intent.setClassName(
-                from.packageName,
-                className(destination)
+            if (from is CarVideoActivity) {
+                from.showHostedDestination(destination)
+                return
+            }
+
+            Log.e(
+                TAG,
+                "CAR HOST NAVIGATION FAILED destination=${destination.name} " +
+                    "reason=single_car_activity_only"
             )
-            intent.putExtra(
-                ProjectionDestination.EXTRA,
-                destination.name
-            )
-            from.startCarActivity(intent)
         } catch (exception: Exception) {
             Log.e(
                 TAG,
@@ -45,27 +48,8 @@ object HostedNavigation {
     }
 
     fun className(destination: ProjectionDestination): String {
-        return when (destination) {
-            ProjectionDestination.LIVE_TV,
-            ProjectionDestination.RADIO ->
-                CarVideoActivity::class.java.name
-
-            ProjectionDestination.YOUTUBE ->
-                CarYouTubeActivity::class.java.name
-
-            ProjectionDestination.GOOGLE ->
-                CarGoogleActivity::class.java.name
-        }
-    }
-
-    fun hideChrome(activity: CarActivity) {
-        try {
-            val carUiController = activity.getCarUiController()
-            carUiController.statusBarController.hideAppHeader()
-            carUiController.menuController.hideMenuButton()
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to hide car chrome", exception)
-        }
+        destination.name
+        return CarVideoActivity::class.java.name
     }
 
     fun menuBar(

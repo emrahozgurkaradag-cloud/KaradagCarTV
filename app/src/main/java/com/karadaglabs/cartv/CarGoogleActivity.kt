@@ -32,7 +32,6 @@ class CarGoogleActivity : CarActivity() {
         Log.d(TAG, "CAR GOOGLE ACTIVITY AÇILDI")
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
         attachCarSearchBox()
 
         val overlay = FrameLayout(this).apply {
@@ -65,6 +64,7 @@ class CarGoogleActivity : CarActivity() {
         HostedWebView.configure(view, desktopUserAgent = false)
 
         view.webViewClient = HostedWebViewClient {
+            Log.d(TAG, "CAR GOOGLE PAGE FINISHED")
             Log.d(TAG, "CAR GOOGLE URL LOADED")
         }
 
@@ -82,7 +82,7 @@ class CarGoogleActivity : CarActivity() {
 
         root.addView(view)
         overlay.addView(root)
-        setContentView(overlay)
+        HostedCarWindow.install(this, overlay)
 
         applyVideoFocus(request = true)
 
@@ -100,6 +100,7 @@ class CarGoogleActivity : CarActivity() {
         super.onResume()
         applyVideoFocus(request = true)
         webView?.onResume()
+        overlay?.let { HostedCarWindow.install(this, it) }
         attachCarSearchBox()
     }
 
