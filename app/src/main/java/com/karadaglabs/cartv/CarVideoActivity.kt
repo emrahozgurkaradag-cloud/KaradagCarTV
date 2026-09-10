@@ -640,7 +640,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             view.visibility = View.GONE
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
+        HostedCarList.showInSlot(this, webOverlay)
         attachWeb(YOUTUBE_URL, desktopUserAgent = true)
+        flushPendingWeb()
         refreshMenu()
         applyVideoFocus(request = true)
         rebindHostedPage()
@@ -658,7 +660,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             view.visibility = View.GONE
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
+        HostedCarList.showInSlot(this, webOverlay)
         attachWeb(GOOGLE_URL, desktopUserAgent = false)
+        flushPendingWeb()
         attachCarSearchBox()
         refreshMenu()
         applyVideoFocus(request = true)
@@ -925,6 +929,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         val view = surfaceView
         if (playing && view != null) {
+            HostedCarList.showInSlot(this, view)
             sizeSurfaceToHost(view)
             view.requestLayout()
         }
@@ -1112,14 +1117,24 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun refreshHostedList() {
-        val list = rootColumn?.findViewById<View>(R.id.car_paged_list) ?: return
+        val rows = hostedRows()
+        val list = rootColumn?.findViewById<View>(R.id.car_paged_list)
         val hide = destination == ProjectionDestination.YOUTUBE ||
             destination == ProjectionDestination.GOOGLE
-        list.visibility = if (hide) View.GONE else View.VISIBLE
-        if (hide) {
-            return
+        if (list != null) {
+            list.visibility = if (hide) View.GONE else View.VISIBLE
+            if (!hide) {
+                HostedCarList.attach(list, rows, ::onHostedRow)
+            }
         }
-        HostedCarList.attach(list, hostedRows(), ::onHostedRow)
+        if (!hide) {
+            HostedCarList.bindActivity(
+                this,
+                hostRoot,
+                rows,
+                ::onHostedRow
+            )
+        }
     }
 
     private fun hostedRows(): List<HostedCarList.Row> {

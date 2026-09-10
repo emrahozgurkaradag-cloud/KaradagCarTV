@@ -267,7 +267,12 @@ class HostedProjectionSourceTest {
         val hostedList = source("java/com/karadaglabs/cartv/HostedCarList.kt")
         assertTrue(hostedList.contains("PagedListView"))
         assertTrue(hostedList.contains("ItemCap"))
+        assertTrue(hostedList.contains("bindActivity"))
+        assertTrue(hostedList.contains("showInSlot"))
+        assertTrue(hostedList.contains("carUiController.c()"))
         assertTrue(hostedList.contains("YouTube") || hostedList.contains("setAdapter"))
+        assertTrue(video.contains("HostedCarList.bindActivity"))
+        assertTrue(video.contains("HostedCarList.showInSlot"))
         assertFalse(video.contains("HostedCarWindow"))
         assertFalse(video.contains("HostedWebPane"))
     }
