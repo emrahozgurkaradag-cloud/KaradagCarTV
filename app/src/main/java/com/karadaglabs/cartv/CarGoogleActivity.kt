@@ -1,19 +1,18 @@
 package com.karadaglabs.cartv
 
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup
-import android.webkit.WebView
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import com.google.android.apps.auto.sdk.CarActivity
 import com.google.android.apps.auto.sdk.SearchCallback
 import com.google.android.apps.auto.sdk.SearchItem
 
 /**
- * Hosted Google search WebView inside the CarActivityHost window.
- * Does not open the phone browser or Google app.
+ * Hosted Google WebView. Uses the same Gearhead MenuAdapter so the
+ * native list is never empty if this window is opened directly.
  */
 class CarGoogleActivity : CarActivity() {
 
@@ -22,9 +21,8 @@ class CarGoogleActivity : CarActivity() {
         const val GOOGLE_URL = "https://www.google.com/"
     }
 
-    private var webView: WebView? = null
-    private var chromeClient: HostedWebChromeClient? = null
     private var overlay: FrameLayout? = null
+    private var webPane: HostedWebPane? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,83 +30,72 @@ class CarGoogleActivity : CarActivity() {
         Log.d(TAG, "CAR GOOGLE ACTIVITY AÇILDI")
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
-        attachCarSearchBox()
 
         val overlay = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-        }
-        this.overlay = overlay
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+            setBackgroundColor(Color.WHITE)
             keepScreenOn = true
         }
-
-        root.addView(
-            HostedNavigation.menuBar(this, ProjectionDestination.GOOGLE) { destination ->
-                if (destination != ProjectionDestination.GOOGLE) {
-                    HostedNavigation.open(this, destination)
-                }
-            }
-        )
-
-        val view = CarProjectionWebView(HostedWebView.themedContext(this))
-        webView = view
-        HostedWebView.configure(view, desktopUserAgent = false)
-
-        view.webViewClient = HostedWebViewClient {
-            Log.d(TAG, "CAR GOOGLE URL LOADED")
-        }
-
-        val chrome = HostedWebChromeClient(overlay) {
-            applyVideoFocus(request = true)
-        }
-        chromeClient = chrome
-        view.webChromeClient = chrome
-        view.setBackgroundColor(android.graphics.Color.WHITE)
-        view.layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            0,
-            1f
-        )
-
-        root.addView(view)
-        overlay.addView(root)
+        this.overlay = overlay
         setContentView(overlay)
+        HostedCarChrome.fillHostContent(overlay)
 
+        val menu = HostedRootMenuAdapter(
+            onAction = { entry ->
+                when (entry.action) {
+                    HostedMenuAction.GOOGLE -> showGoogle()
+                    HostedMenuAction.YOUTUBE,
+                    HostedMenuAction.LIVE_TV,
+                    HostedMenuAction.RADIO,
+                    HostedMenuAction.CHANNEL,
+                    HostedMenuAction.RADIO_STATION ->
+                        HostedNavigation.open(
+                            this,
+                            when (entry.action) {
+                                HostedMenuAction.YOUTUBE -> ProjectionDestination.YOUTUBE
+                                HostedMenuAction.RADIO,
+                                HostedMenuAction.RADIO_STATION ->
+                                    ProjectionDestination.RADIO
+                                else -> ProjectionDestination.LIVE_TV
+                            }
+                        )
+                    HostedMenuAction.PLACEHOLDER -> Unit
+                }
+            },
+            channels = { IptvRepository.loadCached(this) },
+            channelLoading = { false },
+            channelError = { "" }
+        )
+        HostedCarChrome.install(this, menu, "Google")
+        attachCarSearchBox()
+
+        showGoogle()
         applyVideoFocus(request = true)
-
         Log.d(TAG, "CAR GOOGLE WEBVIEW READY")
-        view.loadUrl(GOOGLE_URL)
     }
 
     override fun onPause() {
         applyVideoFocus(request = false)
-        webView?.onPause()
+        webPane?.onPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
-        webView?.onResume()
+        webPane?.onResume()
         attachCarSearchBox()
+        HostedCarChrome.showContent(this, "Google")
     }
 
     override fun onDestroy() {
         applyVideoFocus(request = false)
-        chromeClient?.hideCustomViewIfPresent()
-        chromeClient = null
+        webPane?.destroy()
+        webPane = null
         overlay = null
-        destroyWebView()
         super.onDestroy()
     }
 
@@ -125,15 +112,23 @@ class CarGoogleActivity : CarActivity() {
         return super.onKeyUp(keyCode, keyEvent)
     }
 
+    private fun showGoogle() {
+        val overlay = this.overlay ?: return
+        val pane = webPane ?: HostedWebPane(this, overlay, TAG).also { webPane = it }
+        pane.show(GOOGLE_URL, desktopUserAgent = false) {
+            Log.d(TAG, "CAR GOOGLE URL LOADED")
+        }
+        HostedCarChrome.showContent(this, "Google")
+    }
+
     private fun navigateBack() {
-        if (chromeClient?.hideCustomViewIfPresent() == true) {
+        val view = webPane?.webView
+        if (view != null && view.canGoBack()) {
+            view.goBack()
             return
         }
 
-        val view = webView
-
-        if (view != null && view.canGoBack()) {
-            view.goBack()
+        if (webPane?.goBack() == true) {
             return
         }
 
@@ -142,7 +137,7 @@ class CarGoogleActivity : CarActivity() {
 
     private fun attachCarSearchBox() {
         try {
-            val ui = getCarUiController()
+            val ui = carUiController
             ui.statusBarController.showAppHeader()
             ui.statusBarController.setTitle("Google")
 
@@ -152,7 +147,7 @@ class CarGoogleActivity : CarActivity() {
                 object : SearchCallback() {
                     override fun onSearchSubmitted(query: String): Boolean {
                         Log.d(TAG, "CAR GOOGLE SEARCH SUBMITTED")
-                        webView?.loadUrl(HostedWebView.searchUrl(query))
+                        webPane?.webView?.loadUrl(HostedWebView.searchUrl(query))
                         search.stopSearch()
                         return true
                     }
@@ -164,7 +159,7 @@ class CarGoogleActivity : CarActivity() {
                         val title = item.title?.toString().orEmpty()
 
                         if (title.isNotBlank()) {
-                            webView?.loadUrl(HostedWebView.searchUrl(title))
+                            webPane?.webView?.loadUrl(HostedWebView.searchUrl(title))
                         }
                     }
                 }
@@ -186,11 +181,5 @@ class CarGoogleActivity : CarActivity() {
             TAG,
             "videoFocus request=$request granted=${result.granted} reason=${result.reason}"
         )
-    }
-
-    private fun destroyWebView() {
-        val view = webView
-        webView = null
-        HostedWebView.destroy(view)
     }
 }

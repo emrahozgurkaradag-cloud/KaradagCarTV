@@ -264,7 +264,10 @@ class AndroidAutoDiscoveryTest {
             "java/com/karadaglabs/cartv/CarVideoActivity.kt"
         ).readText()
         val chrome = sourceFile(
-            "java/com/karadaglabs/cartv/HostedNavigation.kt"
+            "java/com/karadaglabs/cartv/HostedCarMenuModel.kt"
+        ).readText()
+        val hostedChrome = sourceFile(
+            "java/com/karadaglabs/cartv/HostedCarChrome.kt"
         ).readText()
         val destinations = sourceFile(
             "java/com/karadaglabs/cartv/ProjectionDestination.kt"
@@ -277,11 +280,17 @@ class AndroidAutoDiscoveryTest {
         assertTrue(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
         assertTrue(chrome.contains("Karadag Car TV"))
+        assertTrue(hostedChrome.contains("setRootMenuAdapter"))
+        assertTrue(hostedChrome.contains("openDrawer"))
+        assertTrue(hostedChrome.contains("closeDrawer"))
+        assertFalse(hostedChrome.contains("View.GONE"))
         assertTrue(destinations.contains("Canlı TV"))
         assertTrue(destinations.contains("Canlı Radyo"))
         assertTrue(destinations.contains("YouTube"))
         assertTrue(destinations.contains("Google"))
-        assertTrue(chrome.contains("ProjectionDestination.entries"))
+        assertTrue(chrome.contains("Canlı TV"))
+        assertTrue(chrome.contains("YouTube"))
+        assertTrue(chrome.contains("Google"))
         assertTrue(activity.contains("prepareChannel"))
         assertTrue(activity.contains("CAR VIDEO ACTIVITY AÇILDI"))
         assertTrue(activity.contains("CAR VIDEO SURFACE CREATED"))
