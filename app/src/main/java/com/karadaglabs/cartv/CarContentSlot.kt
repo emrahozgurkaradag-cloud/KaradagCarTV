@@ -19,20 +19,16 @@ import java.util.WeakHashMap
  *   g.removeAllViews(); g.addView(view);
  *
  * That does **not** replace CarActivityHost.getWindow() (gms.car.c.c()).
- * App content is a sibling of Gearhead chrome, including the empty
- * PagedListView that shows "Öğe yok". CarActivity.onStart then calls
- * CarUiController.a() → Gearhead onStart(), which rebinds that chrome.
+ * Field CarActivity.g is the content_frame analogue. Gearhead's empty PagedListView
+ * lives in the same getAppLayout() and is what paints "Öğe yok".
  *
- * This binder uses those real fields/methods:
- *   CarActivity.g : ViewGroup
- *   CarUiController.c() : int getContentContainerId
- *   CarUiController.d() : View getAppLayout
- *   gms.car.c.c() : Window
+ * If `g` is attached and has real area, the app root stays there.
+ * If `g` is 0-size or smaller than the native list, the root is reparented
+ * onto the list's parent or getAppLayout() as a covering sibling — the
+ * views CarActivity.onCreate already installed. The list is not GONE,
+ * the drawer is not closed, and Window.setContentView is not used.
  *
- * It puts the app root into `g`, sizes `g` to the hosted window's
- * real pixels, and bringToFront() so the native empty list is no
- * longer the top sibling. It does not GONE the list, does not call
- * Window.setContentView, and does not close the drawer.
+ * Rebind after onStart: CarUiController.a() → Gearhead onStart().
  */
 object CarContentSlot {
 
@@ -43,7 +39,7 @@ object CarContentSlot {
         "com.google.android.apps.auto.sdk.CarActivity"
     private const val SLOT_FIELD = "g"
 
-    private val lastHostPixels = WeakHashMap<View, HostPixels>()
+    private val lastBind = WeakHashMap<View, BindKey>()
 
     fun attach(activity: CarActivity, root: View) {
         root.keepScreenOn = true
@@ -76,48 +72,95 @@ object CarContentSlot {
     }
 
     private fun bindIntoSlot(activity: CarActivity, root: View) {
-        val slot = resolveSlot(activity) ?: return
-        val appLayout = resolveAppLayout(activity)
-        val size = hostSize(activity, appLayout)
-        val alreadyBound = root.parent === slot && lastHostPixels[root] == size
+        val slot = resolveSlot(activity)
+        val appLayout = resolveAppLayout(activity) as? ViewGroup
+        val nativeList = findNativeList(appLayout) ?: findNativeList(decor(activity))
+        val host = chooseVisibleHost(slot, appLayout, nativeList) ?: return
+        val size = hostSize(activity, appLayout, host)
+        val key = BindKey(
+            hostIdentity = System.identityHashCode(host),
+            width = size.width,
+            height = size.height
+        )
 
-        if (alreadyBound) {
-            slot.elevation = SLOT_ELEVATION
-            slot.translationZ = SLOT_ELEVATION
-            slot.bringToFront()
-            root.bringToFront()
+        if (root.parent === host && lastBind[root] == key) {
+            promote(host, root)
             return
         }
 
-        lastHostPixels[root] = size
-
-        ensureChild(slot, root)
-        applyHostPixels(slot, size.width, size.height)
+        lastBind[root] = key
+        ensureChild(host, root, replaceChildren = host === slot)
+        applyHostPixels(host, size.width, size.height)
         applyHostPixels(root, size.width, size.height)
+        unclipAncestors(host, appLayout)
+        promote(host, root)
+        host.requestLayout()
+        root.requestLayout()
 
-        var ancestor: View? = slot
-        while (ancestor != null && ancestor !== appLayout) {
-            (ancestor.parent as? ViewGroup)?.let { parent ->
-                parent.clipChildren = false
-                parent.clipToPadding = false
-            }
-            applyHostPixels(ancestor, size.width, size.height)
-            ancestor = ancestor.parent as? View
+        Log.d(
+            TAG,
+            "HOST_CHOSEN_CLASS class=${host.javaClass.name} " +
+                "slot=${slot?.javaClass?.name} " +
+                "appLayout=${appLayout?.javaClass?.name} " +
+                "list=${nativeList?.javaClass?.name} " +
+                "slotArea=${area(slot)} listArea=${area(nativeList)} " +
+                "hostArea=${area(host)}"
+        )
+    }
+
+    private fun chooseVisibleHost(
+        slot: ViewGroup?,
+        appLayout: ViewGroup?,
+        nativeList: View?
+    ): ViewGroup? {
+        val slotArea = area(slot)
+        val listArea = area(nativeList)
+        val appArea = area(appLayout)
+
+        if (
+            slot != null &&
+            slot.isAttachedToWindow &&
+            slotArea > 0 &&
+            (appArea == 0 || slotArea * 3 >= appArea)
+        ) {
+            return slot
+        }
+
+        val listParent = nativeList?.parent as? ViewGroup
+        if (listParent != null && listArea > slotArea) {
+            return listParent
         }
 
         if (appLayout != null) {
-            applyHostPixels(appLayout, size.width, size.height)
-            (appLayout as? ViewGroup)?.clipChildren = false
-            (appLayout as? ViewGroup)?.clipToPadding = false
+            return appLayout
         }
 
-        slot.elevation = SLOT_ELEVATION
-        slot.translationZ = SLOT_ELEVATION
-        slot.isClickable = true
-        slot.bringToFront()
+        return slot
+    }
+
+    private fun promote(host: ViewGroup, root: View) {
+        host.elevation = SLOT_ELEVATION
+        host.translationZ = SLOT_ELEVATION
+        host.isClickable = true
+        host.bringToFront()
+        root.elevation = SLOT_ELEVATION
+        root.translationZ = SLOT_ELEVATION
+        root.isClickable = true
         root.bringToFront()
-        slot.requestLayout()
-        root.requestLayout()
+    }
+
+    private fun unclipAncestors(from: View, appLayout: View?) {
+        var ancestor: View? = from
+        while (ancestor != null) {
+            (ancestor as? ViewGroup)?.let { group ->
+                group.clipChildren = false
+                group.clipToPadding = false
+            }
+            if (ancestor === appLayout) {
+                break
+            }
+            ancestor = ancestor.parent as? View
+        }
     }
 
     private fun resolveSlot(activity: CarActivity): ViewGroup? {
@@ -172,9 +215,18 @@ object CarContentSlot {
         }
     }
 
+    private fun decor(activity: CarActivity): View? {
+        return try {
+            hostWindow(activity).decorView
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun hostSize(
         activity: CarActivity,
-        appLayout: View?
+        appLayout: View?,
+        host: View
     ): HostPixels {
         val window = try {
             hostWindow(activity)
@@ -185,6 +237,8 @@ object CarContentSlot {
         val metrics = activity.resources.displayMetrics
 
         val width = firstPositive(
+            host.width,
+            host.measuredWidth,
             decor?.width ?: 0,
             decor?.measuredWidth ?: 0,
             appLayout?.width ?: 0,
@@ -193,6 +247,8 @@ object CarContentSlot {
             metrics.widthPixels
         )
         val height = firstPositive(
+            host.height,
+            host.measuredHeight,
             decor?.height ?: 0,
             decor?.measuredHeight ?: 0,
             appLayout?.height ?: 0,
@@ -208,16 +264,32 @@ object CarContentSlot {
         return values.firstOrNull { it > 0 } ?: 0
     }
 
-    private fun ensureChild(slot: ViewGroup, root: View) {
-        if (root.parent === slot) {
+    private fun area(view: View?): Int {
+        if (view == null) {
+            return 0
+        }
+        val width = firstPositive(view.width, view.measuredWidth)
+        val height = firstPositive(view.height, view.measuredHeight)
+        return width * height
+    }
+
+    private fun ensureChild(
+        host: ViewGroup,
+        root: View,
+        replaceChildren: Boolean
+    ) {
+        if (root.parent === host) {
             return
         }
 
         (root.parent as? ViewGroup)?.removeView(root)
 
-        if (slot.indexOfChild(root) < 0) {
-            slot.removeAllViews()
-            slot.addView(
+        if (replaceChildren) {
+            host.removeAllViews()
+        }
+
+        if (host.indexOfChild(root) < 0) {
+            host.addView(
                 root,
                 ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -247,11 +319,7 @@ object CarContentSlot {
     }
 
     private fun watchHostLayout(activity: CarActivity, root: View) {
-        val windowView = try {
-            hostWindow(activity).decorView
-        } catch (_: Exception) {
-            root
-        }
+        val windowView = decor(activity) ?: root
 
         windowView.viewTreeObserver.addOnGlobalLayoutListener(
             object : ViewTreeObserver.OnGlobalLayoutListener {
@@ -276,7 +344,8 @@ object CarContentSlot {
         }
         val decor = window?.decorView
         val slot = resolveSlot(activity)
-        val nativeList = findNativeList(decor)
+        val appLayout = resolveAppLayout(activity)
+        val nativeList = findNativeList(appLayout) ?: findNativeList(decor)
 
         Log.d(TAG, "HOST_ACTIVITY_CREATED class=${activity.javaClass.name}")
         Log.d(
@@ -311,13 +380,28 @@ object CarContentSlot {
         Log.d(
             TAG,
             "HOSTED_CONTENT_PARENT parent=${parentName(root)} " +
-                "slot=${slot?.javaClass?.name}"
+                "slot=${slot?.javaClass?.name} " +
+                "appLayout=${appLayout?.javaClass?.name}"
         )
         Log.d(
             TAG,
             "HOSTED_CONTENT_SIZE ${root.width}x${root.height} " +
                 "slot=${slot?.width ?: 0}x${slot?.height ?: 0}"
         )
+        dumpChildren("HOST_APP_LAYOUT", appLayout)
+    }
+
+    private fun dumpChildren(label: String, view: View?) {
+        val group = view as? ViewGroup ?: return
+        val parts = ArrayList<String>(group.childCount)
+        for (index in 0 until group.childCount) {
+            val child = group.getChildAt(index)
+            parts.add(
+                "${child.javaClass.simpleName}:${child.width}x${child.height}:" +
+                    visibilityName(child)
+            )
+        }
+        Log.d(TAG, "$label children=${parts.joinToString(",")}")
     }
 
     private fun findNativeList(root: View?): View? {
@@ -359,6 +443,12 @@ object CarContentSlot {
     }
 
     private data class HostPixels(
+        val width: Int,
+        val height: Int
+    )
+
+    private data class BindKey(
+        val hostIdentity: Int,
         val width: Int,
         val height: Int
     )
