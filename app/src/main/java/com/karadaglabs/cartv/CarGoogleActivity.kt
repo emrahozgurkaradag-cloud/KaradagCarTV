@@ -32,10 +32,6 @@ class CarGoogleActivity : CarActivity() {
         Log.d(TAG, "CAR GOOGLE ACTIVITY AÇILDI")
 
         val overlay = CarContentSlot.install(this)
-        if (overlay == null) {
-            Log.e(TAG, "HOST INSTALL FAILED CarActivity.g")
-            return
-        }
         this.overlay = overlay
         HostedNavigation.hideChrome(this)
         attachCarSearchBox()

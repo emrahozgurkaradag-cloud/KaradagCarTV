@@ -65,6 +65,7 @@ class HostedProjectionDestinationTest {
         assertTrue(slot.contains("activity.setContentView(root)"))
         assertTrue(slot.contains("R.layout.car_host_root"))
         assertTrue(slot.contains("fun install"))
+        assertTrue(slot.contains("hostRootFromSlot"))
         assertTrue(slot.contains("MATCH_PARENT"))
         assertFalse(slot.contains("closeDrawer"))
         assertFalse(slot.contains("chooseVisibleHost"))

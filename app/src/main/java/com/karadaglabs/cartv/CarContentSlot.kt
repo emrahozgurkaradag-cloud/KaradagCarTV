@@ -52,7 +52,7 @@ object CarContentSlot {
         }
     }
 
-    fun install(activity: CarActivity): FrameLayout? {
+    fun install(activity: CarActivity): FrameLayout {
         try {
             activity.setContentView(R.layout.car_host_root)
         } catch (exception: Exception) {
@@ -61,17 +61,26 @@ object CarContentSlot {
                 "setContentView(R.layout.car_host_root) into g failed",
                 exception
             )
-            return null
+        }
+
+        var root = hostRootFromSlot(activity)
+        if (root == null) {
+            root = activity.findViewById(R.id.car_host_root) as? FrameLayout
+        }
+        if (root == null) {
+            Log.w(TAG, "car_host_root missing after inflate; adding FrameLayout to g")
+            root = FrameLayout(activity).apply {
+                id = R.id.car_host_root
+                keepScreenOn = true
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+            putInSlot(activity, root)
         }
 
         prepareHost(activity)
-
-        val root = activity.findViewById(R.id.car_host_root) as? FrameLayout
-        if (root == null) {
-            Log.e(TAG, "car_host_root missing after inflate into CarActivity.g")
-            return null
-        }
-
         root.keepScreenOn = true
         logChosen(activity, root)
         dumpHost(activity, root)
@@ -90,7 +99,7 @@ object CarContentSlot {
         }
 
         val host = install(activity)
-        if (host != null && root !== host) {
+        if (root !== host) {
             (root.parent as? ViewGroup)?.removeView(root)
             fillParent(root)
             host.addView(
@@ -100,17 +109,9 @@ object CarContentSlot {
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
             )
-            dumpHost(activity, host)
-            scheduleDump(activity, host)
-            return
         }
-
-        if (host == null) {
-            fillParent(root)
-            putInSlot(activity, root)
-            dumpHost(activity, root)
-            scheduleDump(activity, root)
-        }
+        dumpHost(activity, host)
+        scheduleDump(activity, host)
     }
 
     fun rebind(activity: CarActivity, root: View) {
@@ -135,6 +136,20 @@ object CarContentSlot {
         return view.visibility == View.VISIBLE &&
             view.width > 0 &&
             view.height > 0
+    }
+
+    private fun hostRootFromSlot(activity: CarActivity): FrameLayout? {
+        val slot = readCarActivitySlot(activity) ?: return null
+        for (index in 0 until slot.childCount) {
+            val child = slot.getChildAt(index)
+            if (child.id == R.id.car_host_root && child is FrameLayout) {
+                return child
+            }
+        }
+        if (slot.childCount == 1) {
+            return slot.getChildAt(0) as? FrameLayout
+        }
+        return null
     }
 
     private fun putInSlot(activity: CarActivity, root: View) {

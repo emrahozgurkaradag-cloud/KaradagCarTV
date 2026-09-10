@@ -70,10 +70,6 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         Log.d(TAG, "HOST_ACTIVITY_CREATED class=${javaClass.name}")
 
         val root = CarContentSlot.install(this)
-        if (root == null) {
-            Log.e(TAG, "HOST INSTALL FAILED CarActivity.g")
-            return
-        }
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
