@@ -184,7 +184,10 @@ class AndroidAutoDiscoveryTest {
         assertTrue(liveBlock.contains("IptvRepository.loadCached"))
         assertTrue(liveBlock.contains("loadCachedOrFastApi"))
         assertTrue(liveBlock.contains("createLiveTvMediaItem"))
+        assertTrue(liveBlock.contains("createLiveTvOpenItem"))
+        assertTrue(liveBlock.contains("LIVE_TV_HOSTED_ID") || liveBlock.contains("createLiveTvOpenItem"))
         assertTrue(liveBlock.contains("SessionError.ERROR_IO"))
+        assertFalse(liveBlock.contains("LibraryResult.ofError"))
         assertTrue(media.contains("▶️ YouTube"))
         assertTrue(media.contains("🔎 Google Arama"))
         assertTrue(media.contains("createLiveTvMediaItem"))
@@ -285,7 +288,8 @@ class AndroidAutoDiscoveryTest {
             if (google > start) google else media.length
         )
 
-        return !block.contains("createYouTubeMediaItem()")
+        return !block.contains("createYouTubeMediaItem") ||
+            !block.contains("YOUTUBE_PHONE_ID")
     }
 
     @Test

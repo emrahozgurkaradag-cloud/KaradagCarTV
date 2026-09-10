@@ -88,6 +88,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
 
+        CarContentSlot.prepareHost(this)
         setContentView(R.layout.car_host_root)
         hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
         ensureHostedPage()
@@ -314,7 +315,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             return
         }
         Log.d(TAG, "HOST_SLOT_MEDIA_CONNECT")
-        revealHostedPage(force = true)
+        revealHostedPage(force = hostRoot?.isAttachedToWindow != true)
         rootColumn?.let { root ->
             CarContentSlot.rebind(this, root)
         }

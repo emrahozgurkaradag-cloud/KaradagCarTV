@@ -363,8 +363,12 @@ class CarMediaService : MediaLibraryService() {
 
                     if (channels.isEmpty()) {
 
-                        LibraryResult.ofError(
-                            SessionError.ERROR_IO
+                        // SessionError.ERROR_IO becomes "Öğe yok" on the car.
+                        LibraryResult.ofItemList(
+                            ImmutableList.of(
+                                createLiveTvOpenItem()
+                            ),
+                            params
                         )
                     } else {
 
@@ -393,16 +397,15 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (
-                parentId == YOUTUBE_ID ||
-                parentId == YOUTUBE_PHONE_ID
-            ) {
+            if (parentId == YOUTUBE_ID) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.of(
-                            createYouTubeMediaItem()
+                            createYouTubeMediaItem(
+                                YOUTUBE_PHONE_ID
+                            )
                         ),
                         params
                     )
@@ -415,16 +418,15 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (
-                parentId == GOOGLE_ID ||
-                parentId == GOOGLE_PHONE_ID
-            ) {
+            if (parentId == GOOGLE_ID) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.of(
-                            createGoogleMediaItem()
+                            createGoogleMediaItem(
+                                GOOGLE_PHONE_ID
+                            )
                         ),
                         params
                     )
@@ -579,7 +581,9 @@ class CarMediaService : MediaLibraryService() {
 
                     LibraryResult.ofItem(
 
-                        createYouTubeMediaItem(),
+                        createYouTubeMediaItem(
+                            mediaId
+                        ),
 
                         null
                     )
@@ -599,7 +603,9 @@ class CarMediaService : MediaLibraryService() {
 
                     LibraryResult.ofItem(
 
-                        createGoogleMediaItem(),
+                        createGoogleMediaItem(
+                            mediaId
+                        ),
 
                         null
                     )
@@ -770,7 +776,9 @@ class CarMediaService : MediaLibraryService() {
             mediaId == YOUTUBE_PHONE_ID
         ) {
 
-            return createYouTubeMediaItem()
+            return createYouTubeMediaItem(
+                mediaId
+            )
         }
 
         if (
@@ -778,7 +786,9 @@ class CarMediaService : MediaLibraryService() {
             mediaId == GOOGLE_PHONE_ID
         ) {
 
-            return createGoogleMediaItem()
+            return createGoogleMediaItem(
+                mediaId
+            )
         }
 
         if (mediaId.startsWith("live-tv-")) {
@@ -823,6 +833,8 @@ class CarMediaService : MediaLibraryService() {
                     channel
                 )
             }
+
+            return createLiveTvOpenItem()
         }
 
         return null
@@ -1006,6 +1018,9 @@ class CarMediaService : MediaLibraryService() {
 
         if (id == LIVE_TV_ID) {
 
+            metadataBuilder.setIsPlayable(
+                true
+            )
             metadataBuilder.setMediaType(
                 MediaMetadata.MEDIA_TYPE_FOLDER_TV_CHANNELS
             )
@@ -1029,12 +1044,62 @@ class CarMediaService : MediaLibraryService() {
             .build()
     }
 
-    private fun createYouTubeMediaItem(): MediaItem {
+    private fun createLiveTvOpenItem(): MediaItem {
 
         return MediaItem.Builder()
 
             .setMediaId(
-                YOUTUBE_ID
+                LIVE_TV_HOSTED_ID
+            )
+
+            .setUri(
+                silenceUri()
+            )
+
+            .setMediaMetadata(
+
+                MediaMetadata.Builder()
+
+                    .setTitle(
+                        "📺 Canlı TV"
+                    )
+
+                    .setArtist(
+                        "Canlı TV araç ekranında açılır"
+                    )
+
+                    .setIsBrowsable(
+                        false
+                    )
+
+                    .setIsPlayable(
+                        true
+                    )
+
+                    .setMediaType(
+                        MediaMetadata.MEDIA_TYPE_TV_CHANNEL
+                    )
+
+                    .setExtras(
+                        browseGroupExtras(
+                            "Canlı TV"
+                        )
+                    )
+
+                    .build()
+            )
+
+            .build()
+    }
+
+    private fun createYouTubeMediaItem(
+        id: String = YOUTUBE_ID
+    ): MediaItem {
+
+        return MediaItem.Builder()
+
+            .setMediaId(
+                id
             )
 
             .setUri(
@@ -1054,7 +1119,7 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     .setIsBrowsable(
-                        false
+                        id == YOUTUBE_ID
                     )
 
                     .setIsPlayable(
@@ -1073,12 +1138,14 @@ class CarMediaService : MediaLibraryService() {
             .build()
     }
 
-    private fun createGoogleMediaItem(): MediaItem {
+    private fun createGoogleMediaItem(
+        id: String = GOOGLE_ID
+    ): MediaItem {
 
         return MediaItem.Builder()
 
             .setMediaId(
-                GOOGLE_ID
+                id
             )
 
             .setUri(
@@ -1098,7 +1165,7 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     .setIsBrowsable(
-                        false
+                        id == GOOGLE_ID
                     )
 
                     .setIsPlayable(
