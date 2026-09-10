@@ -66,8 +66,11 @@ object CarContentSlot {
     private val keepCallbacks = mutableMapOf<Int, MutableList<Runnable>>()
 
     fun prepareHost(activity: CarActivity) {
-        hideHeader(activity)
-        hideMenu(activity)
+        try {
+            activity.setIgnoreConfigChanges(0xFFFFFFFF.toInt())
+        } catch (exception: Exception) {
+            Log.w(TAG, "setIgnoreConfigChanges unavailable", exception)
+        }
     }
 
     fun hideHeader(activity: CarActivity) {

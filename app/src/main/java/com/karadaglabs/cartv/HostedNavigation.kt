@@ -63,6 +63,47 @@ object HostedNavigation {
         }
     }
 
+    fun bindDrawerMenu(
+        activity: CarActivity,
+        current: ProjectionDestination,
+        onSelect: (ProjectionDestination) -> Unit
+    ) {
+        try {
+            val ui = activity.carUiController
+            ui.menuController.setRootMenuAdapter(
+                DestinationMenuAdapter(onSelect)
+            )
+            ui.menuController.showMenuButton()
+            ui.statusBarController.showTitle()
+            ui.statusBarController.setTitle(current.label)
+            Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
+        } catch (exception: Exception) {
+            Log.e(TAG, "HOST_MENU_BIND failed", exception)
+        }
+    }
+
+    private class DestinationMenuAdapter(
+        private val onSelect: (ProjectionDestination) -> Unit
+    ) : com.google.android.apps.auto.sdk.MenuAdapter() {
+
+        private val items = ProjectionDestination.entries
+
+        override fun getMenuItemCount(): Int = items.size
+
+        override fun getMenuItem(index: Int): com.google.android.apps.auto.sdk.MenuItem {
+            return com.google.android.apps.auto.sdk.MenuItem.Builder()
+                .setTitle(items[index].label)
+                .setType(com.google.android.apps.auto.sdk.MenuItem.Type.ITEM)
+                .build()
+        }
+
+        override fun onMenuItemClicked(index: Int) {
+            if (index in items.indices) {
+                onSelect(items[index])
+            }
+        }
+    }
+
     fun menuBar(
         activity: CarActivity,
         current: ProjectionDestination,

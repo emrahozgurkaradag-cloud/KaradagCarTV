@@ -83,13 +83,13 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         BoundCarHost.bind(this)
 
-        CarContentSlot.hideHeader(this)
-        CarContentSlot.hideMenu(this)
-
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
+
+        CarContentSlot.hideHeader(this)
+        HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
 
         setContentView(R.layout.car_host_root)
         hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
@@ -215,7 +215,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             }
             ensureHostedPage()
         }
-        CarContentSlot.hideMenu(this)
+        HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
         val page = rootColumn
         if (page != null) {
             CarContentSlot.keepInSlot(this, page)
@@ -308,6 +308,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             ProjectionDestination.YOUTUBE -> showYouTube()
             ProjectionDestination.GOOGLE -> showGoogle()
         }
+        HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
     }
 
     override fun attachAfterMediaConnect() {
@@ -606,7 +607,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             Log.w(TAG, "hideSearchBox unavailable", exception)
         }
         CarContentSlot.hideHeader(this)
-        CarContentSlot.hideMenu(this)
+        HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
     }
 
     private fun logWebAttachment() {
