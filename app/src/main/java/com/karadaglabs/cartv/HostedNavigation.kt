@@ -11,6 +11,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import java.util.Collections
+import java.util.WeakHashMap
 
 object HostedNavigation {
 
@@ -63,6 +65,9 @@ object HostedNavigation {
         }
     }
 
+    private val boundMenus: MutableSet<CarActivity> =
+        Collections.newSetFromMap(WeakHashMap())
+
     fun bindDrawerMenu(
         activity: CarActivity,
         current: ProjectionDestination,
@@ -70,14 +75,16 @@ object HostedNavigation {
     ) {
         try {
             val ui = activity.carUiController
-            ui.menuController.setRootMenuAdapter(
-                DestinationMenuAdapter(activity, onSelect)
-            )
-            ui.menuController.showMenuButton()
+            if (boundMenus.add(activity)) {
+                ui.menuController.setRootMenuAdapter(
+                    DestinationMenuAdapter(activity, onSelect)
+                )
+                ui.menuController.showMenuButton()
+                Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
+            }
             ui.statusBarController.showTitle()
             ui.statusBarController.setTitle(current.label)
             showHostContent(activity)
-            Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
         } catch (exception: Exception) {
             Log.e(TAG, "HOST_MENU_BIND failed", exception)
         }
