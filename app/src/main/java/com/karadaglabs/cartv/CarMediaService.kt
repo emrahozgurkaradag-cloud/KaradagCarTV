@@ -131,13 +131,9 @@ class CarMediaService : MediaLibraryService() {
                 "IPTV prefetch count=${channels.size}"
             )
 
-            if (::mediaLibrarySession.isInitialized) {
-                mediaLibrarySession.notifyChildrenChanged(
-                    LIVE_TV_ID,
-                    channels.size,
-                    null
-                )
-            }
+            notifyMediaTreeChanged(
+                channels.size
+            )
         }
     }
 
@@ -290,41 +286,11 @@ class CarMediaService : MediaLibraryService() {
 
             if (parentId == ROOT_ID) {
 
-                val items =
-                    ArrayList<MediaItem>(
-                        radios.size + 3
-                    )
-
-                items.add(
-                    createCategoryItem(
-                        LIVE_TV_ID,
-                        "📺 Canlı TV",
-                        liveTvSubtitle()
-                    )
-                )
-
-                items.add(
-                    createYouTubeMediaItem()
-                )
-
-                items.add(
-                    createGoogleMediaItem()
-                )
-
-                radios.forEach { radio ->
-
-                    items.add(
-                        createRadioMediaItem(
-                            radio
-                        )
-                    )
-                }
-
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.copyOf(
-                            items
+                            buildRootMediaItems()
                         ),
                         params
                     )
@@ -358,22 +324,21 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == LIVE_TV_ID) {
+            if (
+                parentId == LIVE_TV_ID ||
+                parentId == LIVE_TV_HOSTED_ID
+            ) {
 
-                return executor.submit<
-                    LibraryResult<ImmutableList<MediaItem>>
-                    > {
-
-                    val channels =
-                        loadLiveTvChannels()
-
-                    val items =
-                        channels.map { channel ->
+                val items =
+                    IptvRepository.loadCached(this@CarMediaService)
+                        .map { channel ->
 
                             createLiveTvMediaItem(
                                 channel
                             )
                         }
+
+                return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.copyOf(
@@ -381,7 +346,7 @@ class CarMediaService : MediaLibraryService() {
                         ),
                         params
                     )
-                }
+                )
             }
 
             /*
@@ -811,6 +776,76 @@ class CarMediaService : MediaLibraryService() {
         }
     }
 
+    private fun buildRootMediaItems(): List<MediaItem> {
+
+        val channels =
+            IptvRepository.loadCached(this)
+
+        val items =
+            ArrayList<MediaItem>(
+                radios.size + 3
+            )
+
+        if (channels.isNotEmpty()) {
+
+            items.add(
+                createCategoryItem(
+                    LIVE_TV_ID,
+                    "📺 Canlı TV",
+                    "${channels.size} kanal"
+                )
+            )
+        }
+
+        items.add(
+            createYouTubeMediaItem()
+        )
+
+        items.add(
+            createGoogleMediaItem()
+        )
+
+        radios.forEach { radio ->
+
+            items.add(
+                createRadioMediaItem(
+                    radio
+                )
+            )
+        }
+
+        return items
+    }
+
+    private fun notifyMediaTreeChanged(
+        channelCount: Int
+    ) {
+
+        if (!::mediaLibrarySession.isInitialized) {
+            return
+        }
+
+        val rootCount =
+            radios.size + 2 +
+                if (channelCount > 0) {
+                    1
+                } else {
+                    0
+                }
+
+        mediaLibrarySession.notifyChildrenChanged(
+            ROOT_ID,
+            rootCount,
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
+            LIVE_TV_ID,
+            channelCount,
+            null
+        )
+    }
+
     private fun loadLiveTvChannels(): List<IptvChannel> {
 
         val cached =
@@ -1036,6 +1071,32 @@ class CarMediaService : MediaLibraryService() {
         subtitle: String
     ): MediaItem {
 
+        val metadataBuilder =
+            MediaMetadata.Builder()
+
+                .setTitle(
+                    title
+                )
+
+                .setArtist(
+                    subtitle
+                )
+
+                .setIsBrowsable(
+                    true
+                )
+
+                .setIsPlayable(
+                    false
+                )
+
+        if (id == LIVE_TV_ID) {
+
+            metadataBuilder.setMediaType(
+                MediaMetadata.MEDIA_TYPE_FOLDER_TV_CHANNELS
+            )
+        }
+
         return MediaItem.Builder()
 
             .setMediaId(
@@ -1043,26 +1104,7 @@ class CarMediaService : MediaLibraryService() {
             )
 
             .setMediaMetadata(
-
-                MediaMetadata.Builder()
-
-                    .setTitle(
-                        title
-                    )
-
-                    .setArtist(
-                        subtitle
-                    )
-
-                    .setIsBrowsable(
-                        true
-                    )
-
-                    .setIsPlayable(
-                        false
-                    )
-
-                    .build()
+                metadataBuilder.build()
             )
 
             .build()
@@ -1270,6 +1312,10 @@ class CarMediaService : MediaLibraryService() {
 
                 .setIsPlayable(
                     true
+                )
+
+                .setMediaType(
+                    MediaMetadata.MEDIA_TYPE_TV_CHANNEL
                 )
 
         channel.logoUrl

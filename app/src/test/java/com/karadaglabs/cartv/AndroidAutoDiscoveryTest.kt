@@ -156,13 +156,14 @@ class AndroidAutoDiscoveryTest {
             "java/com/karadaglabs/cartv/ProjectionDestination.kt"
         ).readText()
 
-        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
-        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
+        val rootStart = media.indexOf("private fun buildRootMediaItems")
+        val notifyStart = media.indexOf("private fun notifyMediaTreeChanged", rootStart)
         val rootBlock = media.substring(
             rootStart,
-            if (radioStart > rootStart) radioStart else media.length
+            if (notifyStart > rootStart) notifyStart else media.length
         )
-        assertTrue(rootBlock.contains("parentId == ROOT_ID"))
+        assertTrue(media.contains("parentId == ROOT_ID"))
+        assertTrue(media.contains("buildRootMediaItems()"))
         assertTrue(rootBlock.contains("createCategoryItem"))
         assertTrue(rootBlock.contains("LIVE_TV_ID"))
         assertTrue(rootBlock.contains("createYouTubeMediaItem"))
@@ -170,6 +171,15 @@ class AndroidAutoDiscoveryTest {
         assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertFalse(rootBlock.contains("createInfoItem"))
         assertTrue(rootBlock.contains("📺 Canlı TV"))
+        val liveStart = media.indexOf("parentId == LIVE_TV_ID")
+        val youtubeStart = media.indexOf("parentId == YOUTUBE_ID", liveStart)
+        val liveBlock = media.substring(
+            liveStart,
+            if (youtubeStart > liveStart) youtubeStart else media.length
+        )
+        assertTrue(liveBlock.contains("IptvRepository.loadCached"))
+        assertTrue(liveBlock.contains("createLiveTvMediaItem"))
+        assertFalse(liveBlock.contains("executor.submit"))
         assertTrue(media.contains("▶️ YouTube"))
         assertTrue(media.contains("🔎 Google Arama"))
         assertTrue(media.contains("createLiveTvMediaItem"))
