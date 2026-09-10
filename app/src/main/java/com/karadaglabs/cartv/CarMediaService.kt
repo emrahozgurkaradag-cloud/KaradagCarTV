@@ -89,7 +89,7 @@ class CarMediaService : MediaLibraryService() {
                 player,
                 CarMediaLibraryCallback()
             )
-                .setId("karadag-car-tv-v77")
+                .setId("karadag-car-tv-v79")
                 .build()
 
         CarVideoPlayerHolder.setPlayer(player)
@@ -984,21 +984,13 @@ class CarMediaService : MediaLibraryService() {
             null
         )
 
-        mediaLibrarySession.notifyChildrenChanged(
-            LIVE_TV_ID,
-            channelCount.coerceAtLeast(1),
-            null
-        )
-
+        // Only the legacy folder IDs. notifyChildrenChanged on the
+        // playable YouTube / Google / Live TV leaf IDs makes Android
+        // Auto open them as empty folders ("Öğe yok") instead of
+        // playing them like radio.
         mediaLibrarySession.notifyChildrenChanged(
             LIVE_TV_LEGACY_ID,
             channelCount.coerceAtLeast(1),
-            null
-        )
-
-        mediaLibrarySession.notifyChildrenChanged(
-            YOUTUBE_ID,
-            1,
             null
         )
 
@@ -1009,20 +1001,8 @@ class CarMediaService : MediaLibraryService() {
         )
 
         mediaLibrarySession.notifyChildrenChanged(
-            GOOGLE_ID,
-            1,
-            null
-        )
-
-        mediaLibrarySession.notifyChildrenChanged(
             GOOGLE_LEGACY_ID,
             1,
-            null
-        )
-
-        mediaLibrarySession.notifyChildrenChanged(
-            RADIO_ID,
-            radios.size,
             null
         )
     }
@@ -1410,7 +1390,7 @@ class CarMediaService : MediaLibraryService() {
             "KaradagCarMedia"
 
         private const val ROOT_ID =
-            "karadag-car-tv-root-v77"
+            "karadag-car-tv-root-v79"
 
         private const val LIVE_TV_ID =
             "karadag-live-tv-play"
