@@ -82,7 +82,9 @@ object HostedNavigation {
                 ui.menuController.showMenuButton()
                 Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
             }
-            ui.statusBarController.showTitle()
+            // Do not showTitle(): that restores Gearhead chrome and
+            // the empty PagedListView over slot g. CarStream keeps
+            // the header hidden and only setTitle on the hidden bar.
             ui.statusBarController.setTitle(current.label)
             showHostContent(activity)
         } catch (exception: Exception) {
