@@ -73,6 +73,26 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private var hostedReady = false
     private var pendingLiveTvChannelId: Int? = null
     private var slotCommitted = false
+    private var pendingWebUrl: String? = null
+    private var pendingDesktopUa = false
+
+    private val hostAttachListener = object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(v: View) {
+            if (destroyed) {
+                return
+            }
+            Log.d(TAG, "HOST_SLOT_ATTACHED_TO_WINDOW")
+            hostedReady = true
+            if (BoundCarHost.consumePending(this@CarVideoActivity) == null) {
+                showHostedDestination(destination)
+            }
+            applyVideoFocus(request = true)
+            flushPendingWeb()
+        }
+
+        override fun onViewDetachedFromWindow(v: View) {
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_KaradagCarTV_Car)
@@ -97,6 +117,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
         slotCommitted = hostRoot != null
+        watchHostRoot(hostRoot)
 
         try {
             startService(Intent(this, CarMediaService::class.java))
@@ -253,6 +274,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 showHostedDestination(destination)
             }
         }
+        watchHostRoot(hostRoot)
     }
 
     internal fun onHostedViewCreated(view: View) {
@@ -273,7 +295,24 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         } else if (BoundCarHost.consumePending(this) == null) {
             showHostedDestination(destination)
         }
+        flushPendingWeb()
         Log.d(TAG, "CAR STREAM FRAGMENT ATTACHED")
+    }
+
+    private fun watchHostRoot(root: FrameLayout?) {
+        val next = root ?: return
+        hostRoot?.removeOnAttachStateChangeListener(hostAttachListener)
+        next.removeOnAttachStateChangeListener(hostAttachListener)
+        next.addOnAttachStateChangeListener(hostAttachListener)
+        if (next.isAttachedToWindow) {
+            hostAttachListener.onViewAttachedToWindow(next)
+        }
+    }
+
+    private fun flushPendingWeb() {
+        val url = pendingWebUrl ?: return
+        pendingWebUrl = null
+        attachWeb(url, pendingDesktopUa)
     }
 
     internal fun buildHostedPage(): View {
@@ -399,6 +438,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     override fun onDestroy() {
         destroyed = true
+        hostRoot?.removeOnAttachStateChangeListener(hostAttachListener)
         CarContentSlot.stopKeep(this)
         BoundCarHost.unbind(this)
         applyVideoFocus(request = false)
@@ -559,6 +599,12 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         desktopUserAgent: Boolean
     ) {
         val overlay = webOverlay ?: return
+        if (!overlay.isAttachedToWindow) {
+            pendingWebUrl = url
+            pendingDesktopUa = desktopUserAgent
+            Log.d(TAG, "HOST_WEB_PENDING url=$url")
+            return
+        }
 
         if (webView != null && loadedWebUrl != null && loadedWebUrl != url) {
             HostedWebView.destroy(webView)
