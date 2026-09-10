@@ -76,6 +76,55 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
 
+        val hosted = hostProjectionFragment()
+        if (!hosted) {
+            root.addView(buildHostedPage())
+        }
+
+        CarContentSlot.attach(this, rootColumn ?: root)
+
+        applyVideoFocus(request = true)
+
+        try {
+            startService(Intent(this, CarMediaService::class.java))
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to start CarMediaService", exception)
+        }
+
+        loadChannels()
+        showHostedDestination(destination)
+    }
+
+    fun getWindow(): android.view.Window {
+        return CarContentSlot.hostWindow(this)
+    }
+
+    private fun hostProjectionFragment(): Boolean {
+        return try {
+            supportFragmentManager.beginTransaction()
+                .replace(
+                    R.id.car_host_root,
+                    HostedProjectionFragment(),
+                    "hosted"
+                )
+                .commitNow()
+            true
+        } catch (exception: Exception) {
+            Log.e(TAG, "CAR STREAM FRAGMENT HOST FAILED", exception)
+            false
+        }
+    }
+
+    internal fun buildHostedPage(): View {
+        val page = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            keepScreenOn = true
+        }
+
         val content = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -113,7 +162,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         content.addView(webOverlay)
         this.webOverlay = webOverlay
 
-        root.addView(content)
+        page.addView(content)
 
         val menu = HostedNavigation.menuBar(this, destination) { next ->
             onMenuSelected(next)
@@ -123,25 +172,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
         menuContainer = menu
-        root.addView(menu)
-        rootColumn = root
-
-        CarContentSlot.attach(this, root)
-
-        applyVideoFocus(request = true)
-
-        try {
-            startService(Intent(this, CarMediaService::class.java))
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to start CarMediaService", exception)
-        }
-
-        loadChannels()
-        showHostedDestination(destination)
-    }
-
-    fun getWindow(): android.view.Window {
-        return CarContentSlot.hostWindow(this)
+        page.addView(menu)
+        rootColumn = page
+        return page
     }
 
     override fun showHostedDestination(destination: ProjectionDestination) {
