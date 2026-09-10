@@ -403,8 +403,16 @@ class HostedProjectionSourceTest {
         assertTrue(media.contains("createRadioMediaItem"))
         assertTrue(media.contains("createLiveTvMediaItem"))
         assertTrue(media.contains("createLiveTvOpenItem"))
+        assertTrue(media.contains("createLiveTvPlayableItem"))
         assertTrue(media.contains("createYouTubeMediaItem"))
         assertTrue(media.contains("createGoogleMediaItem"))
+        assertTrue(media.contains("ROOT_ITEM id="))
+        assertTrue(media.contains("MEDIA_ITEM_CLICK id="))
+        assertTrue(media.contains("ON_ADD_MEDIA_ITEMS id="))
+        assertTrue(media.contains("ON_GET_ITEM id="))
+        assertTrue(media.contains("DESTINATION_REQUEST id="))
+        assertTrue(media.contains("DESTINATION_OPEN id="))
+        assertTrue(media.contains("onSetMediaItems"))
         val youtubeItem = media.substring(
             media.indexOf("private fun createYouTubeMediaItem"),
             media.indexOf("private fun createGoogleMediaItem")

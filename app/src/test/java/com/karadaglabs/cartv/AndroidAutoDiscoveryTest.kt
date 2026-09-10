@@ -164,7 +164,11 @@ class AndroidAutoDiscoveryTest {
         )
         assertTrue(media.contains("parentId == ROOT_ID"))
         assertTrue(media.contains("buildRootMediaItems()"))
-        assertTrue(rootBlock.contains("createCategoryItem"))
+        assertFalse(
+            "TV / YouTube / Google must not be root category folders",
+            rootBlock.contains("createCategoryItem")
+        )
+        assertTrue(rootBlock.contains("createLiveTvPlayableItem"))
         assertTrue(rootBlock.contains("LIVE_TV_ID"))
         assertTrue(rootBlock.contains("liveTvSubtitle()"))
         assertFalse(rootBlock.contains("channels.isNotEmpty()"))

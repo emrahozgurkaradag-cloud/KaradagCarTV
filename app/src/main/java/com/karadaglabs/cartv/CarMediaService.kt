@@ -89,7 +89,7 @@ class CarMediaService : MediaLibraryService() {
                 player,
                 CarMediaLibraryCallback()
             )
-                .setId("karadag-car-tv-v79")
+                .setId("karadag-car-tv-v83")
                 .build()
 
         CarVideoPlayerHolder.setPlayer(player)
@@ -292,11 +292,23 @@ class CarMediaService : MediaLibraryService() {
 
             if (parentId == ROOT_ID) {
 
+                val rootItems = buildRootMediaItems()
+                rootItems.forEach { item ->
+                    val metadata = item.mediaMetadata
+                    Log.i(
+                        TAG,
+                        "ROOT_ITEM id=${item.mediaId} " +
+                            "type=playable=${metadata.isPlayable} " +
+                            "browsable=${metadata.isBrowsable} " +
+                            "uri=${item.localConfiguration?.uri}"
+                    )
+                }
+
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.copyOf(
-                            buildRootMediaItems()
+                            rootItems
                         ),
                         params
                     )
@@ -517,9 +529,9 @@ class CarMediaService : MediaLibraryService() {
             mediaId: String
         ): ListenableFuture<LibraryResult<MediaItem>> {
 
-            Log.d(
+            Log.i(
                 TAG,
-                "onGetItem mediaId=$mediaId"
+                "ON_GET_ITEM id=$mediaId"
             )
 
             /*
@@ -552,19 +564,10 @@ class CarMediaService : MediaLibraryService() {
                 mediaId == LIVE_TV_LEGACY_ID
             ) {
 
-                val channels =
-                    IptvRepository.loadCached(this@CarMediaService)
-
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
-
-                        createCategoryItem(
-                            LIVE_TV_ID,
-                            "📺 Canlı TV",
-                            "${channels.size} kanal"
-                        ),
-
+                        createLiveTvPlayableItem(),
                         null
                     )
                 )
@@ -652,11 +655,7 @@ class CarMediaService : MediaLibraryService() {
                             createLiveTvMediaItem(
                                 channel
                             )
-                        } ?: createCategoryItem(
-                            LIVE_TV_ID,
-                            "📺 Canlı TV",
-                            liveTvSubtitle()
-                        ),
+                        } ?: createLiveTvPlayableItem(),
 
                         null
                     )
@@ -743,6 +742,17 @@ class CarMediaService : MediaLibraryService() {
             mediaItems: List<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
 
+            mediaItems.forEach { requested ->
+                Log.i(
+                    TAG,
+                    "ON_ADD_MEDIA_ITEMS id=${requested.mediaId}"
+                )
+                Log.i(
+                    TAG,
+                    "MEDIA_ITEM_CLICK id=${requested.mediaId}"
+                )
+            }
+
             return executor.submit<List<MediaItem>> {
 
                 val resolved =
@@ -766,11 +776,53 @@ class CarMediaService : MediaLibraryService() {
                 resolved
             }
         }
+
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: List<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+
+            mediaItems.forEach { requested ->
+                Log.i(
+                    TAG,
+                    "MEDIA_ITEM_CLICK id=${requested.mediaId}"
+                )
+            }
+
+            return Futures.transform(
+                onAddMediaItems(
+                    mediaSession,
+                    controller,
+                    mediaItems
+                ),
+                { resolved ->
+                    val index = if (resolved.isEmpty()) {
+                        0
+                    } else {
+                        startIndex.coerceIn(0, resolved.lastIndex)
+                    }
+                    MediaSession.MediaItemsWithStartPosition(
+                        resolved,
+                        index,
+                        startPositionMs
+                    )
+                },
+                MoreExecutors.directExecutor()
+            )
+        }
     }
 
     private fun resolvePlayableMediaItem(
         mediaId: String
     ): MediaItem? {
+
+        Log.i(
+            TAG,
+            "MEDIA_ITEM_CLICK id=$mediaId"
+        )
 
         val hosted =
             hostedDestination(
@@ -778,6 +830,11 @@ class CarMediaService : MediaLibraryService() {
             )
 
         if (hosted != null) {
+
+            Log.i(
+                TAG,
+                "DESTINATION_REQUEST id=$mediaId destination=${hosted.name}"
+            )
 
             revealHostedFromMedia(
                 hosted,
@@ -903,6 +960,10 @@ class CarMediaService : MediaLibraryService() {
 
         Log.i(
             TAG,
+            "DESTINATION_OPEN id=$mediaId destination=${destination.name} bound=$bound"
+        )
+        Log.i(
+            TAG,
             "MEDIA_HOSTED_DESTINATION=${destination.name} bound=$bound"
         )
     }
@@ -931,7 +992,7 @@ class CarMediaService : MediaLibraryService() {
             )
 
         items.add(
-            createCategoryItem(
+            createLiveTvPlayableItem(
                 LIVE_TV_ID,
                 "📺 Canlı TV",
                 liveTvSubtitle()
@@ -1026,6 +1087,74 @@ class CarMediaService : MediaLibraryService() {
         return Uri.parse(
             "android.resource://" + packageName + "/raw/silence"
         )
+    }
+
+    private fun youtubeDestinationUri(): Uri {
+        return Uri.parse("https://www.youtube.com/")
+    }
+
+    private fun googleDestinationUri(): Uri {
+        return Uri.parse("https://www.google.com/")
+    }
+
+    private fun createLiveTvPlayableItem(
+        mediaId: String = LIVE_TV_ID,
+        title: String = "📺 Canlı TV",
+        subtitle: String = liveTvSubtitle()
+    ): MediaItem {
+
+        val channel =
+            IptvRepository.loadCached(this)
+                .firstOrNull { candidate ->
+                    candidate.streamUrl.isNotBlank()
+                }
+
+        val streamUri =
+            if (channel != null) {
+                Uri.parse(channel.streamUrl)
+            } else {
+                Uri.parse("iptv://karadag-live-tv")
+            }
+
+        Log.d(
+            TAG,
+            "Creating Live TV playable item uri=$streamUri"
+        )
+
+        return MediaItem.Builder()
+
+            .setMediaId(
+                mediaId
+            )
+
+            .setUri(
+                streamUri
+            )
+
+            .setMediaMetadata(
+
+                MediaMetadata.Builder()
+
+                    .setTitle(
+                        title
+                    )
+
+                    .setArtist(
+                        subtitle
+                    )
+
+                    .setIsBrowsable(
+                        false
+                    )
+
+                    .setIsPlayable(
+                        true
+                    )
+
+                    .build()
+            )
+
+            .build()
     }
 
 
@@ -1144,7 +1273,7 @@ class CarMediaService : MediaLibraryService() {
             )
 
             .setUri(
-                silenceUri()
+                youtubeDestinationUri()
             )
 
             .setMediaMetadata(
@@ -1184,7 +1313,7 @@ class CarMediaService : MediaLibraryService() {
             )
 
             .setUri(
-                silenceUri()
+                googleDestinationUri()
             )
 
             .setMediaMetadata(
@@ -1390,7 +1519,7 @@ class CarMediaService : MediaLibraryService() {
             "KaradagCarMedia"
 
         private const val ROOT_ID =
-            "karadag-car-tv-root-v79"
+            "karadag-car-tv-root-v83"
 
         private const val LIVE_TV_ID =
             "karadag-live-tv-play"
