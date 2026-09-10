@@ -384,7 +384,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     /**
      * Gearhead's content slot `g` often wrap_content's children.
      * A 0dp-weighted GridView then measures to 0px and the car
-     * keeps showing the empty PagedListView ("Öğe yok"). Size the
+     * keeps showing the empty host list ("Öğe yok"). Size the
      * hosted page and catalog to the live slot / car display so
      * Live TV, YouTube, and Google actually paint in g.
      */
