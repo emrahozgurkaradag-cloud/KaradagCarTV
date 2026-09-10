@@ -37,8 +37,8 @@ import java.net.URL
  * YouTube WebView, Google WebView.
  *
  * The hosted fragment is added+detached in onCreate and attached
- * with commitNow after Gearhead CarUiController.onStart so the empty
- * PagedListView restore cannot cover car_host_root.
+ * with commitNow after Gearhead CarUiController.onStart so chrome
+ * restore cannot cover car_host_root.
  */
 @UnstableApi
 class CarVideoActivity : CarActivity(), CarDestinationHost {
