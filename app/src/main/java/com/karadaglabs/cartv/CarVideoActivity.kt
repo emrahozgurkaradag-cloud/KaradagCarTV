@@ -221,17 +221,25 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
     }
 
+    private fun hostRootInLiveSlot(): Boolean {
+        val root = hostRoot ?: return false
+        return CarContentSlot.isInLiveSlot(this, root)
+    }
+
     private fun revealHostedPage(force: Boolean = false) {
         val liveRoot = hostRoot
         val needsInstall = force ||
             liveRoot == null ||
-            liveRoot.isAttachedToWindow != true
+            !CarContentSlot.isInLiveSlot(this, liveRoot)
+        Log.d(
+            TAG,
+            "HOST_SLOT_LIVE inLive=${liveRoot != null && CarContentSlot.isInLiveSlot(this, liveRoot)} " +
+                "force=$force attached=${liveRoot?.isAttachedToWindow == true}"
+        )
         if (needsInstall) {
             val page = rootColumn
             dropHostedFragment()
-            setContentView(R.layout.car_host_root)
-            hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
-                ?: CarContentSlot.install(this)
+            hostRoot = CarContentSlot.install(this)
             if (page != null) {
                 (page.parent as? ViewGroup)?.removeView(page)
                 hostRoot?.addView(
@@ -284,6 +292,11 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun rebindHostedPage() {
+        val root = hostRoot
+        if (root != null && !CarContentSlot.isInLiveSlot(this, root)) {
+            revealHostedPage(force = true)
+            return
+        }
         if (hostedFragmentWaiting()) {
             return
         }
@@ -422,13 +435,13 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             return
         }
         Log.d(TAG, "HOST_SLOT_MEDIA_CONNECT")
-        revealHostedPage(force = hostRoot?.isAttachedToWindow != true)
+        revealHostedPage(force = !hostRootInLiveSlot())
         rebindHostedPage()
     }
 
     override fun onStart() {
         super.onStart()
-        revealHostedPage(force = hostRoot?.isAttachedToWindow != true)
+        revealHostedPage(force = !hostRootInLiveSlot())
         rebindHostedPage()
         rootColumn?.post { rebindHostedPage() }
         bindIfPlaying()
@@ -440,6 +453,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
+        revealHostedPage(force = !hostRootInLiveSlot())
         rebindHostedPage()
         rootColumn?.post { rebindHostedPage() }
         bindIfPlaying()
