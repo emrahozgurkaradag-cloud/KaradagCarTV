@@ -5,7 +5,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.Window
 import com.google.android.apps.auto.sdk.CarActivity
-import java.util.WeakHashMap
 
 /**
  * Fermata / aauto.aar hosted content path, from bytecode:
@@ -17,29 +16,29 @@ import java.util.WeakHashMap
  * CarActivity.setContentView(View):
  *   g.removeAllViews(); g.addView(view);
  *
- * Fermata MainCarActivity.initCarActivity then:
+ * Fermata MainCarActivity.initCarActivity:
+ *   setIgnoreConfigChanges(0xFFFFFFFF);
  *   hideAppHeader(); hideMenuButton();
  *   getWindow() { return c(); }
+ * then MainActivityDelegate.init() calls setContentView(layout).
  *
- * App content stays in field CarActivity.g. It is not moved onto
- * android.R.id.content and Window.setContentView is not called.
- * Gearhead's empty PagedListView is not GONE; hideMenuButton is the
- * public API that keeps that list from being the visible pane.
+ * App content stays in field CarActivity.g. This binder does not
+ * change g's LayoutParams, z-order, or clip flags — Gearhead owns
+ * that container. Window.setContentView is not called. The empty
+ * PagedListView is not GONE; hideMenuButton is the public API that
+ * keeps that list from being the visible pane.
  * After onStart, CarUiController.a() (Gearhead onStart) can restore
- * chrome, so prepareHost + bind run again.
+ * chrome, so prepareHost runs again and setContentView is repeated
+ * only if our root was detached.
  */
 object CarContentSlot {
 
     const val TAG = "KaradagCarSlot"
 
-    private const val SLOT_ELEVATION = 64f
     private const val CAR_ACTIVITY_CLASS =
         "com.google.android.apps.auto.sdk.CarActivity"
     private const val SLOT_FIELD = "g"
-
-    private val lastBind = WeakHashMap<View, BindKey>()
-    private val hookedSlots = WeakHashMap<ViewGroup, Boolean>()
-    private val followupDelays = longArrayOf(0L, 16L, 50L, 100L, 250L)
+    private val dumpDelays = longArrayOf(0L, 50L, 250L)
 
     fun prepareHost(activity: CarActivity) {
         try {
@@ -59,21 +58,21 @@ object CarContentSlot {
 
     fun attach(activity: CarActivity, root: View) {
         root.keepScreenOn = true
+        fillParent(root)
         prepareHost(activity)
-        activity.setContentView(root)
-        bindIntoSlot(activity, root)
-        scheduleFollowup(activity, root)
+        putInSlot(activity, root)
         dumpHost(activity, root)
+        scheduleDump(activity, root)
     }
 
     fun rebind(activity: CarActivity, root: View) {
+        fillParent(root)
         prepareHost(activity)
-        if (root.parent == null) {
-            activity.setContentView(root)
+        if (root.parent == null || root.parent !== resolveSlot(activity)) {
+            putInSlot(activity, root)
         }
-        bindIntoSlot(activity, root)
-        scheduleFollowup(activity, root)
         dumpHost(activity, root)
+        scheduleDump(activity, root)
     }
 
     fun hostWindow(activity: CarActivity): Window {
@@ -86,37 +85,47 @@ object CarContentSlot {
             view.height > 0
     }
 
-    private fun bindIntoSlot(activity: CarActivity, root: View) {
-        val slot = resolveSlot(activity) ?: return
-        val appLayout = resolveAppLayout(activity) as? ViewGroup
-        val size = hostSize(activity, appLayout, slot)
+    private fun putInSlot(activity: CarActivity, root: View) {
+        val slot = resolveSlot(activity)
+        if (slot == null) {
+            Log.e(
+                TAG,
+                "CarActivity.g missing; setContentView cannot attach hosted UI"
+            )
+        }
 
-        val key = BindKey(
-            hostIdentity = System.identityHashCode(slot),
-            width = size.width,
-            height = size.height
-        )
-        if (root.parent === slot && lastBind[root] == key) {
-            promote(slot, root)
+        try {
+            (root.parent as? ViewGroup)?.removeView(root)
+            fillParent(root)
+            activity.setContentView(root)
+        } catch (exception: Exception) {
+            Log.e(TAG, "CarActivity.setContentView into g failed", exception)
             return
         }
-        lastBind[root] = key
 
-        ensureChild(slot, root)
-        applyHostPixels(slot, size.width, size.height)
-        applyHostPixels(root, size.width, size.height)
-        unclipAncestors(slot, appLayout)
-        promote(slot, root)
-        watchSlot(activity, root, slot)
-        slot.requestLayout()
-        root.requestLayout()
-
+        val attached = resolveSlot(activity)
         Log.d(
             TAG,
-            "HOST_CHOSEN_CLASS class=${slot.javaClass.name} " +
-                "appLayout=${appLayout?.javaClass?.name} " +
-                "slotArea=${area(slot)}"
+            "HOST_CHOSEN_CLASS class=${attached?.javaClass?.name} " +
+                "parent=${parentName(root)} " +
+                "slotArea=${area(attached)}"
         )
+    }
+
+    private fun fillParent(view: View) {
+        val params = view.layoutParams
+            ?: ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        if (
+            params.width != ViewGroup.LayoutParams.MATCH_PARENT ||
+            params.height != ViewGroup.LayoutParams.MATCH_PARENT
+        ) {
+            params.width = ViewGroup.LayoutParams.MATCH_PARENT
+            params.height = ViewGroup.LayoutParams.MATCH_PARENT
+        }
+        view.layoutParams = params
     }
 
     private fun resolveSlot(activity: CarActivity): ViewGroup? {
@@ -131,13 +140,12 @@ object CarContentSlot {
         } else {
             null
         }
-        val slot = fromField ?: fromId
         Log.d(
             TAG,
             "content slot fieldG=${fromField?.javaClass?.name} " +
                 "containerId=$containerId fromId=${fromId?.javaClass?.name}"
         )
-        return slot
+        return fromField ?: fromId
     }
 
     private fun readCarActivitySlot(activity: CarActivity): ViewGroup? {
@@ -167,39 +175,6 @@ object CarContentSlot {
         }
     }
 
-    private fun hostSize(
-        activity: CarActivity,
-        appLayout: View?,
-        slot: View
-    ): HostPixels {
-        val window = try {
-            hostWindow(activity)
-        } catch (_: Exception) {
-            null
-        }
-        val decor = window?.decorView
-        val metrics = activity.resources.displayMetrics
-        val width = firstPositive(
-            slot.width,
-            slot.measuredWidth,
-            appLayout?.width ?: 0,
-            decor?.width ?: 0,
-            metrics.widthPixels
-        )
-        val height = firstPositive(
-            slot.height,
-            slot.measuredHeight,
-            appLayout?.height ?: 0,
-            decor?.height ?: 0,
-            metrics.heightPixels
-        )
-        return HostPixels(width, height)
-    }
-
-    private fun firstPositive(vararg values: Int): Int {
-        return values.firstOrNull { it > 0 } ?: 0
-    }
-
     private fun area(view: View?): Int {
         if (view == null) {
             return 0
@@ -208,90 +183,13 @@ object CarContentSlot {
             firstPositive(view.height, view.measuredHeight)
     }
 
-    private fun ensureChild(slot: ViewGroup, root: View) {
-        if (root.parent === slot) {
-            return
-        }
-        (root.parent as? ViewGroup)?.removeView(root)
-        if (slot.indexOfChild(root) < 0) {
-            slot.removeAllViews()
-            slot.addView(
-                root,
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-        }
+    private fun firstPositive(vararg values: Int): Int {
+        return values.firstOrNull { it > 0 } ?: 0
     }
 
-    private fun applyHostPixels(view: View, width: Int, height: Int) {
-        if (width <= 0 || height <= 0) {
-            return
-        }
-        view.minimumWidth = width
-        view.minimumHeight = height
-        val params = view.layoutParams ?: ViewGroup.LayoutParams(width, height)
-        if (params.width == width && params.height == height) {
-            return
-        }
-        params.width = width
-        params.height = height
-        view.layoutParams = params
-    }
-
-    private fun promote(slot: ViewGroup, root: View) {
-        slot.elevation = SLOT_ELEVATION
-        slot.translationZ = SLOT_ELEVATION
-        slot.bringToFront()
-        root.elevation = SLOT_ELEVATION
-        root.translationZ = SLOT_ELEVATION
-        root.bringToFront()
-    }
-
-    private fun unclipAncestors(from: View, appLayout: View?) {
-        var ancestor: View? = from
-        while (ancestor != null) {
-            (ancestor as? ViewGroup)?.let { group ->
-                group.clipChildren = false
-                group.clipToPadding = false
-            }
-            if (ancestor === appLayout) {
-                break
-            }
-            ancestor = ancestor.parent as? View
-        }
-    }
-
-    private fun watchSlot(
-        activity: CarActivity,
-        root: View,
-        slot: ViewGroup
-    ) {
-        if (hookedSlots.containsKey(slot)) {
-            return
-        }
-        hookedSlots[slot] = true
-        slot.setOnHierarchyChangeListener(
-            object : ViewGroup.OnHierarchyChangeListener {
-                override fun onChildViewAdded(parent: View, child: View) {
-                    if (child !== root) {
-                        parent.post { bindIntoSlot(activity, root) }
-                    }
-                }
-
-                override fun onChildViewRemoved(parent: View, child: View) {
-                    if (child === root) {
-                        parent.post { bindIntoSlot(activity, root) }
-                    }
-                }
-            }
-        )
-    }
-
-    private fun scheduleFollowup(activity: CarActivity, root: View) {
-        followupDelays.forEach { delay ->
-            root.postDelayed({ bindIntoSlot(activity, root) }, delay)
+    private fun scheduleDump(activity: CarActivity, root: View) {
+        dumpDelays.forEach { delay ->
+            root.postDelayed({ dumpHost(activity, root) }, delay)
         }
     }
 
@@ -340,6 +238,23 @@ object CarContentSlot {
             "HOSTED_CONTENT_SIZE ${root.width}x${root.height} " +
                 "slot=${slot?.width ?: 0}x${slot?.height ?: 0}"
         )
+        dumpChildren(slot, "slot")
+    }
+
+    private fun dumpChildren(group: ViewGroup?, label: String) {
+        if (group == null) {
+            return
+        }
+        for (index in 0 until group.childCount) {
+            val child = group.getChildAt(index)
+            Log.d(
+                TAG,
+                "HOST_SLOT_CHILD label=$label i=$index " +
+                    "class=${child.javaClass.name} " +
+                    "${child.width}x${child.height} " +
+                    "vis=${visibilityName(child)}"
+            )
+        }
     }
 
     private fun findNativeList(root: View?): View? {
@@ -375,14 +290,6 @@ object CarContentSlot {
             else -> view.visibility.toString()
         }
     }
-
-    private data class HostPixels(val width: Int, val height: Int)
-
-    private data class BindKey(
-        val hostIdentity: Int,
-        val width: Int,
-        val height: Int
-    )
 }
 
 interface CarDestinationHost {
