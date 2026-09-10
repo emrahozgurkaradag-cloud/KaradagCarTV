@@ -407,6 +407,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         } else if (gridView == null) {
             buildListUi()
         }
+        refreshHostedList()
 
         val surface = root.findViewById<SurfaceView>(R.id.car_surface)
             ?: SurfaceView(this).apply {
@@ -913,6 +914,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         statusView?.text = state.statusText
         adapter?.update(state.channels, state.selectedId)
+        refreshHostedList()
 
         val playing = state.mode == ProjectionMode.PLAYING &&
             state.hostAvailable &&
@@ -1019,6 +1021,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             },
             radios.indexOfFirst { it.id == selectedRadioId }.takeIf { it >= 0 }
         )
+        refreshHostedList()
     }
 
     private fun bindIfPlaying() {
@@ -1097,8 +1100,99 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             grid.requestFocus()
             return
         }
+        rootColumn?.findViewById<View>(R.id.car_paged_list)?.let { list ->
+            if (list.visibility == View.VISIBLE && list.isAttachedToWindow) {
+                list.isFocusable = true
+                list.requestFocus()
+                return
+            }
+        }
         rootColumn?.requestFocus()
         hostRoot?.requestFocus()
+    }
+
+    private fun refreshHostedList() {
+        val list = rootColumn?.findViewById<View>(R.id.car_paged_list) ?: return
+        val hide = destination == ProjectionDestination.YOUTUBE ||
+            destination == ProjectionDestination.GOOGLE
+        list.visibility = if (hide) View.GONE else View.VISIBLE
+        if (hide) {
+            return
+        }
+        HostedCarList.attach(list, hostedRows(), ::onHostedRow)
+    }
+
+    private fun hostedRows(): List<HostedCarList.Row> {
+        if (destination == ProjectionDestination.RADIO) {
+            return RadioStations.all.map { radio ->
+                HostedCarList.Row(radio.id, radio.name)
+            }
+        }
+        val rows = ArrayList<HostedCarList.Row>(state.channels.size + 4)
+        rows.add(
+            HostedCarList.Row(
+                "youtube",
+                ProjectionDestination.YOUTUBE.label
+            )
+        )
+        rows.add(
+            HostedCarList.Row(
+                "google",
+                ProjectionDestination.GOOGLE.label
+            )
+        )
+        rows.add(
+            HostedCarList.Row(
+                "radio",
+                ProjectionDestination.RADIO.label
+            )
+        )
+        if (state.channels.isEmpty()) {
+            rows.add(HostedCarList.Row("live-tv", "Canlı TV"))
+        } else {
+            state.channels.forEach { channel ->
+                rows.add(
+                    HostedCarList.Row(
+                        "live-tv-${channel.id}",
+                        channel.name
+                    )
+                )
+            }
+        }
+        return rows
+    }
+
+    private fun onHostedRow(row: HostedCarList.Row) {
+        when (row.key) {
+            "youtube" -> showYouTube()
+            "google" -> showGoogle()
+            "radio" -> showRadio()
+            "live-tv" -> showLiveTv()
+            else -> {
+                if (row.key.startsWith("live-tv-")) {
+                    val channelId = row.key.removePrefix("live-tv-").toIntOrNull()
+                    val channel = state.channels.firstOrNull { candidate ->
+                        candidate.id == channelId
+                    }
+                    if (channel != null) {
+                        onChannelClicked(channel)
+                    }
+                    return
+                }
+                val index = RadioStations.all.indexOfFirst { it.id == row.key }
+                if (index >= 0) {
+                    onChannelClicked(
+                        IptvChannel(
+                            id = index,
+                            name = RadioStations.all[index].name,
+                            streamUrl = RadioStations.all[index].url,
+                            logoUrl = null,
+                            category = "Radyo"
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun applyVideoFocus(request: Boolean) {

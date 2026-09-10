@@ -14,8 +14,8 @@ android {
         applicationId = "com.karadaglabs.cartv"
         minSdk = 29
         targetSdk = 37
-        versionCode = 65
-        versionName = "1.0.65"
+        versionCode = 66
+        versionName = "1.0.66"
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
@@ -91,6 +91,8 @@ dependencies {
 
     // Jetifier rewrites aauto.aar onto AndroidX FragmentManager.
     implementation("androidx.fragment:fragment-ktx:1.8.8")
+
+    implementation("androidx.recyclerview:recyclerview:1.3.0")
 
     // ============================================================
     // MEDIA3 / EXOPLAYER
