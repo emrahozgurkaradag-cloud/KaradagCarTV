@@ -79,7 +79,6 @@ object HostedNavigation {
                 ui.menuController.setRootMenuAdapter(
                     DestinationMenuAdapter(activity, onSelect)
                 )
-                ui.menuController.showMenuButton()
                 try {
                     ui.drawerController.openDrawer()
                 } catch (exception: Exception) {
@@ -87,6 +86,7 @@ object HostedNavigation {
                 }
                 Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
             }
+            ui.menuController.showMenuButton()
             // Do not showTitle(): that restores Gearhead chrome and
             // the empty PagedListView over slot g. CarStream keeps
             // the header hidden and only setTitle on the hidden bar.
