@@ -521,7 +521,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
 
         if (webView == null) {
-            val view = CarProjectionWebView(HostedWebView.themedContext(this))
+            val view = CarProjectionWebView(this)
             HostedWebView.configure(view, desktopUserAgent = desktopUserAgent)
             view.layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

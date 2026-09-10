@@ -52,7 +52,7 @@ class CarGoogleActivity : CarActivity() {
             }
         )
 
-        val view = CarProjectionWebView(HostedWebView.themedContext(this))
+        val view = CarProjectionWebView(this)
         webView = view
         HostedWebView.configure(view, desktopUserAgent = false)
 
