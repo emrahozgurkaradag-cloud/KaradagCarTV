@@ -1,11 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        Fermata and CarStream advertise projection + media + service.
-        Template stays commented out so the host opens CarActivity, not
-        a NavigationTemplate. Live TV / YouTube / Google are not media
-        browse children (that path was Öğe yok). Media root is radio
-        only. video: park/OEM host SurfaceView capability.
+        Current Fermata: media + service + projection. No notification
+        (that tag made AA open the empty message surface). No template.
+        video: park/OEM host SurfaceView capability.
+        Live TV / YouTube / Google render in CarActivity.g, not as
+        empty media browse folders.
     -->
     <uses
         name="projection"
@@ -14,7 +14,6 @@
     <uses
         name="service"
         tools:ignore="InvalidUsesTagAttribute" />
-    <uses name="notification" />
     <uses name="media" />
     <!-- <uses name="template" /> -->
 </automotiveApp>

@@ -154,6 +154,21 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains(".commit()"))
         assertTrue(video.contains("HOST_SLOT_REUSE"))
         assertTrue(video.contains("HOST_SLOT_REINSTALL"))
+        val onCreateStart = video.indexOf("override fun onCreate")
+        val onCreateBlock = video.substring(
+            onCreateStart,
+            video.indexOf("fun getWindow()", onCreateStart)
+        )
+        assertFalse(onCreateBlock.contains("CarContentSlot.install"))
+        assertFalse(onCreateBlock.contains("hostProjectionFragment"))
+        val revealStart = video.indexOf("private fun revealHostedPage")
+        val revealBlock = video.substring(
+            revealStart,
+            video.indexOf("internal fun buildHostedPage", revealStart)
+        )
+        assertTrue(revealBlock.contains("CarContentSlot.install"))
+        assertTrue(revealBlock.contains("hostProjectionFragment"))
+        assertTrue(revealBlock.contains("attachHostedFragment"))
         assertTrue(video.contains("HostedProjectionFragment"))
         assertTrue(video.contains("getSupportFragmentManager") || video.contains("supportFragmentManager"))
         assertTrue(video.contains("R.id.car_host_root"))

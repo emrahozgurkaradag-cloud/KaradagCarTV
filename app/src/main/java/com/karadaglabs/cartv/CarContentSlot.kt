@@ -25,20 +25,15 @@ import com.google.android.apps.auto.sdk.CarActivity
  *   fragment add+detach commitNow, then attach commit();
  *   then hideAppHeader.
  *
- * Fermata initCarActivity hides chrome before setContentView.
- * CarStream does not inflate a second container after onStart; it
- * keeps the onCreate FrameLayout in g and attaches the fragment
- * into that same id.
- *
- * Chrome is applied after app content is in g so Gearhead does not
- * lay out the empty PagedListView as the only pane.
+ * Fermata initCarActivity hides chrome before setContentView, and
+ * MainActivityDelegate.setContentView runs after media connect —
+ * after CarActivity.onStart / Gearhead CarUiController.a().
+ * Inflating car_host_root in onCreate lets that restore cover g.
  *
  * CarActivity.onStart runs gms.car.e.onStart (execPendingActions)
- * and then Gearhead CarUiController.a(). A commit() queued in
- * onCreate therefore attaches the fragment BEFORE Gearhead onStart
- * and that restore can cover g with the empty PagedListView.
- * Attach with commitNow after super.onStart so the hosted page is
- * created in car_host_root after chrome restore.
+ * and then Gearhead CarUiController.a(). setContentView(car_host_root)
+ * and fragment attach happen after super.onStart so the hosted page
+ * is created in g after chrome restore.
  *
  * CarActivity.setContentView always writes field g, assigned once in
  * onCreate from findViewById(getContentContainerId()). If Gearhead

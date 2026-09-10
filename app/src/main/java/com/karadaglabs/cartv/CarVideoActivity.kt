@@ -36,9 +36,10 @@ import java.net.URL
  * Destinations switch inside that slot: Live TV list/SurfaceView,
  * YouTube WebView, Google WebView.
  *
- * The hosted fragment is added+detached in onCreate and attached
- * with commitNow after Gearhead CarUiController.onStart so chrome
- * restore cannot cover car_host_root.
+ * The hosted fragment is added+detached after Gearhead
+ * CarUiController.onStart, then attached with commitNow, so chrome
+ * restore cannot cover car_host_root. Fermata also setContentView
+ * after onCreate (after media connect).
  */
 @UnstableApi
 class CarVideoActivity : CarActivity(), CarDestinationHost {
@@ -82,15 +83,11 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         CarContentSlot.hideHeader(this)
         CarContentSlot.hideMenu(this)
-        val root = CarContentSlot.install(this)
-        hostRoot = root
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
-
-        hostProjectionFragment()
 
         try {
             startService(Intent(this, CarMediaService::class.java))
@@ -174,6 +171,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 "HOST_SLOT_REUSE attached=${hostRoot?.isAttachedToWindow == true}"
             )
         }
+        hostProjectionFragment()
         if (rootColumn == null) {
             attachHostedFragment()
             if (rootColumn == null) {

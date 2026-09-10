@@ -93,10 +93,15 @@ class AndroidAutoDiscoveryTest {
                 it.trim() == """<uses name="template" />"""
             }
         )
+        assertFalse(
+            "notification makes AA open the empty message surface",
+            xml.lineSequence().any {
+                it.trim() == """<uses name="notification" />"""
+            }
+        )
         assertTrue(xml.contains("""name="projection""""))
         assertTrue(xml.contains("""<uses name="video" />"""))
         assertTrue(xml.contains("""name="service""""))
-        assertTrue(xml.contains("""<uses name="notification" />"""))
     }
 
     @Test
