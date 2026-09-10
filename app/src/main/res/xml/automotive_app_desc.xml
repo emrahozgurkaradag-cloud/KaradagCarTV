@@ -1,12 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        Projection is the only Android Auto launcher surface.
-        Media browse (MediaBrowserService) is not advertised so the
-        host cannot open a radio/TV list instead of CarVideoActivity.
-        CarMediaService still runs in-process for ExoPlayer.
-        Template stays commented out (Fermata).
-        video: park/OEM host video capability for SurfaceView.
+        Fermata and CarStream advertise projection + media + service.
+        Template stays commented out so the host opens CarActivity, not
+        a NavigationTemplate. Live TV / YouTube / Google are not media
+        browse children (that path was Öğe yok). Media root is radio
+        only. video: park/OEM host SurfaceView capability.
     -->
     <uses
         name="projection"
@@ -15,6 +14,7 @@
     <uses
         name="service"
         tools:ignore="InvalidUsesTagAttribute" />
-    <!-- <uses name="media" /> -->
+    <uses name="notification" />
+    <uses name="media" />
     <!-- <uses name="template" /> -->
 </automotiveApp>

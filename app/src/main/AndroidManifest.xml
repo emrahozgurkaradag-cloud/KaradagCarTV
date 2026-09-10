@@ -152,9 +152,19 @@
 
         <service
             android:name=".CarMediaService"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="mediaPlayback"
-            android:label="Karadag Radyo" />
+            android:label="Karadag Radyo">
+
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+
+        </service>
 
         <!--
             Mirror is phone-initiated MediaProjection, not the Android Auto

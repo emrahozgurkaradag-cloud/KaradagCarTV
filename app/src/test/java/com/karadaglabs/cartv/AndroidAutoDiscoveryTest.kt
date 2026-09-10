@@ -83,7 +83,7 @@ class AndroidAutoDiscoveryTest {
     fun automotiveDescriptorDeclaresAllHostCapabilities() {
         val xml = sourceFile("res/xml/automotive_app_desc.xml").readText()
 
-        assertFalse(
+        assertTrue(
             xml.lineSequence().any {
                 it.trim() == """<uses name="media" />"""
             }
@@ -96,6 +96,7 @@ class AndroidAutoDiscoveryTest {
         assertTrue(xml.contains("""name="projection""""))
         assertTrue(xml.contains("""<uses name="video" />"""))
         assertTrue(xml.contains("""name="service""""))
+        assertTrue(xml.contains("""<uses name="notification" />"""))
     }
 
     @Test
@@ -119,8 +120,9 @@ class AndroidAutoDiscoveryTest {
         val mediaStart = xml.indexOf("""android:name=".CarMediaService"""")
         val mirrorStart = xml.indexOf("""android:name=".CarMirrorService"""", mediaStart)
         val mediaBlock = xml.substring(mediaStart, mirrorStart)
-        assertTrue(mediaBlock.contains("""android:exported="false""""))
-        assertFalse(mediaBlock.contains("MediaBrowserService"))
+        assertTrue(mediaBlock.contains("""android:exported="true""""))
+        assertTrue(mediaBlock.contains("MediaBrowserService"))
+        assertTrue(mediaBlock.contains("MediaLibraryService"))
         assertTrue(xml.contains("""android:label="Karadag Radyo""""))
         assertTrue(xml.contains("""android:label="Karadag Car TV""""))
         assertTrue(
