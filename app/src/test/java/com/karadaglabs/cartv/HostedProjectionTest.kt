@@ -124,6 +124,7 @@ class HostedProjectionSourceTest {
         val slot = source("java/com/karadaglabs/cartv/CarContentSlot.kt")
 
         assertTrue(video.contains("CAR VIDEO ACTIVITY AÇILDI"))
+        assertTrue(video.contains("setTheme(R.style.Theme_KaradagCarTV_Car)"))
         assertTrue(video.contains("CAR VIDEO SURFACE CREATED"))
         assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
         assertTrue(video.contains("setCarSurfaceView"))
@@ -196,6 +197,7 @@ class HostedProjectionSourceTest {
         val phone = source("java/com/karadaglabs/cartv/YouTubeActivity.kt")
 
         assertTrue(youtube.contains("CAR YOUTUBE ACTIVITY AÇILDI"))
+        assertTrue(youtube.contains("setTheme(R.style.Theme_KaradagCarTV_Car)"))
         assertTrue(youtube.contains("CAR YOUTUBE WEBVIEW READY"))
         assertTrue(youtube.contains("CAR YOUTUBE URL LOADED"))
         assertTrue(youtube.contains("CarProjectionWebView"))
@@ -222,6 +224,7 @@ class HostedProjectionSourceTest {
         val hosted = source("java/com/karadaglabs/cartv/HostedWebView.kt")
 
         assertTrue(google.contains("CAR GOOGLE ACTIVITY AÇILDI"))
+        assertTrue(google.contains("setTheme(R.style.Theme_KaradagCarTV_Car)"))
         assertTrue(google.contains("CAR GOOGLE WEBVIEW READY"))
         assertTrue(google.contains("CAR GOOGLE URL LOADED"))
         assertTrue(google.contains("CarProjectionWebView"))

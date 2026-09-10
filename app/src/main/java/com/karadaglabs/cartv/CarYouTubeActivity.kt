@@ -26,6 +26,7 @@ class CarYouTubeActivity : CarActivity() {
     private var overlay: FrameLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_KaradagCarTV_Car)
         super.onCreate(savedInstanceState)
 
         Log.d(TAG, "CAR YOUTUBE ACTIVITY AÇILDI")

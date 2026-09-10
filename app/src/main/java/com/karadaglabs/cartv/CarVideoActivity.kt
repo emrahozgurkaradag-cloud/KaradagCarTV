@@ -66,6 +66,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private var hostedReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_KaradagCarTV_Car)
         super.onCreate(savedInstanceState)
 
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")

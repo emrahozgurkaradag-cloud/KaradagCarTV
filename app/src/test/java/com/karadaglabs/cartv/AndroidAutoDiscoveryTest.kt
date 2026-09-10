@@ -309,6 +309,7 @@ class AndroidAutoDiscoveryTest {
         ).readText()
 
         assertTrue(activity.contains("SurfaceView"))
+        assertTrue(activity.contains("setTheme(R.style.Theme_KaradagCarTV_Car)"))
         assertTrue(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
         assertTrue(activity.contains("CarContentSlot.keepInSlot"))
