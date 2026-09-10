@@ -279,11 +279,14 @@ class AndroidAutoDiscoveryTest {
         val media = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
+        val video = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
 
         assertTrue(repository.contains("AppSession.deviceUuid"))
         assertTrue(repository.contains("AppSession.licenseKey"))
         assertTrue(media.contains("IptvRepository.loadCached"))
-        assertTrue(media.contains("IptvRepository.loadFromApiWithCacheFallback"))
+        assertTrue(video.contains("IptvRepository.loadFromApiWithCacheFallback"))
     }
 
     @Test
