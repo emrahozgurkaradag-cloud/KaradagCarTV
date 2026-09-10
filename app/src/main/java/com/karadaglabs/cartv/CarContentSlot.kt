@@ -49,9 +49,11 @@ object CarContentSlot {
         root.keepScreenOn = true
 
         try {
-            activity.carUiController.statusBarController.hideAppHeader()
+            val ui = activity.carUiController
+            ui.statusBarController.hideAppHeader()
+            ui.menuController.hideMenuButton()
         } catch (exception: Exception) {
-            Log.w(TAG, "hideAppHeader unavailable", exception)
+            Log.w(TAG, "hideAppHeader/hideMenuButton unavailable", exception)
         }
 
         activity.setContentView(root)
