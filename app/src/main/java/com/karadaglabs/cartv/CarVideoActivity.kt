@@ -73,9 +73,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         BoundCarHost.bind(this)
 
+        CarContentSlot.hideHeader(this)
         val root = CarContentSlot.install(this)
         hostRoot = root
-        CarContentSlot.hideHeader(this)
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
@@ -146,6 +146,11 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             hostRoot = CarContentSlot.install(this)
             attachHostedFragment()
             ensureHostedPage()
+            val page = rootColumn
+            if (page != null && !CarContentSlot.isInLiveSlot(this, page)) {
+                CarContentSlot.putPage(this, page)
+                hostRoot = page as? FrameLayout
+            }
         }
         CarContentSlot.hideMenu(this)
         (rootColumn ?: hostRoot)?.let { root ->

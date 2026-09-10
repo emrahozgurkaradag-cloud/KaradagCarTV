@@ -63,6 +63,7 @@ object CarContentSlot {
             val bar = activity.carUiController.statusBarController
             bar.hideAppHeader()
             bar.hideConnectivityLevel()
+            bar.hideTitle()
         } catch (exception: Exception) {
             Log.w(TAG, "hideAppHeader unavailable", exception)
         }
@@ -137,6 +138,21 @@ object CarContentSlot {
         }
         dumpHost(activity, host)
         scheduleDump(activity, host)
+    }
+
+    fun putPage(activity: CarActivity, page: View): View {
+        page.keepScreenOn = true
+        fillParent(page)
+        putInSlot(activity, page)
+        dumpHost(activity, page)
+        scheduleDump(activity, page)
+        return page
+    }
+
+    fun isInLiveSlot(activity: CarActivity, view: View): Boolean {
+        bindLiveSlotField(activity)
+        val slot = resolveSlot(activity) ?: return false
+        return slot.isAttachedToWindow && isUnder(slot, view)
     }
 
     fun rebind(activity: CarActivity, root: View) {
