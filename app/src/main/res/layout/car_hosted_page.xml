@@ -40,15 +40,16 @@
             android:horizontalSpacing="10dp"
             android:numColumns="2"
             android:verticalSpacing="10dp"
-            android:visibility="visible" />
+            android:visibility="gone" />
 
         <com.google.android.apps.auto.sdk.ui.PagedListView
             android:id="@+id/car_paged_list"
             android:layout_width="fill_parent"
             android:layout_height="0dp"
+            android:layout_weight="1"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:visibility="gone" />
+            android:visibility="visible" />
     </LinearLayout>
 
     <SurfaceView

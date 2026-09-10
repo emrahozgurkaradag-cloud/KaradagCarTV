@@ -233,15 +233,33 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         return CarContentSlot.isInLiveSlot(this, root)
     }
 
+    private fun hostedContentPainted(): Boolean {
+        if (!hostRootInLiveSlot()) {
+            return false
+        }
+        val root = hostRoot ?: return false
+        if (!root.isAttachedToWindow) {
+            return false
+        }
+        val list = rootColumn?.findViewById<View>(R.id.car_paged_list)
+        val shown = listOf(rootColumn, list, gridView, webOverlay, surfaceView)
+        return shown.any { view ->
+            view != null &&
+                view.visibility == View.VISIBLE &&
+                view.isAttachedToWindow
+        }
+    }
+
     private fun revealHostedPage(force: Boolean = false) {
         val liveRoot = hostRoot
-        val needsInstall = force ||
-            liveRoot == null ||
-            !CarContentSlot.isInLiveSlot(this, liveRoot)
+        val painted = hostedContentPainted()
+        val needsInstall = liveRoot == null ||
+            !CarContentSlot.isInLiveSlot(this, liveRoot) ||
+            (force && !painted)
         Log.d(
             TAG,
             "HOST_SLOT_LIVE inLive=${liveRoot != null && CarContentSlot.isInLiveSlot(this, liveRoot)} " +
-                "force=$force attached=${liveRoot?.isAttachedToWindow == true}"
+                "force=$force painted=$painted attached=${liveRoot?.isAttachedToWindow == true}"
         )
         if (needsInstall) {
             val page = rootColumn
@@ -1147,11 +1165,15 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             destination == ProjectionDestination.GOOGLE
         val list = rootColumn?.findViewById<View>(R.id.car_paged_list)
         if (list != null) {
-            HostedCarList.attach(list, rows, ::onHostedRow)
+            list.visibility = if (hide) View.GONE else View.VISIBLE
+            if (!hide) {
+                HostedCarList.attach(list, rows, ::onHostedRow)
+            }
         }
         val grid = gridView
         if (grid != null) {
-            grid.visibility = if (hide) View.GONE else View.VISIBLE
+            val showGrid = !hide && list == null
+            grid.visibility = if (showGrid) View.VISIBLE else View.GONE
             if (!hide) {
                 adapter?.update(hostedGridChannels(rows), state.selectedId)
             }
