@@ -473,13 +473,13 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             return
         }
         Log.d(TAG, "HOST_SLOT_MEDIA_CONNECT")
-        revealHostedPage(force = !hostRootInLiveSlot())
+        revealHostedPage(force = true)
         rebindHostedPage()
     }
 
     override fun onStart() {
         super.onStart()
-        revealHostedPage(force = !hostRootInLiveSlot())
+        revealHostedPage(force = true)
         rebindHostedPage()
         rootColumn?.post { rebindHostedPage() }
         bindIfPlaying()

@@ -158,6 +158,13 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("hostProjectionFragment"))
         assertTrue(video.contains("attachHostedFragment"))
         assertTrue(video.contains("revealHostedPage"))
+        val onStartStart = video.indexOf("override fun onStart()")
+        val onStartBlock = video.substring(
+            onStartStart,
+            video.indexOf("override fun onResume()", onStartStart)
+        )
+        assertTrue(onStartBlock.contains("revealHostedPage(force = true)"))
+        assertTrue(onStartBlock.contains("super.onStart()"))
         assertTrue(video.contains("BoundCarHost.bind"))
         assertTrue(video.contains("BoundCarHost.unbind"))
         assertTrue(video.contains("BoundCarHost.consumePending"))
