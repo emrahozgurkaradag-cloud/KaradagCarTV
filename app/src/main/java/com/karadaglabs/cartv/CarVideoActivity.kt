@@ -317,6 +317,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         if (rootColumn == null || rootColumn?.parent == null) {
             ensureHostedPage()
         }
+        rootColumn?.let { keepSingleHostedPage(it) }
         HostedNavigation.bindDrawerMenu(
             this,
             destination,
@@ -345,6 +346,33 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         watchHostRoot(hostRoot)
     }
 
+    private fun keepSingleHostedPage(page: View) {
+        val parent = page.parent as? ViewGroup ?: hostRoot ?: return
+        if (parent.id != R.id.car_host_root) {
+            return
+        }
+        val extras = ArrayList<View>()
+        for (index in 0 until parent.childCount) {
+            val child = parent.getChildAt(index)
+            if (child !== page) {
+                extras.add(child)
+            }
+        }
+        extras.forEach { extra ->
+            parent.removeView(extra)
+        }
+        if (page.parent !== parent) {
+            (page.parent as? ViewGroup)?.removeView(page)
+            parent.addView(
+                page,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+    }
+
     private fun hostedFragmentWaiting(): Boolean {
         val hosted = supportFragmentManager.findFragmentByTag("hosted")
         return hosted != null && hosted.isAdded && hosted.isDetached
@@ -368,6 +396,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             return
         }
         hostRoot = view.parent as? FrameLayout ?: hostRoot
+        keepSingleHostedPage(view)
         if (gridView == null || rootColumn !== view) {
             bindHostedPage(view)
         }
