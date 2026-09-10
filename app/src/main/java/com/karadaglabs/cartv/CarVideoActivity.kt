@@ -71,6 +71,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private var destroyed = false
     private var hostRoot: FrameLayout? = null
     private var hostedReady = false
+    private var pendingLiveTvChannelId: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_KaradagCarTV_Car)
@@ -112,7 +113,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun hostProjectionFragment(): Boolean {
-        if (rootColumn?.isAttachedToWindow == true) {
+        if (rootColumn != null) {
             return true
         }
         return try {
@@ -167,7 +168,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     internal fun hostedPageIfPresent(): View? {
         val page = rootColumn ?: return null
-        return page.takeIf { it.isAttachedToWindow }
+        return page.takeIf { it.parent == null }
     }
 
     private fun ensureHostedPage() {
@@ -180,10 +181,21 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun revealHostedPage() {
         if (hostRoot == null || hostRoot?.isAttachedToWindow != true) {
-            rootColumn = null
+            val page = rootColumn
             setContentView(R.layout.car_host_root)
             hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
                 ?: CarContentSlot.install(this)
+            if (page != null) {
+                (page.parent as? ViewGroup)?.removeView(page)
+                hostRoot?.addView(
+                    page,
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                )
+                rootColumn = page
+            }
             Log.d(TAG, "HOST_SLOT_REINSTALL")
         } else {
             Log.d(
@@ -404,10 +416,33 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         destination = ProjectionDestination.LIVE_TV
         hideCarSearchBox()
         hideWeb()
+        BoundCarHost.consumePendingChannel()?.let { channelId ->
+            pendingLiveTvChannelId = channelId
+        }
+        if (
+            playPendingLiveTvChannel() ||
+            (state.mode == ProjectionMode.PLAYING && state.selected != null)
+        ) {
+            applyState()
+            refreshMenu()
+            rootColumn?.let { CarContentSlot.rebind(this, it) }
+            Log.d(TAG, "CAR HOST LIVE TV")
+            return
+        }
         showChannelList()
         refreshMenu()
         rootColumn?.let { CarContentSlot.rebind(this, it) }
         Log.d(TAG, "CAR HOST LIVE TV")
+    }
+
+    private fun playPendingLiveTvChannel(): Boolean {
+        val channelId = pendingLiveTvChannelId ?: return false
+        val channel = state.channels.firstOrNull { candidate ->
+            candidate.id == channelId
+        } ?: return false
+        pendingLiveTvChannelId = null
+        onChannelClicked(channel)
+        return true
     }
 
     private fun showRadio() {
@@ -606,7 +641,14 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             state = state.withChannels(cached, loading = true)
             persistSelection()
             Log.d(TAG, "LIVE_TV_CHANNEL_COUNT count=${state.channels.size}")
-            applyState()
+            if (
+                destination == ProjectionDestination.LIVE_TV &&
+                playPendingLiveTvChannel()
+            ) {
+                refreshMenu()
+            } else {
+                applyState()
+            }
         } else {
             applyState()
         }
@@ -637,7 +679,14 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
                 Log.d(TAG, "LIVE_TV_CHANNEL_COUNT count=${state.channels.size}")
                 persistSelection()
-                applyState()
+                if (
+                    destination == ProjectionDestination.LIVE_TV &&
+                    playPendingLiveTvChannel()
+                ) {
+                    refreshMenu()
+                } else {
+                    applyState()
+                }
             }
         }.start()
     }

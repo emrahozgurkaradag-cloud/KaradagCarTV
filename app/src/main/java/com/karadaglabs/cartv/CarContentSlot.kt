@@ -594,6 +594,9 @@ object BoundCarHost {
     @Volatile
     private var pending: ProjectionDestination? = null
 
+    @Volatile
+    private var pendingChannelId: Int? = null
+
     fun bind(host: CarDestinationHost) {
         current = host
     }
@@ -604,8 +607,14 @@ object BoundCarHost {
         }
     }
 
-    fun show(destination: ProjectionDestination): Boolean {
+    fun show(
+        destination: ProjectionDestination,
+        channelId: Int? = null
+    ): Boolean {
         pending = destination
+        if (channelId != null) {
+            pendingChannelId = channelId
+        }
         val bound = current
         Handler(Looper.getMainLooper()).post {
             val live = current ?: CarVideoService.hostedActivity()
@@ -633,5 +642,11 @@ object BoundCarHost {
         )
         host.showHostedDestination(destination)
         return destination
+    }
+
+    fun consumePendingChannel(): Int? {
+        val channelId = pendingChannelId
+        pendingChannelId = null
+        return channelId
     }
 }

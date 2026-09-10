@@ -166,6 +166,8 @@ class AndroidAutoDiscoveryTest {
         assertTrue(media.contains("buildRootMediaItems()"))
         assertTrue(rootBlock.contains("createCategoryItem"))
         assertTrue(rootBlock.contains("LIVE_TV_ID"))
+        assertTrue(rootBlock.contains("liveTvSubtitle()"))
+        assertFalse(rootBlock.contains("channels.isNotEmpty()"))
         assertTrue(rootBlock.contains("createYouTubeMediaItem"))
         assertTrue(rootBlock.contains("createGoogleMediaItem"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))

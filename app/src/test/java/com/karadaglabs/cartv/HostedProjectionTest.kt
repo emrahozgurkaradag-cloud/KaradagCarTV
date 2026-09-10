@@ -100,6 +100,8 @@ class HostedProjectionDestinationTest {
         assertTrue(slot.contains("showHostedDestination"))
         assertTrue(slot.contains("HOST_SLOT_PENDING"))
         assertTrue(slot.contains("fun consumePending"))
+        assertTrue(slot.contains("consumePendingChannel"))
+        assertTrue(slot.contains("pendingChannelId"))
         assertTrue(slot.contains("CarVideoService.hostedActivity"))
     }
 
@@ -146,6 +148,7 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("BoundCarHost.bind"))
         assertTrue(video.contains("BoundCarHost.unbind"))
         assertTrue(video.contains("BoundCarHost.consumePending"))
+        assertTrue(video.contains("playPendingLiveTvChannel"))
         assertTrue(video.contains("HOST_SLOT_PENDING"))
         assertTrue(video.contains("CAR STREAM FRAGMENT ATTACHED"))
         assertTrue(video.contains("CarContentSlot.keepInSlot"))
@@ -332,6 +335,9 @@ class HostedProjectionSourceTest {
         assertTrue(addBlock.contains("MEDIA_HOSTED_DESTINATION"))
         assertTrue(addBlock.contains("hostedDestination"))
         assertTrue(addBlock.contains("prepareChannel"))
+        assertTrue(addBlock.contains("CarVideoService::class.java"))
+        assertTrue(addBlock.contains("waitForSurface = false"))
+        assertTrue(addBlock.contains("revealHostedFromMedia"))
         assertFalse(addBlock.contains("createInfoItem"))
         assertTrue(media.contains("silenceUri"))
         assertTrue(media.contains("raw/silence"))

@@ -1,5 +1,6 @@
 ﻿package com.karadaglabs.cartv
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -743,19 +744,11 @@ class CarMediaService : MediaLibraryService() {
                 mediaId
             )
 
-        if (
-            hosted == ProjectionDestination.YOUTUBE ||
-            hosted == ProjectionDestination.GOOGLE
-        ) {
+        if (hosted != null) {
 
-            val bound =
-                BoundCarHost.show(
-                    hosted
-                )
-
-            Log.i(
-                TAG,
-                "MEDIA_HOSTED_DESTINATION=${hosted.name} bound=$bound"
+            revealHostedFromMedia(
+                hosted,
+                mediaId
             )
         }
 
@@ -798,7 +791,8 @@ class CarMediaService : MediaLibraryService() {
             if (channel != null) {
 
                 CarVideoPlayerHolder.prepareChannel(
-                    channel
+                    channel,
+                    waitForSurface = false
                 )
 
                 return createLiveTvMediaItem(
@@ -819,7 +813,8 @@ class CarMediaService : MediaLibraryService() {
             if (channel != null) {
 
                 CarVideoPlayerHolder.prepareChannel(
-                    channel
+                    channel,
+                    waitForSurface = false
                 )
 
                 return createLiveTvMediaItem(
@@ -829,6 +824,45 @@ class CarMediaService : MediaLibraryService() {
         }
 
         return null
+    }
+
+    private fun revealHostedFromMedia(
+        destination: ProjectionDestination,
+        mediaId: String
+    ) {
+        try {
+            startService(
+                Intent(
+                    this,
+                    CarVideoService::class.java
+                )
+            )
+        } catch (exception: Exception) {
+            Log.w(
+                TAG,
+                "Unable to start CarVideoService",
+                exception
+            )
+        }
+
+        val channelId =
+            mediaId
+                .removePrefix("live-tv-")
+                .toIntOrNull()
+                .takeIf {
+                    mediaId.startsWith("live-tv-")
+                }
+
+        val bound =
+            BoundCarHost.show(
+                destination,
+                channelId
+            )
+
+        Log.i(
+            TAG,
+            "MEDIA_HOSTED_DESTINATION=${destination.name} bound=$bound"
+        )
     }
 
     private fun liveTvSubtitle(): String {
@@ -854,16 +888,13 @@ class CarMediaService : MediaLibraryService() {
                 radios.size + channels.size + 3
             )
 
-        if (channels.isNotEmpty()) {
-
-            items.add(
-                createCategoryItem(
-                    LIVE_TV_ID,
-                    "📺 Canlı TV",
-                    "${channels.size} kanal"
-                )
+        items.add(
+            createCategoryItem(
+                LIVE_TV_ID,
+                "📺 Canlı TV",
+                liveTvSubtitle()
             )
-        }
+        )
 
         items.add(
             createYouTubeMediaItem()
@@ -903,12 +934,7 @@ class CarMediaService : MediaLibraryService() {
         }
 
         val rootCount =
-            radios.size + 2 +
-                if (channelCount > 0) {
-                    channelCount + 1
-                } else {
-                    0
-                }
+            radios.size + 3 + channelCount
 
         mediaLibrarySession.notifyChildrenChanged(
             ROOT_ID,
@@ -1432,9 +1458,12 @@ object CarVideoPlayerHolder {
         }
     }
 
-    fun prepareChannel(channel: IptvChannel) {
+    fun prepareChannel(
+        channel: IptvChannel,
+        waitForSurface: Boolean = true
+    ) {
         runOnMainThread {
-            requireSurface = true
+            requireSurface = waitForSurface
             pendingAudio = null
             prepareChannelLocked(channel)
         }
