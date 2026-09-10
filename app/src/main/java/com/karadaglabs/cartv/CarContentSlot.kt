@@ -35,11 +35,12 @@ import com.google.android.apps.auto.sdk.CarActivity
  * and fragment attach happen after super.onStart so the hosted page
  * is created in g after chrome restore.
  *
- * CarActivity.setContentView always writes field g, assigned once in
- * onCreate from findViewById(getContentContainerId()). If Gearhead
+ * CarActivity.setContentView always writes field g. If Gearhead
  * onStart replaces the window layout, g can point at a detached
  * view. bindLiveSlotField reassigns g to the live window container
- * from the same public ID before inflate.
+ * from the same public ID, then setContentView inflates into that
+ * official slot. Content is never addView'd into a different
+ * container than g.
  *
  * keepInSlot retries that put on the main Handler. View.postDelayed
  * only drains after attach, so a detached page would never retry.
@@ -295,8 +296,7 @@ object CarContentSlot {
 
     private fun putInSlot(activity: CarActivity, root: View) {
         bindLiveSlotField(activity)
-        val slot = resolveSlot(activity)
-        if (slot == null) {
+        if (readCarActivitySlot(activity) == null) {
             Log.e(
                 TAG,
                 "CarActivity.g missing; setContentView cannot attach hosted UI"
@@ -306,19 +306,7 @@ object CarContentSlot {
         try {
             (root.parent as? ViewGroup)?.removeView(root)
             fillParent(root)
-            val field = readCarActivitySlot(activity)
-            if (slot != null && slot !== field) {
-                slot.removeAllViews()
-                slot.addView(
-                    root,
-                    FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                )
-            } else {
-                activity.setContentView(root)
-            }
+            activity.setContentView(root)
         } catch (exception: Exception) {
             Log.e(TAG, "CarActivity.setContentView into g failed", exception)
             return

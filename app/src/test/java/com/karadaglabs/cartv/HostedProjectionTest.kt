@@ -74,6 +74,7 @@ class HostedProjectionDestinationTest {
         assertTrue(slot.contains("mainHandler.postDelayed"))
         assertTrue(slot.contains("fun isInLiveSlot"))
         assertTrue(slot.contains("activity.setContentView(root)"))
+        assertFalse(slot.contains("slot !== field"))
         assertTrue(slot.contains("R.layout.car_host_root"))
         assertTrue(slot.contains("fun install"))
         assertTrue(slot.contains("hostRootFromSlot"))
