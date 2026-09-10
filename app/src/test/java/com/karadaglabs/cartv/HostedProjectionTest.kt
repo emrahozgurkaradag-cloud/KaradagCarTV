@@ -58,6 +58,8 @@ class HostedProjectionDestinationTest {
         assertTrue(nav.contains("showMenuButton"))
         assertTrue(nav.contains("bindDrawerMenu"))
         assertTrue(nav.contains("HOST_MENU_BOUND"))
+        assertTrue(nav.contains("showHostContent"))
+        assertTrue(nav.contains("drawerController.closeDrawer"))
         assertFalse(nav.contains("startCarActivity"))
         assertTrue(slot.contains("CarActivity.g"))
         assertTrue(slot.contains("getContentContainerId"))

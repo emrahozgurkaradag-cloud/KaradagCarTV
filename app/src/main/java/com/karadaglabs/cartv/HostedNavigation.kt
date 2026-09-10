@@ -71,18 +71,28 @@ object HostedNavigation {
         try {
             val ui = activity.carUiController
             ui.menuController.setRootMenuAdapter(
-                DestinationMenuAdapter(onSelect)
+                DestinationMenuAdapter(activity, onSelect)
             )
             ui.menuController.showMenuButton()
             ui.statusBarController.showTitle()
             ui.statusBarController.setTitle(current.label)
+            showHostContent(activity)
             Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
         } catch (exception: Exception) {
             Log.e(TAG, "HOST_MENU_BIND failed", exception)
         }
     }
 
+    fun showHostContent(activity: CarActivity) {
+        try {
+            activity.carUiController.drawerController.closeDrawer()
+        } catch (exception: Exception) {
+            Log.w(TAG, "closeDrawer unavailable", exception)
+        }
+    }
+
     private class DestinationMenuAdapter(
+        private val activity: CarActivity,
         private val onSelect: (ProjectionDestination) -> Unit
     ) : com.google.android.apps.auto.sdk.MenuAdapter() {
 
@@ -100,6 +110,7 @@ object HostedNavigation {
         override fun onMenuItemClicked(index: Int) {
             if (index in items.indices) {
                 onSelect(items[index])
+                showHostContent(activity)
             }
         }
     }
