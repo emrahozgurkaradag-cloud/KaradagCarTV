@@ -71,14 +71,19 @@ object HostedNavigation {
     fun bindDrawerMenu(
         activity: CarActivity,
         current: ProjectionDestination,
-        onSelect: (ProjectionDestination) -> Unit
+        onSelect: (ProjectionDestination) -> Unit,
+        openDrawerOnce: Boolean = false
     ) {
         try {
             val ui = activity.carUiController
-            if (boundMenus.add(activity)) {
-                ui.menuController.setRootMenuAdapter(
-                    DestinationMenuAdapter(activity, onSelect)
-                )
+            // Gearhead onStart wipes an onCreate adapter. Set it on
+            // every bind so Canlı TV / YouTube / Google stay in the
+            // official drawer after chrome restore.
+            ui.menuController.setRootMenuAdapter(
+                DestinationMenuAdapter(activity, onSelect)
+            )
+            ui.menuController.showMenuButton()
+            if (openDrawerOnce && boundMenus.add(activity)) {
                 try {
                     ui.drawerController.openDrawer()
                 } catch (exception: Exception) {
@@ -86,7 +91,6 @@ object HostedNavigation {
                 }
                 Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
             }
-            ui.menuController.showMenuButton()
             // Do not showTitle(): that restores Gearhead chrome and
             // the empty PagedListView over slot g. CarStream keeps
             // the header hidden and only setTitle on the hidden bar.

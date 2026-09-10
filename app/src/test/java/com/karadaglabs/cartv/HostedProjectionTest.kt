@@ -59,6 +59,17 @@ class HostedProjectionDestinationTest {
         assertTrue(nav.contains("bindDrawerMenu"))
         assertTrue(nav.contains("HOST_MENU_BOUND"))
         assertTrue(nav.contains("boundMenus"))
+        assertTrue(nav.contains("openDrawerOnce"))
+        val bindStart = nav.indexOf("fun bindDrawerMenu")
+        val bindBlock = nav.substring(
+            bindStart,
+            nav.indexOf("fun showHostContent", bindStart)
+        )
+        assertTrue(
+            "MenuAdapter must be set after Gearhead onStart, not only on first onCreate bind",
+            bindBlock.indexOf("setRootMenuAdapter") <
+                bindBlock.indexOf("if (openDrawerOnce && boundMenus.add")
+        )
         assertTrue(nav.contains("showHostContent"))
         assertTrue(nav.contains("drawerController.closeDrawer"))
         assertFalse(nav.contains("startCarActivity"))

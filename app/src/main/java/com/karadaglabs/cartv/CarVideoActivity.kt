@@ -301,7 +301,12 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         if (rootColumn == null || rootColumn?.parent == null) {
             ensureHostedPage()
         }
-        HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
+        HostedNavigation.bindDrawerMenu(
+            this,
+            destination,
+            ::onMenuSelected,
+            openDrawerOnce = true
+        )
         // Keep the Gearhead drawer (Live TV / YouTube / Google) visible.
         // hideMenuButton here would cover that native list with Öğe yok.
         if (destination != ProjectionDestination.GOOGLE) {
