@@ -144,7 +144,6 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("CarContentSlot.prepareHost") || video.contains("CarContentSlot.install"))
         assertTrue(video.contains("FrameLayout(this)"))
         assertTrue(video.contains("CarContentSlot.install"))
-        assertTrue(video.contains("CarContentSlot.hideHeader"))
         assertTrue(video.contains("HostedNavigation.bindDrawerMenu"))
         assertTrue(video.contains(".detach(fragment)"))
         assertTrue(video.contains(".attach(fragment)"))

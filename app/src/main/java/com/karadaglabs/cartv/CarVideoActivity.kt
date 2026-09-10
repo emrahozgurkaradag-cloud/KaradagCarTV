@@ -88,15 +88,13 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
 
-        CarContentSlot.hideHeader(this)
-        HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
-
         setContentView(R.layout.car_host_root)
         hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
         ensureHostedPage()
         if (rootColumn != null) {
             showHostedDestination(destination)
         }
+        HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
 
         try {
             startService(Intent(this, CarMediaService::class.java))
@@ -606,7 +604,6 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         } catch (exception: Exception) {
             Log.w(TAG, "hideSearchBox unavailable", exception)
         }
-        CarContentSlot.hideHeader(this)
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
     }
 
