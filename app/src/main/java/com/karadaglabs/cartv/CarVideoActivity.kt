@@ -49,7 +49,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private var surfaceView: SurfaceView? = null
     private var listContainer: View? = null
     private var menuContainer: View? = null
-    private var rootColumn: LinearLayout? = null
+    private var rootColumn: ViewGroup? = null
     private var webOverlay: FrameLayout? = null
     private var webView: WebView? = null
     private var chromeClient: HostedWebChromeClient? = null
@@ -76,8 +76,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val root = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -86,18 +85,10 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             keepScreenOn = true
         }
 
-        val menu = HostedNavigation.menuBar(this, destination) { next ->
-            onMenuSelected(next)
-        }
-        menuContainer = menu
-        root.addView(menu)
-        rootColumn = root
-
         val content = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.BLACK)
         }
@@ -132,6 +123,18 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         this.webOverlay = webOverlay
 
         root.addView(content)
+
+        val menu = HostedNavigation.menuBar(this, destination) { next ->
+            onMenuSelected(next)
+        }
+        menu.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        menuContainer = menu
+        root.addView(menu)
+        rootColumn = root
+
         CarContentSlot.attach(this, root)
 
         applyVideoFocus(request = true)
@@ -394,12 +397,16 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private fun refreshMenu() {
         val root = rootColumn ?: return
         val previous = menuContainer ?: return
-        val index = root.indexOfChild(previous)
         val menu = HostedNavigation.menuBar(this, destination) { next ->
             onMenuSelected(next)
         }
         root.removeView(previous)
-        root.addView(menu, index)
+        menu.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        root.addView(menu)
+        menu.bringToFront()
         menuContainer = menu
     }
 

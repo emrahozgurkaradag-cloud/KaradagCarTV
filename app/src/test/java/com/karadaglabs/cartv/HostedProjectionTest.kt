@@ -105,6 +105,7 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("setCarSurfaceView"))
         assertTrue(video.contains("SurfaceHolder.Callback"))
         assertTrue(video.contains("CarContentSlot.prepareHost"))
+        assertTrue(video.contains("FrameLayout(this)"))
         assertTrue(video.contains("CarContentSlot.attach"))
         assertTrue(video.contains("CarContentSlot.rebind"))
         assertTrue(video.contains("fun getWindow()"))
