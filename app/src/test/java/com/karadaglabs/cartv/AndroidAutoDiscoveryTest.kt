@@ -118,9 +118,6 @@ class AndroidAutoDiscoveryTest {
             )
         )
         assertTrue(
-            xml.contains("androidx.car.app.CarAppService")
-        )
-        assertTrue(
             xml.contains(
                 "com.google.android.gms.car.category.CATEGORY_PROJECTION"
             )
@@ -201,9 +198,12 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             manifest.contains("""android:name=".CarMirrorService"""")
         )
-        assertTrue(
-            manifest.contains("androidx.car.app.category.NAVIGATION")
-        )
+        val mirrorStart = manifest.indexOf("""android:name=".CarMirrorService"""")
+        val videoStart = manifest.indexOf("""android:name=".CarVideoService"""", mirrorStart)
+        val mirrorBlock = manifest.substring(mirrorStart, videoStart)
+        assertTrue(mirrorBlock.contains("""android:exported="false""""))
+        assertFalse(mirrorBlock.contains("androidx.car.app.CarAppService"))
+        assertFalse(mirrorBlock.contains("androidx.car.app.category.NAVIGATION"))
         assertTrue(
             manifest.contains("""android:name=".MediaProjectionPermissionActivity"""")
         )

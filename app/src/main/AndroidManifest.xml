@@ -173,26 +173,16 @@
 
         </service>
 
-        <!-- ====================================================== -->
-        <!-- ANDROIDX CAR APP SERVICE                               -->
-        <!-- ====================================================== -->
-
+        <!--
+            Mirror is phone-initiated MediaProjection, not the Android Auto
+            launcher. An exported CarAppService with the same label as
+            CarVideoService lets the host open an empty NavigationTemplate
+            instead of CarActivity.g.
+        -->
         <service
             android:name=".CarMirrorService"
-            android:exported="true"
-            android:label="Karadag Car TV">
-
-            <intent-filter>
-
-                <action
-                    android:name="androidx.car.app.CarAppService" />
-
-                <category
-                    android:name="androidx.car.app.category.NAVIGATION" />
-
-            </intent-filter>
-
-        </service>
+            android:exported="false"
+            android:label="Karadag Mirror" />
 
         <!-- ====================================================== -->
         <!-- FERMATA TİPİ CAR ACTIVITY SERVICE                     -->
