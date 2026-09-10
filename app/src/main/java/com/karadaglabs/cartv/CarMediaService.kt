@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.media3.common.C
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -85,7 +86,7 @@ class CarMediaService : MediaLibraryService() {
         mediaLibrarySession =
             MediaLibrarySession.Builder(
                 this,
-                player,
+                HostedSkipPlayer(player),
                 CarMediaLibraryCallback()
             )
                 .setId("karadag-car-tv")
@@ -120,6 +121,24 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "======================================"
         )
+
+        executor.execute {
+            val channels =
+                IptvRepository.loadFromApiWithCacheFallback(this)
+
+            Log.d(
+                TAG,
+                "IPTV prefetch count=${channels.size}"
+            )
+
+            if (::mediaLibrarySession.isInitialized) {
+                mediaLibrarySession.notifyChildrenChanged(
+                    LIVE_TV_ID,
+                    channels.size,
+                    null
+                )
+            }
+        }
     }
 
     override fun onGetSession(
@@ -269,13 +288,51 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == ROOT_ID || parentId == RADIO_ID) {
+            if (parentId == ROOT_ID) {
 
-                /*
-                 * Media browse is radio only. Canlı TV / YouTube /
-                 * Google are hosted in CarActivity.g (that path was
-                 * Öğe yok when they were empty browse nodes).
-                 */
+                val items =
+                    ArrayList<MediaItem>(
+                        radios.size + 3
+                    )
+
+                items.add(
+                    createCategoryItem(
+                        LIVE_TV_ID,
+                        "📺 Canlı TV",
+                        liveTvSubtitle()
+                    )
+                )
+
+                items.add(
+                    createYouTubeMediaItem()
+                )
+
+                items.add(
+                    createGoogleMediaItem()
+                )
+
+                radios.forEach { radio ->
+
+                    items.add(
+                        createRadioMediaItem(
+                            radio
+                        )
+                    )
+                }
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItemList(
+                        ImmutableList.copyOf(
+                            items
+                        ),
+                        params
+                    )
+                )
+            }
+
+            if (parentId == RADIO_ID) {
+
                 val items =
                     radios.map { radio ->
 
@@ -303,22 +360,28 @@ class CarMediaService : MediaLibraryService() {
 
             if (parentId == LIVE_TV_ID) {
 
-                return Futures.immediateFuture(
+                return executor.submit<
+                    LibraryResult<ImmutableList<MediaItem>>
+                    > {
+
+                    val channels =
+                        loadLiveTvChannels()
+
+                    val items =
+                        channels.map { channel ->
+
+                            createLiveTvMediaItem(
+                                channel
+                            )
+                        }
 
                     LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createInfoItem(
-                                id = LIVE_TV_HOSTED_ID,
-                                title = "Canlı TV araç ekranında açılır",
-                                subtitle =
-                                    "Kanal listesi ve IPTV videosu " +
-                                        "projection penceresinde. " +
-                                        "MediaSession Now Playing kullanılmaz."
-                            )
+                        ImmutableList.copyOf(
+                            items
                         ),
                         params
                     )
-                )
+                }
             }
 
             /*
@@ -327,19 +390,16 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == YOUTUBE_ID) {
+            if (
+                parentId == YOUTUBE_ID ||
+                parentId == YOUTUBE_PHONE_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.of(
-                            createInfoItem(
-                                id = YOUTUBE_PHONE_ID,
-                                title = "YouTube araç ekranında açılır",
-                                subtitle =
-                                    "YouTube hosted WebView projection " +
-                                        "penceresinde gösterilir."
-                            )
+                            createYouTubeMediaItem()
                         ),
                         params
                     )
@@ -352,19 +412,16 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == GOOGLE_ID) {
+            if (
+                parentId == GOOGLE_ID ||
+                parentId == GOOGLE_PHONE_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.of(
-                            createInfoItem(
-                                id = GOOGLE_PHONE_ID,
-                                title = "Google araç ekranında açılır",
-                                subtitle =
-                                    "Arama hosted WebView projection " +
-                                        "penceresinde gösterilir."
-                            )
+                            createGoogleMediaItem()
                         ),
                         params
                     )
@@ -477,17 +534,16 @@ class CarMediaService : MediaLibraryService() {
              * YOUTUBE
              */
 
-            if (mediaId == YOUTUBE_ID) {
+            if (
+                mediaId == YOUTUBE_ID ||
+                mediaId == YOUTUBE_PHONE_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
-                        createCategoryItem(
-                            YOUTUBE_ID,
-                            "▶️ YouTube",
-                            "YouTube"
-                        ),
+                        createYouTubeMediaItem(),
 
                         null
                     )
@@ -498,51 +554,16 @@ class CarMediaService : MediaLibraryService() {
              * GOOGLE
              */
 
-            if (mediaId == GOOGLE_ID) {
+            if (
+                mediaId == GOOGLE_ID ||
+                mediaId == GOOGLE_PHONE_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
-                        createCategoryItem(
-                            GOOGLE_ID,
-                            "🔎 Google Arama",
-                            "Web"
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == YOUTUBE_PHONE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            YOUTUBE_PHONE_ID,
-                            "YouTube araç ekranında açılır",
-                            "YouTube hosted WebView projection penceresinde."
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == GOOGLE_PHONE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            GOOGLE_PHONE_ID,
-                            "Google araç ekranında açılır",
-                            "Arama hosted WebView projection penceresinde."
-                        ),
+                        createGoogleMediaItem(),
 
                         null
                     )
@@ -551,14 +572,23 @@ class CarMediaService : MediaLibraryService() {
 
             if (mediaId == LIVE_TV_HOSTED_ID) {
 
+                val first =
+                    IptvRepository.loadCached(this@CarMediaService)
+                        .firstOrNull()
+
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
-                        createInfoItem(
-                            LIVE_TV_HOSTED_ID,
-                            "Canlı TV araç ekranında açılır",
-                            "IPTV videosu projection penceresinde."
+                        first?.let { channel ->
+
+                            createLiveTvMediaItem(
+                                channel
+                            )
+                        } ?: createCategoryItem(
+                            LIVE_TV_ID,
+                            "📺 Canlı TV",
+                            liveTvSubtitle()
                         ),
 
                         null
@@ -592,25 +622,29 @@ class CarMediaService : MediaLibraryService() {
                 )
             }
 
-            /*
-             * IPTV kanalları MediaSession'da oynatılmaz.
-             */
-
             if (mediaId.startsWith("live-tv-")) {
 
-                return Futures.immediateFuture(
+                val channel =
+                    IptvRepository.loadCached(this@CarMediaService)
+                        .firstOrNull { candidate ->
 
-                    LibraryResult.ofItem(
+                            candidate.mediaId == mediaId
+                        }
 
-                        createInfoItem(
-                            LIVE_TV_HOSTED_ID,
-                            "Canlı TV araç ekranında açılır",
-                            "MediaSession Now Playing kullanılmaz."
-                        ),
+                if (channel != null) {
 
-                        null
+                    return Futures.immediateFuture(
+
+                        LibraryResult.ofItem(
+
+                            createLiveTvMediaItem(
+                                channel
+                            ),
+
+                            null
+                        )
                     )
-                )
+                }
             }
 
             /*
@@ -642,47 +676,350 @@ class CarMediaService : MediaLibraryService() {
             mediaItems: List<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
 
-            mediaItems.forEach { requested ->
-                val destination = hostedDestination(requested.mediaId) ?: return@forEach
-                val bound = BoundCarHost.show(destination)
-                Log.i(
-                    TAG,
-                    "MEDIA_HOSTED_DESTINATION=${destination.name} bound=$bound"
-                )
-            }
+            return executor.submit<List<MediaItem>> {
 
-            val resolved =
-                mediaItems.mapNotNull { requested ->
+                val resolved =
+                    mediaItems.mapNotNull { requested ->
 
-                    Log.d(
-                        TAG,
-                        "Resolving mediaId=${requested.mediaId}"
-                    )
+                        Log.d(
+                            TAG,
+                            "Resolving mediaId=${requested.mediaId}"
+                        )
 
-                    /*
-                     * RADYO
-                     */
-
-                    radios.firstOrNull {
-
-                        it.id ==
-                                requested.mediaId
-
-                    }?.let {
-
-                        createRadioMediaItem(
-                            it
+                        resolvePlayableMediaItem(
+                            requested.mediaId
                         )
                     }
-                }
 
-            Log.d(
-                TAG,
-                "Resolved media items=${resolved.size}"
+                Log.d(
+                    TAG,
+                    "Resolved media items=${resolved.size}"
+                )
+
+                resolved
+            }
+        }
+    }
+
+    private fun resolvePlayableMediaItem(
+        mediaId: String
+    ): MediaItem? {
+
+        val hosted =
+            hostedDestination(
+                mediaId
             )
 
-            return Futures.immediateFuture(
-                resolved
+        if (
+            hosted == ProjectionDestination.YOUTUBE ||
+            hosted == ProjectionDestination.GOOGLE
+        ) {
+
+            val bound =
+                BoundCarHost.show(
+                    hosted
+                )
+
+            Log.i(
+                TAG,
+                "MEDIA_HOSTED_DESTINATION=${hosted.name} bound=$bound"
+            )
+        }
+
+        radios.firstOrNull { radio ->
+
+            radio.id == mediaId
+
+        }?.let { radio ->
+
+            return createRadioMediaItem(
+                radio
+            )
+        }
+
+        if (
+            mediaId == YOUTUBE_ID ||
+            mediaId == YOUTUBE_PHONE_ID
+        ) {
+
+            return createYouTubeMediaItem()
+        }
+
+        if (
+            mediaId == GOOGLE_ID ||
+            mediaId == GOOGLE_PHONE_ID
+        ) {
+
+            return createGoogleMediaItem()
+        }
+
+        if (mediaId.startsWith("live-tv-")) {
+
+            val channel =
+                loadLiveTvChannels()
+                    .firstOrNull { candidate ->
+
+                        candidate.mediaId == mediaId
+                    }
+
+            if (channel != null) {
+
+                CarVideoPlayerHolder.prepareChannel(
+                    channel
+                )
+
+                return createLiveTvMediaItem(
+                    channel
+                )
+            }
+        }
+
+        if (
+            mediaId == LIVE_TV_HOSTED_ID ||
+            mediaId == LIVE_TV_ID
+        ) {
+
+            val channel =
+                loadLiveTvChannels()
+                    .firstOrNull()
+
+            if (channel != null) {
+
+                CarVideoPlayerHolder.prepareChannel(
+                    channel
+                )
+
+                return createLiveTvMediaItem(
+                    channel
+                )
+            }
+        }
+
+        return null
+    }
+
+    private fun liveTvSubtitle(): String {
+
+        val count =
+            IptvRepository.loadCached(this)
+                .size
+
+        return if (count > 0) {
+            "$count kanal"
+        } else {
+            "Canlı TV araç ekranında açılır"
+        }
+    }
+
+    private fun loadLiveTvChannels(): List<IptvChannel> {
+
+        val cached =
+            IptvRepository.loadCached(this)
+
+        if (cached.isNotEmpty()) {
+
+            return cached
+        }
+
+        return IptvRepository.loadFromApiWithCacheFallback(
+            this
+        )
+    }
+
+    /*
+     * YouTube / Google HTML URL'lerini ExoPlayer'a vermeyiz.
+     * Media browse öğesi radyo gibi playable kalır; görüntü
+     * BoundCarHost üzerinden hosted WebView'dedir.
+     */
+    private inner class HostedSkipPlayer(
+        player: ExoPlayer
+    ) : ForwardingPlayer(
+        player
+    ) {
+
+        override fun setMediaItem(
+            mediaItem: MediaItem
+        ) {
+
+            if (skipHostedWeb(mediaItem)) {
+                return
+            }
+
+            super.setMediaItem(
+                mediaItem
+            )
+        }
+
+        override fun setMediaItem(
+            mediaItem: MediaItem,
+            resetPosition: Boolean
+        ) {
+
+            if (skipHostedWeb(mediaItem)) {
+                return
+            }
+
+            super.setMediaItem(
+                mediaItem,
+                resetPosition
+            )
+        }
+
+        override fun setMediaItem(
+            mediaItem: MediaItem,
+            startPositionMs: Long
+        ) {
+
+            if (skipHostedWeb(mediaItem)) {
+                return
+            }
+
+            super.setMediaItem(
+                mediaItem,
+                startPositionMs
+            )
+        }
+
+        override fun setMediaItems(
+            mediaItems: List<MediaItem>
+        ) {
+
+            val playable =
+                withoutHostedWeb(
+                    mediaItems
+                )
+
+            if (playable.isEmpty()) {
+                return
+            }
+
+            super.setMediaItems(
+                playable
+            )
+        }
+
+        override fun setMediaItems(
+            mediaItems: List<MediaItem>,
+            resetPosition: Boolean
+        ) {
+
+            val playable =
+                withoutHostedWeb(
+                    mediaItems
+                )
+
+            if (playable.isEmpty()) {
+                return
+            }
+
+            super.setMediaItems(
+                playable,
+                resetPosition
+            )
+        }
+
+        override fun setMediaItems(
+            mediaItems: List<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ) {
+
+            val startItem =
+                mediaItems.getOrNull(
+                    startIndex
+                )
+
+            if (startItem != null && skipHostedWeb(startItem)) {
+                return
+            }
+
+            val playable =
+                withoutHostedWeb(
+                    mediaItems
+                )
+
+            if (playable.isEmpty()) {
+                return
+            }
+
+            val newIndex =
+                playable.indexOfFirst { item ->
+
+                    item.mediaId == startItem?.mediaId
+                }.coerceAtLeast(
+                    0
+                )
+
+            super.setMediaItems(
+                playable,
+                newIndex,
+                startPositionMs
+            )
+        }
+
+        override fun addMediaItem(
+            mediaItem: MediaItem
+        ) {
+
+            if (skipHostedWeb(mediaItem)) {
+                return
+            }
+
+            super.addMediaItem(
+                mediaItem
+            )
+        }
+
+        override fun addMediaItem(
+            index: Int,
+            mediaItem: MediaItem
+        ) {
+
+            if (skipHostedWeb(mediaItem)) {
+                return
+            }
+
+            super.addMediaItem(
+                index,
+                mediaItem
+            )
+        }
+
+        override fun addMediaItems(
+            mediaItems: List<MediaItem>
+        ) {
+
+            val playable =
+                withoutHostedWeb(
+                    mediaItems
+                )
+
+            if (playable.isEmpty()) {
+                return
+            }
+
+            super.addMediaItems(
+                playable
+            )
+        }
+
+        override fun addMediaItems(
+            index: Int,
+            mediaItems: List<MediaItem>
+        ) {
+
+            val playable =
+                withoutHostedWeb(
+                    mediaItems
+                )
+
+            if (playable.isEmpty()) {
+                return
+            }
+
+            super.addMediaItems(
+                index,
+                playable
             )
         }
     }
@@ -731,20 +1068,18 @@ class CarMediaService : MediaLibraryService() {
             .build()
     }
 
-    /*
-     * Sürüşte video/web zorlanmaz. Bu öğeler yalnızca
-     * Android Auto menüsünün boş görünmesini önler.
-     */
-    private fun createInfoItem(
-        id: String,
-        title: String,
-        subtitle: String
-    ): MediaItem {
+    private fun createYouTubeMediaItem(): MediaItem {
 
         return MediaItem.Builder()
 
             .setMediaId(
-                id
+                YOUTUBE_ID
+            )
+
+            .setUri(
+                Uri.parse(
+                    YOUTUBE_URL
+                )
             )
 
             .setMediaMetadata(
@@ -752,11 +1087,11 @@ class CarMediaService : MediaLibraryService() {
                 MediaMetadata.Builder()
 
                     .setTitle(
-                        title
+                        "▶️ YouTube"
                     )
 
                     .setArtist(
-                        subtitle
+                        "YouTube araç ekranında açılır"
                     )
 
                     .setIsBrowsable(
@@ -771,6 +1106,75 @@ class CarMediaService : MediaLibraryService() {
             )
 
             .build()
+    }
+
+    private fun createGoogleMediaItem(): MediaItem {
+
+        return MediaItem.Builder()
+
+            .setMediaId(
+                GOOGLE_ID
+            )
+
+            .setUri(
+                Uri.parse(
+                    GOOGLE_URL
+                )
+            )
+
+            .setMediaMetadata(
+
+                MediaMetadata.Builder()
+
+                    .setTitle(
+                        "🔎 Google Arama"
+                    )
+
+                    .setArtist(
+                        "Google araç ekranında açılır"
+                    )
+
+                    .setIsBrowsable(
+                        false
+                    )
+
+                    .setIsPlayable(
+                        true
+                    )
+
+                    .build()
+            )
+
+            .build()
+    }
+
+    private fun skipHostedWeb(
+        mediaItem: MediaItem
+    ): Boolean {
+
+        return when (
+            hostedDestination(
+                mediaItem.mediaId
+            )
+        ) {
+            ProjectionDestination.YOUTUBE,
+            ProjectionDestination.GOOGLE ->
+                true
+            else ->
+                false
+        }
+    }
+
+    private fun withoutHostedWeb(
+        mediaItems: List<MediaItem>
+    ): List<MediaItem> {
+
+        return mediaItems.filterNot { item ->
+
+            skipHostedWeb(
+                item
+            )
+        }
     }
 
     /*
@@ -935,16 +1339,34 @@ class CarMediaService : MediaLibraryService() {
         private const val GOOGLE_PHONE_ID =
             "karadag-google-phone"
 
+        private const val YOUTUBE_URL =
+            "https://www.youtube.com/"
+
+        private const val GOOGLE_URL =
+            "https://www.google.com/"
+
         private const val CONTENT_STYLE_LIST = 1
 
         private const val CONTENT_STYLE_GRID = 2
 
         internal fun hostedDestination(mediaId: String?): ProjectionDestination? {
-            return when (mediaId) {
-                LIVE_TV_HOSTED_ID -> ProjectionDestination.LIVE_TV
-                YOUTUBE_PHONE_ID -> ProjectionDestination.YOUTUBE
-                GOOGLE_PHONE_ID -> ProjectionDestination.GOOGLE
-                else -> null
+            if (mediaId.isNullOrBlank()) {
+                return null
+            }
+
+            return when {
+                mediaId == YOUTUBE_ID ||
+                    mediaId == YOUTUBE_PHONE_ID ->
+                    ProjectionDestination.YOUTUBE
+                mediaId == GOOGLE_ID ||
+                    mediaId == GOOGLE_PHONE_ID ->
+                    ProjectionDestination.GOOGLE
+                mediaId == LIVE_TV_ID ||
+                    mediaId == LIVE_TV_HOSTED_ID ||
+                    mediaId.startsWith("live-tv-") ->
+                    ProjectionDestination.LIVE_TV
+                else ->
+                    null
             }
         }
     }

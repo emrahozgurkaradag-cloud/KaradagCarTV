@@ -305,35 +305,38 @@ class HostedProjectionSourceTest {
     }
 
     @Test
-    fun mediaSessionDoesNotPlayLiveTvYoutubeOrGoogle() {
+    fun mediaSessionPlaysLiveTvChannelsLikeRadio() {
         val media = source("java/com/karadaglabs/cartv/CarMediaService.kt")
 
         assertTrue(media.contains("Canlı TV araç ekranında açılır"))
         assertTrue(media.contains("YouTube araç ekranında açılır"))
         assertTrue(media.contains("Google araç ekranında açılır"))
         assertTrue(media.contains("createRadioMediaItem"))
+        assertTrue(media.contains("createLiveTvMediaItem"))
+        assertTrue(media.contains("createYouTubeMediaItem"))
+        assertTrue(media.contains("createGoogleMediaItem"))
         assertFalse(media.contains("YouTube telefonda açılır"))
-        val addStart = media.indexOf("override fun onAddMediaItems")
-        val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
-        assertFalse(addBlock.contains("createLiveTvMediaItem"))
-        val infoStart = media.indexOf("private fun createInfoItem")
-        val infoBlock = media.substring(infoStart, media.indexOf("private fun createRadioMediaItem", infoStart))
-        assertTrue(infoBlock.contains("setIsPlayable"))
-        assertTrue(infoBlock.contains("true"))
-        assertFalse(infoBlock.contains("setIsPlayable(\n                        false"))
+        val addStart = media.indexOf("private fun resolvePlayableMediaItem")
+        val addBlock = media.substring(
+            addStart,
+            media.indexOf("private fun liveTvSubtitle", addStart)
+        )
+        assertTrue(addBlock.contains("createLiveTvMediaItem"))
+        assertTrue(addBlock.contains("createRadioMediaItem"))
+        assertTrue(addBlock.contains("createYouTubeMediaItem"))
+        assertTrue(addBlock.contains("createGoogleMediaItem"))
         assertTrue(addBlock.contains("BoundCarHost.show"))
         assertTrue(addBlock.contains("MEDIA_HOSTED_DESTINATION"))
         assertTrue(addBlock.contains("hostedDestination"))
+        assertTrue(addBlock.contains("prepareChannel"))
         assertFalse(addBlock.contains("createInfoItem"))
-        assertTrue(
-            media.contains("LIVE_TV_HOSTED_ID -> ProjectionDestination.LIVE_TV")
-        )
-        assertTrue(
-            media.contains("YOUTUBE_PHONE_ID -> ProjectionDestination.YOUTUBE")
-        )
-        assertTrue(
-            media.contains("GOOGLE_PHONE_ID -> ProjectionDestination.GOOGLE")
-        )
+        assertTrue(media.contains("HostedSkipPlayer"))
+        assertTrue(media.contains("LIVE_TV_HOSTED_ID"))
+        assertTrue(media.contains("YOUTUBE_PHONE_ID"))
+        assertTrue(media.contains("GOOGLE_PHONE_ID"))
+        assertTrue(media.contains("ProjectionDestination.LIVE_TV"))
+        assertTrue(media.contains("ProjectionDestination.YOUTUBE"))
+        assertTrue(media.contains("ProjectionDestination.GOOGLE"))
     }
 
     @Test

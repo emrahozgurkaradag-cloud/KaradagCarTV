@@ -156,21 +156,23 @@ class AndroidAutoDiscoveryTest {
             "java/com/karadaglabs/cartv/ProjectionDestination.kt"
         ).readText()
 
-        val rootStart = media.indexOf("if (parentId == ROOT_ID || parentId == RADIO_ID)")
-        val liveStart = media.indexOf("if (parentId == LIVE_TV_ID)", rootStart)
+        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
+        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
         val rootBlock = media.substring(
             rootStart,
-            if (liveStart > rootStart) liveStart else media.length
+            if (radioStart > rootStart) radioStart else media.length
         )
-        assertTrue(rootBlock.contains("parentId == ROOT_ID || parentId == RADIO_ID"))
+        assertTrue(rootBlock.contains("parentId == ROOT_ID"))
+        assertTrue(rootBlock.contains("createCategoryItem"))
+        assertTrue(rootBlock.contains("LIVE_TV_ID"))
+        assertTrue(rootBlock.contains("createYouTubeMediaItem"))
+        assertTrue(rootBlock.contains("createGoogleMediaItem"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))
-        assertFalse(rootBlock.contains("LIVE_TV_HOSTED_ID"))
-        assertFalse(rootBlock.contains("YOUTUBE_PHONE_ID"))
-        assertFalse(rootBlock.contains("GOOGLE_PHONE_ID"))
         assertFalse(rootBlock.contains("createInfoItem"))
-        assertFalse(rootBlock.contains("📺 Canlı TV"))
-        assertFalse(rootBlock.contains("▶️ YouTube"))
-        assertFalse(rootBlock.contains("🔎 Google Arama"))
+        assertTrue(rootBlock.contains("📺 Canlı TV"))
+        assertTrue(media.contains("▶️ YouTube"))
+        assertTrue(media.contains("🔎 Google Arama"))
+        assertTrue(media.contains("createLiveTvMediaItem"))
         assertTrue(media.contains("CONTENT_STYLE_BROWSABLE_HINT"))
         assertTrue(media.contains("YouTube araç ekranında açılır"))
         assertTrue(media.contains("Google araç ekranında açılır"))
@@ -183,10 +185,13 @@ class AndroidAutoDiscoveryTest {
         assertTrue(destinations.contains("Canlı TV"))
         assertTrue(destinations.contains("YouTube"))
         assertTrue(destinations.contains("Google"))
+        assertTrue(
+            media.contains("parentId == YOUTUBE_ID") &&
+                media.contains("createYouTubeMediaItem()")
+        )
         assertFalse(
             "YouTube browse must not return an empty list",
-            media.contains("if (parentId == YOUTUBE_ID)") &&
-                youtubeChildrenAreEmpty(media)
+            youtubeChildrenAreEmpty(media)
         )
     }
 
@@ -254,18 +259,18 @@ class AndroidAutoDiscoveryTest {
     }
 
     private fun youtubeChildrenAreEmpty(media: String): Boolean {
-        val start = media.indexOf("if (parentId == YOUTUBE_ID)")
+        val start = media.indexOf("parentId == YOUTUBE_ID")
         if (start < 0) {
             return true
         }
 
-        val google = media.indexOf("if (parentId == GOOGLE_ID)", start)
+        val google = media.indexOf("parentId == GOOGLE_ID", start)
         val block = media.substring(
             start,
             if (google > start) google else media.length
         )
 
-        return block.contains("ImmutableList.of()")
+        return !block.contains("createYouTubeMediaItem()")
     }
 
     @Test
