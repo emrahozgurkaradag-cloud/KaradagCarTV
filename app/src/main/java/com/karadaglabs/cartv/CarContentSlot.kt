@@ -606,6 +606,10 @@ object BoundCarHost {
     @Volatile
     private var mediaConnected = false
 
+    fun currentHost(): CarDestinationHost? {
+        return current
+    }
+
     fun bind(host: CarDestinationHost) {
         current = host
         if (mediaConnected) {

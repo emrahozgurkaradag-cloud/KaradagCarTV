@@ -110,6 +110,19 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         return CarContentSlot.hostWindow(this)
     }
 
+    private fun dropHostedFragment() {
+        try {
+            val manager = supportFragmentManager
+            val fragment = manager.findFragmentByTag("hosted") ?: return
+            manager.beginTransaction()
+                .remove(fragment)
+                .commitNow()
+            Log.d(TAG, "CAR STREAM FRAGMENT REMOVED")
+        } catch (exception: Exception) {
+            Log.e(TAG, "CAR STREAM FRAGMENT REMOVE FAILED", exception)
+        }
+    }
+
     private fun hostProjectionFragment(): Boolean {
         return try {
             val manager = supportFragmentManager
@@ -168,11 +181,21 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun ensureHostedPage() {
-        if (rootColumn != null) {
+        val root = hostRoot ?: return
+        val page = rootColumn
+        if (page == null) {
+            root.addView(buildHostedPage())
             return
         }
-        val root = hostRoot ?: return
-        root.addView(buildHostedPage())
+        if (page.parent == null) {
+            root.addView(
+                page,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
     }
 
     private fun revealHostedPage(force: Boolean = false) {
@@ -182,6 +205,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             liveRoot.isAttachedToWindow != true
         if (needsInstall) {
             val page = rootColumn
+            dropHostedFragment()
             setContentView(R.layout.car_host_root)
             hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
                 ?: CarContentSlot.install(this)
@@ -206,7 +230,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
         hostProjectionFragment()
         attachHostedFragment()
-        if (rootColumn == null) {
+        if (rootColumn == null || rootColumn?.parent == null) {
             queueHostedFragmentAttach()
             ensureHostedPage()
         }
@@ -220,8 +244,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                     showHostedDestination(destination)
                 }
                 applyVideoFocus(request = true)
-            } else {
-                BoundCarHost.consumePending(this)
+            } else if (BoundCarHost.consumePending(this) == null && needsInstall) {
+                showHostedDestination(destination)
             }
         }
     }

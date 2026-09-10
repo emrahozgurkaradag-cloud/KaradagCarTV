@@ -104,6 +104,7 @@ class HostedProjectionDestinationTest {
         assertFalse(slot.contains("clipChildren"))
         assertTrue(slot.contains("object BoundCarHost"))
         assertTrue(slot.contains("fun bind(host: CarDestinationHost)"))
+        assertTrue(slot.contains("fun currentHost"))
         assertTrue(slot.contains("showHostedDestination"))
         assertTrue(slot.contains("HOST_SLOT_PENDING"))
         assertTrue(slot.contains("fun consumePending"))
@@ -186,6 +187,7 @@ class HostedProjectionSourceTest {
         assertTrue(revealBlock.contains("CarContentSlot.install"))
         assertTrue(revealBlock.contains("hostProjectionFragment"))
         assertTrue(revealBlock.contains("attachHostedFragment"))
+        assertTrue(revealBlock.contains("dropHostedFragment()"))
         val hostFragmentStart = video.indexOf("private fun hostProjectionFragment")
         val hostFragmentBlock = video.substring(
             hostFragmentStart,
@@ -195,6 +197,8 @@ class HostedProjectionSourceTest {
             "Fragment add+detach must run even when the page was built in onCreate",
             hostFragmentBlock.contains("if (rootColumn != null)")
         )
+        assertTrue(video.contains("dropHostedFragment"))
+        assertTrue(video.contains(".remove(fragment)"))
         assertTrue(video.contains("HostedProjectionFragment"))
         assertTrue(video.contains("getSupportFragmentManager") || video.contains("supportFragmentManager"))
         assertTrue(video.contains("R.id.car_host_root"))
