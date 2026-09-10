@@ -88,6 +88,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             }
             applyVideoFocus(request = true)
             flushPendingWeb()
+            requestHostedFocus()
         }
 
         override fun onViewDetachedFromWindow(v: View) {
@@ -253,8 +254,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         hostProjectionFragment()
         attachHostedFragment()
         queueHostedFragmentAttach()
-        val hosted = supportFragmentManager.findFragmentByTag("hosted")
-        val waitingForAttach = hosted != null && hosted.isDetached
+        val waitingForAttach = hostedFragmentWaiting()
         if (!waitingForAttach) {
             if (rootColumn == null || rootColumn?.parent == null) {
                 ensureHostedPage()
@@ -273,8 +273,22 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             } else if (BoundCarHost.consumePending(this) == null && needsInstall) {
                 showHostedDestination(destination)
             }
+            requestHostedFocus()
         }
         watchHostRoot(hostRoot)
+    }
+
+    private fun hostedFragmentWaiting(): Boolean {
+        val hosted = supportFragmentManager.findFragmentByTag("hosted")
+        return hosted != null && hosted.isAdded && hosted.isDetached
+    }
+
+    private fun rebindHostedPage() {
+        if (hostedFragmentWaiting()) {
+            return
+        }
+        val page = rootColumn ?: return
+        CarContentSlot.rebind(this, page)
     }
 
     internal fun onHostedViewCreated(view: View) {
@@ -295,6 +309,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         } else if (BoundCarHost.consumePending(this) == null) {
             showHostedDestination(destination)
         }
+        requestHostedFocus()
         flushPendingWeb()
         Log.d(TAG, "CAR STREAM FRAGMENT ATTACHED")
     }
@@ -323,6 +338,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             )
             setBackgroundColor(Color.BLACK)
             keepScreenOn = true
+            isFocusable = true
+            isFocusableInTouchMode = true
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
 
         val content = FrameLayout(this).apply {
@@ -358,6 +376,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             )
             visibility = View.GONE
             setBackgroundColor(Color.BLACK)
+            isFocusable = true
+            isFocusableInTouchMode = true
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
         }
         content.addView(webOverlay)
         this.webOverlay = webOverlay
@@ -393,6 +414,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             ProjectionDestination.GOOGLE -> showGoogle()
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
+        requestHostedFocus()
     }
 
     override fun attachAfterMediaConnect() {
@@ -401,33 +423,29 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
         Log.d(TAG, "HOST_SLOT_MEDIA_CONNECT")
         revealHostedPage(force = hostRoot?.isAttachedToWindow != true)
-        rootColumn?.let { root ->
-            CarContentSlot.rebind(this, root)
-        }
+        rebindHostedPage()
     }
 
     override fun onStart() {
         super.onStart()
         revealHostedPage(force = hostRoot?.isAttachedToWindow != true)
-        rootColumn?.let { root ->
-            CarContentSlot.rebind(this, root)
-            root.post { CarContentSlot.rebind(this, root) }
-        }
+        rebindHostedPage()
+        rootColumn?.post { rebindHostedPage() }
         bindIfPlaying()
         webView?.onResume()
         logWebAttachment()
+        requestHostedFocus()
     }
 
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
-        rootColumn?.let { root ->
-            CarContentSlot.rebind(this, root)
-            root.post { CarContentSlot.rebind(this, root) }
-        }
+        rebindHostedPage()
+        rootColumn?.post { rebindHostedPage() }
         bindIfPlaying()
         webView?.onResume()
         logWebAttachment()
+        requestHostedFocus()
     }
 
     override fun onPause() {
@@ -526,13 +544,15 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         ) {
             applyState()
             refreshMenu()
-            rootColumn?.let { CarContentSlot.rebind(this, it) }
+            rebindHostedPage()
+            requestHostedFocus()
             Log.d(TAG, "CAR HOST LIVE TV")
             return
         }
         showChannelList()
         refreshMenu()
-        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        rebindHostedPage()
+        requestHostedFocus()
         Log.d(TAG, "CAR HOST LIVE TV")
     }
 
@@ -554,7 +574,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         CarVideoPlayerHolder.setPlayWhenReady(false)
         refreshMenu()
         applyState()
-        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        rebindHostedPage()
+        requestHostedFocus()
         Log.d(TAG, "CAR HOST RADIO")
     }
 
@@ -570,7 +591,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         attachWeb(YOUTUBE_URL, desktopUserAgent = true)
         refreshMenu()
         applyVideoFocus(request = true)
-        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        rebindHostedPage()
+        requestHostedFocus()
         logWebAttachment()
         Log.d(TAG, "CAR YOUTUBE WEBVIEW READY")
         Log.d(TAG, "CAR YOUTUBE URL LOADED")
@@ -588,7 +610,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         attachCarSearchBox()
         refreshMenu()
         applyVideoFocus(request = true)
-        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        rebindHostedPage()
+        requestHostedFocus()
         logWebAttachment()
         Log.d(TAG, "CAR GOOGLE WEBVIEW READY")
         Log.d(TAG, "CAR GOOGLE URL LOADED")
@@ -649,6 +672,11 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         overlay.bringToFront()
         view.bringToFront()
+        view.isFocusable = true
+        view.isFocusableInTouchMode = true
+        overlay.isFocusable = true
+        overlay.isFocusableInTouchMode = true
+        view.requestFocus()
         logWebAttachment()
     }
 
@@ -971,6 +999,49 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         applyState()
     }
 
+    private fun requestHostedFocus() {
+        if (destroyed) {
+            return
+        }
+        val overlay = webOverlay
+        val web = webView
+        if (
+            overlay != null &&
+            overlay.visibility == View.VISIBLE &&
+            overlay.isAttachedToWindow
+        ) {
+            web?.isFocusable = true
+            web?.isFocusableInTouchMode = true
+            if (web?.requestFocus() != true) {
+                overlay.requestFocus()
+            }
+            return
+        }
+        val surface = surfaceView
+        if (
+            surface != null &&
+            surface.visibility == View.VISIBLE &&
+            surface.isAttachedToWindow
+        ) {
+            surface.isFocusable = true
+            surface.isFocusableInTouchMode = true
+            surface.requestFocus()
+            return
+        }
+        val grid = gridView
+        if (
+            grid != null &&
+            grid.visibility == View.VISIBLE &&
+            grid.isAttachedToWindow
+        ) {
+            grid.isFocusable = true
+            grid.requestFocus()
+            return
+        }
+        rootColumn?.requestFocus()
+        hostRoot?.requestFocus()
+    }
+
     private fun applyVideoFocus(request: Boolean) {
         val result = if (request) {
             CarVideoFocus.request(this)
@@ -1016,6 +1087,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             numColumns = 2
             horizontalSpacing = dp(10)
             verticalSpacing = dp(10)
+            isFocusable = true
+            isFocusableInTouchMode = true
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
             this.adapter = this@CarVideoActivity.adapter
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

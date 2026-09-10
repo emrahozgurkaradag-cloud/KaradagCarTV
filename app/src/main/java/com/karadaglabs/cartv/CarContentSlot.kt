@@ -64,6 +64,7 @@ object CarContentSlot {
     )
     private val mainHandler = Handler(Looper.getMainLooper())
     private val keepCallbacks = mutableMapOf<Int, MutableList<Runnable>>()
+    private val latestHostRoot = java.util.WeakHashMap<CarActivity, FrameLayout>()
 
     fun prepareHost(activity: CarActivity) {
         try {
@@ -119,6 +120,9 @@ object CarContentSlot {
             root = FrameLayout(activity).apply {
                 id = R.id.car_host_root
                 keepScreenOn = true
+                isFocusable = true
+                isFocusableInTouchMode = true
+                descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -128,6 +132,10 @@ object CarContentSlot {
         }
 
         root.keepScreenOn = true
+        root.isFocusable = true
+        root.isFocusableInTouchMode = true
+        root.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        latestHostRoot[activity] = root
         logChosen(activity, root)
         dumpHost(activity, root)
         scheduleDump(activity, root)
@@ -248,9 +256,11 @@ object CarContentSlot {
 
     private fun putHostRoot(activity: CarActivity, page: View) {
         val existingRoot = ancestorHostRoot(page)
+        val liveRoot = liveHostRoot(activity)
         val container = when {
             existingRoot != null -> existingRoot
             page.id == R.id.car_host_root && page is FrameLayout -> page
+            liveRoot != null -> liveRoot
             else -> hostRootFromSlot(activity) ?: install(activity)
         }
         if (page !== container && !isUnder(container, page)) {
@@ -269,9 +279,27 @@ object CarContentSlot {
             "HOST_SLOT_CONTAINER class=${container.javaClass.name} " +
                 "id=${container.id} children=${container.childCount}"
         )
+        latestHostRoot[activity] = container
         putInSlot(activity, container)
         dumpHost(activity, page)
         scheduleDump(activity, page)
+    }
+
+    private fun liveHostRoot(activity: CarActivity): FrameLayout? {
+        val fromId = try {
+            activity.findViewById(R.id.car_host_root) as? FrameLayout
+        } catch (_: Exception) {
+            null
+        }
+        if (fromId != null) {
+            return fromId
+        }
+        latestHostRoot[activity]?.let { remembered ->
+            if (remembered.id == R.id.car_host_root) {
+                return remembered
+            }
+        }
+        return hostRootFromSlot(activity)
     }
 
     private fun ancestorHostRoot(view: View): FrameLayout? {

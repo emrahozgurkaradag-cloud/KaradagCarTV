@@ -96,6 +96,13 @@ class CarMediaService : MediaLibraryService() {
 
         BoundCarHost.onMediaConnected()
 
+        val cached =
+            IptvRepository.loadCached(this)
+
+        notifyMediaTreeChanged(
+            cached.size
+        )
+
         Log.d(
             TAG,
             "======================================"
@@ -110,9 +117,6 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "Radio count = ${radios.size}"
         )
-
-        val cached =
-            IptvRepository.loadCached(this)
 
         Log.d(
             TAG,
@@ -461,8 +465,14 @@ class CarMediaService : MediaLibraryService() {
 
             if (
                 parentId == ROOT_ID ||
-                parentId == LIVE_TV_ID
+                parentId == LIVE_TV_ID ||
+                parentId == YOUTUBE_ID ||
+                parentId == GOOGLE_ID ||
+                parentId == RADIO_ID
             ) {
+                notifyMediaTreeChanged(
+                    IptvRepository.loadCached(this@CarMediaService).size
+                )
 
                 executor.execute {
 
@@ -958,7 +968,25 @@ class CarMediaService : MediaLibraryService() {
 
         mediaLibrarySession.notifyChildrenChanged(
             LIVE_TV_ID,
-            channelCount,
+            channelCount.coerceAtLeast(1),
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
+            YOUTUBE_ID,
+            1,
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
+            GOOGLE_ID,
+            1,
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
+            RADIO_ID,
+            radios.size,
             null
         )
     }
@@ -1197,6 +1225,11 @@ class CarMediaService : MediaLibraryService() {
 
             putInt(
                 "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT",
+                CONTENT_STYLE_LIST
+            )
+
+            putInt(
+                "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT",
                 CONTENT_STYLE_LIST
             )
 

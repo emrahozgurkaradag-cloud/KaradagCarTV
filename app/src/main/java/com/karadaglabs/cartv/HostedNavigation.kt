@@ -162,6 +162,8 @@ object HostedNavigation {
             val button = Button(activity).apply {
                 text = destination.label
                 isSelected = selected
+                isFocusable = true
+                isFocusableInTouchMode = true
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                 setOnClickListener { onSelect(destination) }
                 val params = LinearLayout.LayoutParams(
