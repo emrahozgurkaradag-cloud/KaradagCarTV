@@ -89,7 +89,7 @@ class CarMediaService : MediaLibraryService() {
                 player,
                 CarMediaLibraryCallback()
             )
-                .setId("karadag-car-tv-v83")
+                .setId("karadag-car-tv-v90")
                 .build()
 
         CarVideoPlayerHolder.setPlayer(player)
@@ -1532,7 +1532,7 @@ class CarMediaService : MediaLibraryService() {
             "KaradagCarMedia"
 
         private const val ROOT_ID =
-            "karadag-car-tv-root-v83"
+            "karadag-car-tv-root-v90"
 
         private const val LIVE_TV_ID =
             "karadag-live-tv-play"

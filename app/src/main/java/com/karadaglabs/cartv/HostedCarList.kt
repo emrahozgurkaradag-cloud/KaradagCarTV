@@ -26,7 +26,9 @@ object HostedCarList {
     private const val TAG = "KaradagCarList"
     private const val ROW_TAG = "karadag_host_rows"
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val bindDelays = longArrayOf(0L, 50L, 250L, 500L, 1000L, 2000L)
+    private val bindDelays = longArrayOf(
+        0L, 50L, 250L, 500L, 1000L, 2000L, 4000L, 6000L
+    )
     private val pending = WeakHashMap<CarActivity, PendingBind>()
 
     private class PendingBind(
@@ -349,6 +351,12 @@ object HostedCarList {
         onClick: (Row) -> Unit
     ) {
         val existing = group.findViewWithTag<View>(ROW_TAG) as? LinearLayout
+        val width = firstPositiveSize(group.width, group.measuredWidth)
+        val height = firstPositiveSize(group.height, group.measuredHeight)
+        val params = FrameLayout.LayoutParams(
+            if (width > 0) width else ViewGroup.LayoutParams.MATCH_PARENT,
+            if (height > 0) height else ViewGroup.LayoutParams.MATCH_PARENT
+        )
         val column = existing ?: LinearLayout(group.context).apply {
             tag = ROW_TAG
             orientation = LinearLayout.VERTICAL
@@ -356,12 +364,13 @@ object HostedCarList {
             isFocusable = true
             isClickable = true
             descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+            layoutParams = params
             group.addView(this)
         }
+        column.minimumWidth = width
+        column.minimumHeight = height
+        column.layoutParams = params
+        column.bringToFront()
         column.removeAllViews()
         val density = group.resources.displayMetrics.density
         val pad = (16 * density).toInt()
@@ -534,5 +543,9 @@ object HostedCarList {
             isClickable = true
             isFocusableInTouchMode = true
         }
+    }
+
+    private fun firstPositiveSize(vararg values: Int): Int {
+        return values.firstOrNull { value -> value > 0 } ?: 0
     }
 }

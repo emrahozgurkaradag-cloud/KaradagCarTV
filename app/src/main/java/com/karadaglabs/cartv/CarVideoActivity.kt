@@ -90,6 +90,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             }
             applyVideoFocus(request = true)
             flushPendingWeb()
+            rootColumn?.let { fillHostedViews(it) }
             requestHostedFocus()
         }
 
@@ -225,19 +226,22 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private fun ensureHostedPage() {
         val root = hostRoot ?: return
         val page = rootColumn
+        val params = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
         if (page == null) {
-            root.addView(buildHostedPage())
+            val created = buildHostedPage()
+            created.layoutParams = params
+            root.addView(created, params)
+            fillHostedViews(created)
             return
         }
         if (page.parent == null) {
-            root.addView(
-                page,
-                FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
+            page.layoutParams = params
+            root.addView(page, params)
         }
+        fillHostedViews(page)
     }
 
     private fun hostRootInLiveSlot(): Boolean {
@@ -317,7 +321,10 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         if (rootColumn == null || rootColumn?.parent == null) {
             ensureHostedPage()
         }
-        rootColumn?.let { keepSingleHostedPage(it) }
+        rootColumn?.let { page ->
+            keepSingleHostedPage(page)
+            fillHostedViews(page)
+        }
         HostedNavigation.bindDrawerMenu(
             this,
             destination,
@@ -371,6 +378,110 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 )
             )
         }
+        fillHostedViews(page)
+    }
+
+    /**
+     * Gearhead's content slot `g` often wrap_content's children.
+     * A 0dp-weighted GridView then measures to 0px and the car
+     * keeps showing the empty PagedListView ("Öğe yok"). Size the
+     * hosted page and catalog to the live slot / car display so
+     * Live TV, YouTube, and Google actually paint in g.
+     */
+    private fun fillHostedViews(page: View) {
+        val metrics = resources.displayMetrics
+        val slot = try {
+            findViewById<View>(carUiController.c())
+        } catch (_: Exception) {
+            null
+        }
+        val host = hostRoot
+        val parent = page.parent as? View
+        val width = firstPositive(
+            slot?.width ?: 0,
+            slot?.measuredWidth ?: 0,
+            host?.width ?: 0,
+            host?.measuredWidth ?: 0,
+            parent?.width ?: 0,
+            page.width,
+            metrics.widthPixels
+        )
+        val height = firstPositive(
+            slot?.height ?: 0,
+            slot?.measuredHeight ?: 0,
+            host?.height ?: 0,
+            host?.measuredHeight ?: 0,
+            parent?.height ?: 0,
+            page.height,
+            metrics.heightPixels
+        )
+        page.minimumWidth = width
+        page.minimumHeight = height
+        val parentHasSize = (parent?.width ?: 0) > 0 && (parent?.height ?: 0) > 0
+        page.layoutParams = FrameLayout.LayoutParams(
+            if (parentHasSize) {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            } else if (width > 0) {
+                width
+            } else {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            },
+            if (parentHasSize) {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            } else if (height > 0) {
+                height
+            } else {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            }
+        )
+        listContainer?.let { list ->
+            list.minimumWidth = width
+            list.minimumHeight = height
+            if (list.layoutParams == null || list.parent === page) {
+                list.layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            }
+        }
+        val web = destination == ProjectionDestination.YOUTUBE ||
+            destination == ProjectionDestination.GOOGLE
+        val grid = gridView
+        if (grid != null && !web) {
+            val chrome = (menuContainer?.height ?: 0) + (statusView?.height ?: 0)
+            val gridHeight = firstPositive(
+                height - chrome,
+                height / 2,
+                (280 * metrics.density).toInt()
+            )
+            grid.minimumHeight = gridHeight
+            grid.layoutParams = when (grid.parent) {
+                is LinearLayout -> LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    gridHeight,
+                    1f
+                )
+                else -> FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    gridHeight
+                )
+            }
+            grid.visibility = View.VISIBLE
+        }
+        webOverlay?.let { overlay ->
+            overlay.minimumWidth = width
+            overlay.minimumHeight = height
+            overlay.layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        surfaceView?.let { surface ->
+            if (surface.visibility == View.VISIBLE) {
+                sizeSurfaceToHost(surface)
+            }
+        }
+        page.requestLayout()
     }
 
     private fun hostedFragmentWaiting(): Boolean {
@@ -400,6 +511,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         if (gridView == null || rootColumn !== view) {
             bindHostedPage(view)
         }
+        fillHostedViews(view)
         CarContentSlot.keepInSlot(this, view)
         if (!hostedReady) {
             hostedReady = true
@@ -449,6 +561,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             }
         }
         bindHostedPage(page)
+        fillHostedViews(page)
         return page
     }
 
@@ -528,6 +641,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         if (menuContainer?.parent != menuHolder) {
             refreshMenu()
         }
+        fillHostedViews(root)
     }
 
     override fun showHostedDestination(destination: ProjectionDestination) {
@@ -546,6 +660,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             ProjectionDestination.GOOGLE -> showGoogle()
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
+        rootColumn?.let { fillHostedViews(it) }
         requestHostedFocus()
     }
 
@@ -1400,9 +1515,10 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             isFocusableInTouchMode = true
             descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
             this.adapter = this@CarVideoActivity.adapter
+            minimumHeight = dp(280)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
+                dp(280),
                 1f
             )
         }
