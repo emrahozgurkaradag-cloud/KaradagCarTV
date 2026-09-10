@@ -272,21 +272,38 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * Media browse is radio only. Live TV, YouTube, and
-                 * Google are CarVideoActivity destinations. Listing
-                 * them here made Android Auto show those names and
-                 * then Öğe yok when the host opened media instead of
-                 * CarActivity.g.
+                 * Playable hosted items do not have children, so the
+                 * host cannot show Öğe yok. Taps route to the bound
+                 * CarVideoActivity via BoundCarHost. Radio stays a
+                 * real browsable list of stations.
                  */
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.of(
+                            createInfoItem(
+                                id = LIVE_TV_HOSTED_ID,
+                                title = "Canlı TV",
+                                subtitle =
+                                    "Canlı TV araç ekranında açılır"
+                            ),
                             createCategoryItem(
                                 id = RADIO_ID,
-                                title = "📻 Canlı Radyo",
+                                title = "Canlı Radyo",
                                 subtitle =
                                     "${radios.size} radyo"
+                            ),
+                            createInfoItem(
+                                id = YOUTUBE_PHONE_ID,
+                                title = "YouTube",
+                                subtitle =
+                                    "YouTube araç ekranında açılır"
+                            ),
+                            createInfoItem(
+                                id = GOOGLE_PHONE_ID,
+                                title = "Google",
+                                subtitle =
+                                    "Google araç ekranında açılır"
                             )
                         ),
                         params

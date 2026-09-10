@@ -157,7 +157,14 @@ class AndroidAutoDiscoveryTest {
             rootStart,
             if (radioStart > rootStart) radioStart else media.length
         )
-        assertTrue(rootBlock.contains("📻 Canlı Radyo"))
+        assertTrue(rootBlock.contains("Canlı Radyo"))
+        assertTrue(rootBlock.contains("Canlı TV"))
+        assertTrue(rootBlock.contains("YouTube"))
+        assertTrue(rootBlock.contains("Google"))
+        assertTrue(rootBlock.contains("karadag-live-tv-hosted"))
+        assertTrue(rootBlock.contains("karadag-youtube-phone"))
+        assertTrue(rootBlock.contains("karadag-google-phone"))
+        assertTrue(rootBlock.contains("createInfoItem"))
         assertFalse(rootBlock.contains("📺 Canlı TV"))
         assertFalse(rootBlock.contains("▶️ YouTube"))
         assertFalse(rootBlock.contains("🔎 Google Arama"))
