@@ -69,12 +69,12 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
         Log.d(TAG, "HOST_ACTIVITY_CREATED class=${javaClass.name}")
 
+        CarContentSlot.prepareHost(this)
+
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
-
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL

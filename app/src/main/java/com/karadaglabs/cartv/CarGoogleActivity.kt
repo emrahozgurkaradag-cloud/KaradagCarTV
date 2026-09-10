@@ -31,7 +31,7 @@ class CarGoogleActivity : CarActivity() {
 
         Log.d(TAG, "CAR GOOGLE ACTIVITY AÇILDI")
 
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
+        CarContentSlot.prepareHost(this)
         HostedNavigation.hideChrome(this)
         attachCarSearchBox()
 

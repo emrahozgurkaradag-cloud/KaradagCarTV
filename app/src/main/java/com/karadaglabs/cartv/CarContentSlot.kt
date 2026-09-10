@@ -45,8 +45,12 @@ object CarContentSlot {
     private val hookedParents = WeakHashMap<ViewGroup, Boolean>()
     private val followupDelays = longArrayOf(0L, 16L, 50L, 100L, 250L, 500L)
 
-    fun attach(activity: CarActivity, root: View) {
-        root.keepScreenOn = true
+    fun prepareHost(activity: CarActivity) {
+        try {
+            activity.setIgnoreConfigChanges(0xFFFFFFFF.toInt())
+        } catch (exception: Exception) {
+            Log.w(TAG, "setIgnoreConfigChanges unavailable", exception)
+        }
 
         try {
             val ui = activity.carUiController
@@ -55,6 +59,11 @@ object CarContentSlot {
         } catch (exception: Exception) {
             Log.w(TAG, "hideAppHeader/hideMenuButton unavailable", exception)
         }
+    }
+
+    fun attach(activity: CarActivity, root: View) {
+        root.keepScreenOn = true
+        prepareHost(activity)
 
         activity.setContentView(root)
         bindIntoSlot(activity, root)
@@ -64,6 +73,7 @@ object CarContentSlot {
     }
 
     fun rebind(activity: CarActivity, root: View) {
+        prepareHost(activity)
         bindIntoSlot(activity, root)
         scheduleFollowup(activity, root)
         dumpHost(activity, root)

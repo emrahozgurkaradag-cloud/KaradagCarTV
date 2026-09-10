@@ -30,7 +30,7 @@ class CarYouTubeActivity : CarActivity() {
 
         Log.d(TAG, "CAR YOUTUBE ACTIVITY AÇILDI")
 
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
+        CarContentSlot.prepareHost(this)
         HostedNavigation.hideChrome(this)
 
         val overlay = FrameLayout(this).apply {
