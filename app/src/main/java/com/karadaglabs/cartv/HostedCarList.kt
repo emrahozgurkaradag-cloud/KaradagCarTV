@@ -86,7 +86,28 @@ object HostedCarList {
 
     fun showInSlot(activity: CarActivity, page: View?) {
         val overlay = page ?: return
-        val container = visibleHost(activity) ?: contentSlot(activity) ?: return
+        val liveRoot = try {
+            activity.findViewById(R.id.car_host_root) as? ViewGroup
+        } catch (_: Exception) {
+            null
+        }
+        if (
+            liveRoot != null &&
+            liveRoot.isAttachedToWindow &&
+            isUnder(liveRoot, overlay)
+        ) {
+            overlay.visibility = View.VISIBLE
+            Log.d(
+                TAG,
+                "HOST_LIST_OVERLAY class=${liveRoot.javaClass.name} " +
+                    "${liveRoot.width}x${liveRoot.height}"
+            )
+            return
+        }
+        val container = liveRoot?.takeIf { it.isAttachedToWindow }
+            ?: visibleHost(activity)
+            ?: contentSlot(activity)
+            ?: return
         val params = overlay.layoutParams
             ?: FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -105,6 +126,17 @@ object HostedCarList {
             "HOST_LIST_OVERLAY class=${container.javaClass.name} " +
                 "${container.width}x${container.height}"
         )
+    }
+
+    private fun isUnder(parent: ViewGroup, child: View): Boolean {
+        var current: View? = child
+        while (current != null) {
+            if (current === parent) {
+                return true
+            }
+            current = current.parent as? View
+        }
+        return false
     }
 
     private fun bindNow(activity: CarActivity) {

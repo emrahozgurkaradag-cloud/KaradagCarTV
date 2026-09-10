@@ -38,8 +38,8 @@ import java.net.URL
  *
  * The hosted fragment is added+detached after Gearhead
  * CarUiController.onStart, then attached with commitNow, so chrome
- * restore cannot cover car_host_root. Fermata also setContentView
- * after onCreate (after media connect).
+ * restore cannot cover car_host_root. Fermata hides the app header
+ * and menu button, then setContentView after media connect.
  */
 @UnstableApi
 class CarVideoActivity : CarActivity(), CarDestinationHost {
@@ -276,6 +276,14 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             }
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
+        // bindDrawerMenu shows the Gearhead title/menu; hide them again
+        // so slot g stays the content surface, like Fermata. Google
+        // keeps the header because attachCarSearchBox uses it.
+        if (destination != ProjectionDestination.GOOGLE) {
+            HostedNavigation.hideChrome(this)
+            CarContentSlot.hideHeader(this)
+            CarContentSlot.hideMenu(this)
+        }
         val page = rootColumn
         if (page != null && !waitingForAttach) {
             CarContentSlot.keepInSlot(this, page)

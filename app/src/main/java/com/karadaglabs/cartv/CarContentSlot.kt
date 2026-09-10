@@ -100,6 +100,10 @@ object CarContentSlot {
     }
 
     fun install(activity: CarActivity): FrameLayout {
+        // Fermata initCarActivity: hide Gearhead chrome, then
+        // setContentView into g after CarUiController.a().
+        hideHeader(activity)
+        hideMenu(activity)
         bindLiveSlotField(activity)
         try {
             activity.setContentView(R.layout.car_host_root)

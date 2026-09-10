@@ -89,7 +89,7 @@ class CarMediaService : MediaLibraryService() {
                 player,
                 CarMediaLibraryCallback()
             )
-                .setId("karadag-car-tv")
+                .setId("karadag-car-tv-v74")
                 .build()
 
         CarVideoPlayerHolder.setPlayer(player)
@@ -332,6 +332,7 @@ class CarMediaService : MediaLibraryService() {
 
             if (
                 parentId == LIVE_TV_ID ||
+                parentId == LIVE_TV_LEGACY_ID ||
                 parentId == LIVE_TV_HOSTED_ID
             ) {
 
@@ -401,7 +402,10 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == YOUTUBE_ID) {
+            if (
+                parentId == YOUTUBE_ID ||
+                parentId == YOUTUBE_LEGACY_ID
+            ) {
 
                 return Futures.immediateFuture(
 
@@ -422,7 +426,10 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == GOOGLE_ID) {
+            if (
+                parentId == GOOGLE_ID ||
+                parentId == GOOGLE_LEGACY_ID
+            ) {
 
                 return Futures.immediateFuture(
 
@@ -466,8 +473,11 @@ class CarMediaService : MediaLibraryService() {
             if (
                 parentId == ROOT_ID ||
                 parentId == LIVE_TV_ID ||
+                parentId == LIVE_TV_LEGACY_ID ||
                 parentId == YOUTUBE_ID ||
+                parentId == YOUTUBE_LEGACY_ID ||
                 parentId == GOOGLE_ID ||
+                parentId == GOOGLE_LEGACY_ID ||
                 parentId == RADIO_ID
             ) {
                 notifyMediaTreeChanged(
@@ -537,7 +547,10 @@ class CarMediaService : MediaLibraryService() {
              * CANLI TV KATEGORİ
              */
 
-            if (mediaId == LIVE_TV_ID) {
+            if (
+                mediaId == LIVE_TV_ID ||
+                mediaId == LIVE_TV_LEGACY_ID
+            ) {
 
                 val channels =
                     IptvRepository.loadCached(this@CarMediaService)
@@ -584,7 +597,8 @@ class CarMediaService : MediaLibraryService() {
 
             if (
                 mediaId == YOUTUBE_ID ||
-                mediaId == YOUTUBE_PHONE_ID
+                mediaId == YOUTUBE_PHONE_ID ||
+                mediaId == YOUTUBE_LEGACY_ID
             ) {
 
                 return Futures.immediateFuture(
@@ -606,7 +620,8 @@ class CarMediaService : MediaLibraryService() {
 
             if (
                 mediaId == GOOGLE_ID ||
-                mediaId == GOOGLE_PHONE_ID
+                mediaId == GOOGLE_PHONE_ID ||
+                mediaId == GOOGLE_LEGACY_ID
             ) {
 
                 return Futures.immediateFuture(
@@ -783,7 +798,8 @@ class CarMediaService : MediaLibraryService() {
 
         if (
             mediaId == YOUTUBE_ID ||
-            mediaId == YOUTUBE_PHONE_ID
+            mediaId == YOUTUBE_PHONE_ID ||
+            mediaId == YOUTUBE_LEGACY_ID
         ) {
 
             return createYouTubeMediaItem(
@@ -793,7 +809,8 @@ class CarMediaService : MediaLibraryService() {
 
         if (
             mediaId == GOOGLE_ID ||
-            mediaId == GOOGLE_PHONE_ID
+            mediaId == GOOGLE_PHONE_ID ||
+            mediaId == GOOGLE_LEGACY_ID
         ) {
 
             return createGoogleMediaItem(
@@ -825,7 +842,8 @@ class CarMediaService : MediaLibraryService() {
 
         if (
             mediaId == LIVE_TV_HOSTED_ID ||
-            mediaId == LIVE_TV_ID
+            mediaId == LIVE_TV_ID ||
+            mediaId == LIVE_TV_LEGACY_ID
         ) {
 
             val channel =
@@ -973,13 +991,31 @@ class CarMediaService : MediaLibraryService() {
         )
 
         mediaLibrarySession.notifyChildrenChanged(
+            LIVE_TV_LEGACY_ID,
+            channelCount.coerceAtLeast(1),
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
             YOUTUBE_ID,
             1,
             null
         )
 
         mediaLibrarySession.notifyChildrenChanged(
+            YOUTUBE_LEGACY_ID,
+            1,
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
             GOOGLE_ID,
+            1,
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
+            GOOGLE_LEGACY_ID,
             1,
             null
         )
@@ -1047,21 +1083,14 @@ class CarMediaService : MediaLibraryService() {
         if (id == LIVE_TV_ID) {
 
             // Same shape as createRadioMediaItem: a playable root
-            // leaf. FLAG_BROWSABLE / FOLDER_TV_CHANNELS makes Android
-            // Auto open an empty folder ("Öğe yok") instead of playing.
+            // leaf. FLAG_BROWSABLE / FOLDER_TV_CHANNELS / TV_CHANNEL
+            // extras make Android Auto open an empty folder
+            // ("Öğe yok") instead of playing.
             metadataBuilder.setIsBrowsable(
                 false
             )
             metadataBuilder.setIsPlayable(
                 true
-            )
-            metadataBuilder.setMediaType(
-                MediaMetadata.MEDIA_TYPE_TV_CHANNEL
-            )
-            metadataBuilder.setExtras(
-                browseGroupExtras(
-                    "Canlı TV"
-                )
             )
         }
 
@@ -1116,16 +1145,6 @@ class CarMediaService : MediaLibraryService() {
 
                     .setIsPlayable(
                         true
-                    )
-
-                    .setMediaType(
-                        MediaMetadata.MEDIA_TYPE_TV_CHANNEL
-                    )
-
-                    .setExtras(
-                        browseGroupExtras(
-                            "Canlı TV"
-                        )
                     )
 
                     .build()
@@ -1391,9 +1410,12 @@ class CarMediaService : MediaLibraryService() {
             "KaradagCarMedia"
 
         private const val ROOT_ID =
-            "karadag-car-tv-root"
+            "karadag-car-tv-root-v74"
 
         private const val LIVE_TV_ID =
+            "karadag-live-tv-play"
+
+        private const val LIVE_TV_LEGACY_ID =
             "karadag-live-tv"
 
         private const val LIVE_TV_HOSTED_ID =
@@ -1403,9 +1425,15 @@ class CarMediaService : MediaLibraryService() {
             "karadag-live-radio"
 
         private const val YOUTUBE_ID =
+            "karadag-youtube-play"
+
+        private const val YOUTUBE_LEGACY_ID =
             "karadag-youtube"
 
         private const val GOOGLE_ID =
+            "karadag-google-play"
+
+        private const val GOOGLE_LEGACY_ID =
             "karadag-google"
 
         private const val YOUTUBE_PHONE_ID =
@@ -1425,12 +1453,15 @@ class CarMediaService : MediaLibraryService() {
 
             return when {
                 mediaId == YOUTUBE_ID ||
-                    mediaId == YOUTUBE_PHONE_ID ->
+                    mediaId == YOUTUBE_PHONE_ID ||
+                    mediaId == YOUTUBE_LEGACY_ID ->
                     ProjectionDestination.YOUTUBE
                 mediaId == GOOGLE_ID ||
-                    mediaId == GOOGLE_PHONE_ID ->
+                    mediaId == GOOGLE_PHONE_ID ||
+                    mediaId == GOOGLE_LEGACY_ID ->
                     ProjectionDestination.GOOGLE
                 mediaId == LIVE_TV_ID ||
+                    mediaId == LIVE_TV_LEGACY_ID ||
                     mediaId == LIVE_TV_HOSTED_ID ||
                     mediaId.startsWith("live-tv-") ->
                     ProjectionDestination.LIVE_TV
