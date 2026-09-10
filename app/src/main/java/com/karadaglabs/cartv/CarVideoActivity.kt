@@ -81,6 +81,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             root.addView(buildHostedPage())
         }
 
+        CarContentSlot.prepareHost(this)
         CarContentSlot.attach(this, rootColumn ?: root)
 
         applyVideoFocus(request = true)

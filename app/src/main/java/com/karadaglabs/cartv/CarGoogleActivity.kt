@@ -33,8 +33,6 @@ class CarGoogleActivity : CarActivity() {
 
         val overlay = CarContentSlot.install(this)
         this.overlay = overlay
-        HostedNavigation.hideChrome(this)
-        attachCarSearchBox()
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -79,6 +77,7 @@ class CarGoogleActivity : CarActivity() {
         root.addView(view)
         overlay.addView(root)
         CarContentSlot.attach(this, overlay)
+        attachCarSearchBox()
 
         applyVideoFocus(request = true)
 

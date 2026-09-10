@@ -20,12 +20,11 @@ import com.google.android.apps.auto.sdk.CarActivity
  * CarStream MainCarActivity.onCreate:
  *   super.onCreate(bundle);
  *   setContentView(R.layout.activity_car_main); // MATCH_PARENT FrameLayout
+ *   fragment replace into that container;
  *   then hideAppHeader.
  *
- * Fermata hides chrome then later setContentView(layout). Filling g
- * first keeps Gearhead from laying out the empty PagedListView as the
- * only pane. App content stays in field CarActivity.g. Window.setContentView
- * is not called. The empty PagedListView is not GONE.
+ * Chrome is applied after app content is in g so Gearhead does not
+ * lay out the empty PagedListView as the only pane.
  */
 object CarContentSlot {
 
@@ -46,6 +45,7 @@ object CarContentSlot {
         try {
             val ui = activity.carUiController
             ui.statusBarController.hideAppHeader()
+            ui.statusBarController.hideConnectivityLevel()
             ui.menuController.hideMenuButton()
         } catch (exception: Exception) {
             Log.w(TAG, "hideAppHeader/hideMenuButton unavailable", exception)
@@ -80,7 +80,6 @@ object CarContentSlot {
             putInSlot(activity, root)
         }
 
-        prepareHost(activity)
         root.keepScreenOn = true
         logChosen(activity, root)
         dumpHost(activity, root)

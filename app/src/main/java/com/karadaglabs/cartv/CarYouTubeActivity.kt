@@ -32,7 +32,6 @@ class CarYouTubeActivity : CarActivity() {
 
         val overlay = CarContentSlot.install(this)
         this.overlay = overlay
-        HostedNavigation.hideChrome(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
