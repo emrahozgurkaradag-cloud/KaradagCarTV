@@ -83,6 +83,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         CarContentSlot.hideHeader(this)
         CarContentSlot.hideMenu(this)
+        setContentView(R.layout.car_host_root)
+        hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
@@ -162,8 +164,10 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun revealHostedPage() {
-        if (hostRoot == null) {
-            hostRoot = CarContentSlot.install(this)
+        if (hostRoot == null || hostRoot?.isAttachedToWindow != true) {
+            setContentView(R.layout.car_host_root)
+            hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
+                ?: CarContentSlot.install(this)
             Log.d(TAG, "HOST_SLOT_REINSTALL")
         } else {
             Log.d(

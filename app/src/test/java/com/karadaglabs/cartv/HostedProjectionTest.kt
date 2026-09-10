@@ -162,6 +162,7 @@ class HostedProjectionSourceTest {
         )
         assertFalse(onCreateBlock.contains("CarContentSlot.install"))
         assertFalse(onCreateBlock.contains("hostProjectionFragment"))
+        assertTrue(onCreateBlock.contains("setContentView(R.layout.car_host_root)"))
         val revealStart = video.indexOf("private fun revealHostedPage")
         val revealBlock = video.substring(
             revealStart,
