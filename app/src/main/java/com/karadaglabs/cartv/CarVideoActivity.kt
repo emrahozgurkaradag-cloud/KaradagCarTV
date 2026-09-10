@@ -1127,14 +1127,12 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 HostedCarList.attach(list, rows, ::onHostedRow)
             }
         }
-        if (!hide) {
-            HostedCarList.bindActivity(
-                this,
-                hostRoot,
-                rows,
-                ::onHostedRow
-            )
-        }
+        HostedCarList.bindActivity(
+            this,
+            hostRoot,
+            rows,
+            ::onHostedRow
+        )
     }
 
     private fun hostedRows(): List<HostedCarList.Row> {

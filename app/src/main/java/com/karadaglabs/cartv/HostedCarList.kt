@@ -1,6 +1,8 @@
 package com.karadaglabs.cartv
 
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
@@ -11,6 +13,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.apps.auto.sdk.CarActivity
 import com.google.android.apps.auto.sdk.ui.PagedListView
+import java.util.WeakHashMap
 
 /**
  * Puts Live TV / YouTube / Google rows on the real aauto.aar
@@ -20,6 +23,15 @@ import com.google.android.apps.auto.sdk.ui.PagedListView
 object HostedCarList {
 
     private const val TAG = "KaradagCarList"
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val bindDelays = longArrayOf(0L, 50L, 250L, 500L, 1000L, 2000L)
+    private val pending = WeakHashMap<CarActivity, PendingBind>()
+
+    private class PendingBind(
+        val extra: View?,
+        val rows: List<Row>,
+        val onClick: (Row) -> Unit
+    )
 
     data class Row(
         val key: String,
@@ -54,23 +66,16 @@ object HostedCarList {
         rows: List<Row>,
         onClick: (Row) -> Unit
     ) {
-        val seen = HashSet<View>()
-        collectPaged(extra).forEach { paged ->
-            if (seen.add(paged)) {
-                attach(paged, rows, onClick)
-            }
+        pending[activity] = PendingBind(extra, rows, onClick)
+        bindNow(activity)
+        bindDelays.forEach { delay ->
+            mainHandler.postDelayed({ bindNow(activity) }, delay)
         }
-        collectPaged(contentSlot(activity)).forEach { paged ->
-            if (seen.add(paged)) {
-                attach(paged, rows, onClick)
-            }
-        }
-        Log.d(TAG, "HOST_LIST_BOUND count=${seen.size} rows=${rows.size}")
     }
 
     fun showInSlot(activity: CarActivity, page: View?) {
         val overlay = page ?: return
-        val slot = contentSlot(activity) ?: return
+        val container = visibleHost(activity) ?: contentSlot(activity) ?: return
         val params = overlay.layoutParams
             ?: FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -79,11 +84,64 @@ object HostedCarList {
         params.width = ViewGroup.LayoutParams.MATCH_PARENT
         params.height = ViewGroup.LayoutParams.MATCH_PARENT
         overlay.layoutParams = params
-        if (overlay.parent !== slot) {
+        if (overlay.parent !== container) {
             (overlay.parent as? ViewGroup)?.removeView(overlay)
-            slot.addView(overlay, params)
+            container.addView(overlay, params)
         }
         overlay.visibility = View.VISIBLE
+        Log.d(
+            TAG,
+            "HOST_LIST_OVERLAY class=${container.javaClass.name} " +
+                "${container.width}x${container.height}"
+        )
+    }
+
+    private fun bindNow(activity: CarActivity) {
+        val bound = pending[activity] ?: return
+        val seen = HashSet<View>()
+        hostRoots(activity, bound.extra).forEach { root ->
+            collectPaged(root).forEach { paged ->
+                if (seen.add(paged) && shouldFill(paged)) {
+                    attach(paged, bound.rows, bound.onClick)
+                }
+            }
+        }
+        Log.d(TAG, "HOST_LIST_BOUND count=${seen.size} rows=${bound.rows.size}")
+    }
+
+    private fun shouldFill(paged: PagedListView): Boolean {
+        return try {
+            val adapter = paged.adapter
+            adapter == null ||
+                adapter is Adapter ||
+                adapter.itemCount == 0
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun hostRoots(activity: CarActivity, extra: View?): List<View> {
+        val roots = ArrayList<View>(4)
+        extra?.let { roots.add(it) }
+        contentSlot(activity)?.let { roots.add(it) }
+        appLayout(activity)?.let { roots.add(it) }
+        return roots
+    }
+
+    private fun visibleHost(activity: CarActivity): ViewGroup? {
+        val lists = ArrayList<PagedListView>()
+        hostRoots(activity, null).forEach { root ->
+            lists.addAll(collectPaged(root))
+        }
+        return lists
+            .filter { list ->
+                list.isAttachedToWindow &&
+                    list.visibility == View.VISIBLE &&
+                    list.width > 0 &&
+                    list.height > 0
+            }
+            .maxByOrNull { list -> list.width * list.height }
+            ?: contentSlot(activity)
     }
 
     private fun contentSlot(activity: CarActivity): ViewGroup? {
@@ -92,6 +150,15 @@ object HostedCarList {
             activity.findViewById(id) as? ViewGroup
         } catch (exception: Exception) {
             Log.w(TAG, "HOST_LIST_SLOT unavailable", exception)
+            null
+        }
+    }
+
+    private fun appLayout(activity: CarActivity): View? {
+        return try {
+            activity.carUiController.d()
+        } catch (exception: Exception) {
+            Log.w(TAG, "HOST_LIST_APP_LAYOUT unavailable", exception)
             null
         }
     }
