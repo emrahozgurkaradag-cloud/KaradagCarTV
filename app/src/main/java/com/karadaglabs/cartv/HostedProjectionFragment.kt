@@ -8,9 +8,12 @@ import androidx.fragment.app.Fragment
 
 /**
  * CarStream hosts YouTube by adding a support fragment to the
- * MATCH_PARENT FrameLayout inflated into CarActivity.g. Jetifier
- * maps aauto.aar's FragmentManager onto AndroidX, so this fragment
- * receives CarActivity lifecycle from gms.car.e FragmentController.
+ * MATCH_PARENT FrameLayout inflated into CarActivity.g, then
+ * attaching it after CarActivity.onStart so Gearhead's
+ * CarUiController.onStart does not restore the empty PagedListView
+ * over the hosted page. Jetifier maps aauto.aar's FragmentManager
+ * onto AndroidX, so this fragment receives CarActivity lifecycle
+ * from gms.car.e FragmentController.
  */
 class HostedProjectionFragment : Fragment() {
 

@@ -112,6 +112,8 @@ class AndroidAutoDiscoveryTest {
         assertTrue(xml.contains("""android:name=".CarVideoService""""))
         assertTrue(xml.contains("""android:name=".CarMirrorService""""))
         assertTrue(xml.contains("""android:name=".CarMediaService""""))
+        assertTrue(xml.contains("""android:label="Karadag Radyo""""))
+        assertTrue(xml.contains("""android:label="Karadag Car TV""""))
         assertTrue(
             xml.contains(
                 "android.media.browse.MediaBrowserService"

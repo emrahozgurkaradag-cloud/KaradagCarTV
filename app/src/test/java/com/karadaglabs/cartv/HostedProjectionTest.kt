@@ -77,6 +77,9 @@ class HostedProjectionDestinationTest {
         assertFalse(slot.contains("OnHierarchyChangeListener"))
         assertFalse(slot.contains("bringToFront()"))
         assertFalse(slot.contains("clipChildren"))
+        assertTrue(slot.contains("object BoundCarHost"))
+        assertTrue(slot.contains("fun bind(host: CarDestinationHost)"))
+        assertTrue(slot.contains("showHostedDestination"))
     }
 
     private fun source(relativeFromMain: String): String {
@@ -116,6 +119,11 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains(".detach(fragment)"))
         assertTrue(video.contains(".attach(fragment)"))
         assertTrue(video.contains("hostProjectionFragment"))
+        assertTrue(video.contains("attachHostedFragment"))
+        assertTrue(video.contains("revealHostedPage"))
+        assertTrue(video.contains("BoundCarHost.bind"))
+        assertTrue(video.contains("BoundCarHost.unbind"))
+        assertTrue(video.contains("CAR STREAM FRAGMENT ATTACHED"))
         assertTrue(video.contains("CarContentSlot.attach"))
         assertTrue(video.contains("HostedProjectionFragment"))
         assertTrue(video.contains("getSupportFragmentManager") || video.contains("supportFragmentManager"))
@@ -264,6 +272,19 @@ class HostedProjectionSourceTest {
         assertTrue(infoBlock.contains("setIsPlayable"))
         assertTrue(infoBlock.contains("true"))
         assertFalse(infoBlock.contains("setIsPlayable(\n                        false"))
+        assertTrue(addBlock.contains("BoundCarHost.show"))
+        assertTrue(addBlock.contains("MEDIA_HOSTED_DESTINATION"))
+        assertTrue(addBlock.contains("hostedDestination"))
+        assertFalse(addBlock.contains("createInfoItem"))
+        assertTrue(
+            media.contains("LIVE_TV_HOSTED_ID -> ProjectionDestination.LIVE_TV")
+        )
+        assertTrue(
+            media.contains("YOUTUBE_PHONE_ID -> ProjectionDestination.YOUTUBE")
+        )
+        assertTrue(
+            media.contains("GOOGLE_PHONE_ID -> ProjectionDestination.GOOGLE")
+        )
     }
 
     @Test

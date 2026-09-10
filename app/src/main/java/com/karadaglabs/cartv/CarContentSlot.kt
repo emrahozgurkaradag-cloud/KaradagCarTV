@@ -1,5 +1,7 @@
 package com.karadaglabs.cartv
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -25,6 +27,10 @@ import com.google.android.apps.auto.sdk.CarActivity
  *
  * Chrome is applied after app content is in g so Gearhead does not
  * lay out the empty PagedListView as the only pane.
+ *
+ * CarStream attaches the hosted fragment after CarActivity.onStart
+ * (Gearhead CarUiController.onStart). Attaching in onCreate lets
+ * that restore cover the slot with the empty list.
  */
 object CarContentSlot {
 
@@ -376,4 +382,34 @@ object CarContentSlot {
 
 interface CarDestinationHost {
     fun showHostedDestination(destination: ProjectionDestination)
+}
+
+/**
+ * Media browse and the hosted CarActivity run in the same process.
+ * Live TV / YouTube / Google taps on the media session must switch
+ * the already-bound projection UI instead of creating a Now Playing
+ * playlist.
+ */
+object BoundCarHost {
+
+    @Volatile
+    private var current: CarDestinationHost? = null
+
+    fun bind(host: CarDestinationHost) {
+        current = host
+    }
+
+    fun unbind(host: CarDestinationHost) {
+        if (current === host) {
+            current = null
+        }
+    }
+
+    fun show(destination: ProjectionDestination): Boolean {
+        val host = current ?: return false
+        Handler(Looper.getMainLooper()).post {
+            current?.showHostedDestination(destination)
+        }
+        return host === current
+    }
 }

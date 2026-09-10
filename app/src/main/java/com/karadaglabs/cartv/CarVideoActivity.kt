@@ -62,6 +62,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private var selectedRadioId: String? = null
     private var state = ProjectionUiState()
     private var destroyed = false
+    private var hostRoot: FrameLayout? = null
+    private var hostedReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,7 +71,10 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
         Log.d(TAG, "HOST_ACTIVITY_CREATED class=${javaClass.name}")
 
+        BoundCarHost.bind(this)
+
         val root = CarContentSlot.install(this)
+        hostRoot = root
         CarContentSlot.hideHeader(this)
 
         destination = ProjectionDestination.fromExtra(
@@ -77,15 +82,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
 
-        val hosted = hostProjectionFragment()
-        if (!hosted) {
-            root.addView(buildHostedPage())
-        }
-
-        CarContentSlot.hideMenu(this)
-        CarContentSlot.attach(this, rootColumn ?: root)
-
-        applyVideoFocus(request = true)
+        hostProjectionFragment()
 
         try {
             startService(Intent(this, CarMediaService::class.java))
@@ -94,7 +91,6 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
 
         loadChannels()
-        showHostedDestination(destination)
     }
 
     fun getWindow(): android.view.Window {
@@ -104,11 +100,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private fun hostProjectionFragment(): Boolean {
         return try {
             val manager = supportFragmentManager
-            val existing = manager.findFragmentByTag("hosted")
-            if (existing != null) {
-                if (existing.isDetached) {
-                    manager.beginTransaction().attach(existing).commitNow()
-                }
+            if (manager.findFragmentByTag("hosted") != null) {
                 return true
             }
 
@@ -117,13 +109,49 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 .add(R.id.car_host_root, fragment, "hosted")
                 .detach(fragment)
                 .commitNow()
-            manager.beginTransaction()
-                .attach(fragment)
-                .commitNow()
             true
         } catch (exception: Exception) {
             Log.e(TAG, "CAR STREAM FRAGMENT HOST FAILED", exception)
             false
+        }
+    }
+
+    private fun attachHostedFragment(): Boolean {
+        return try {
+            val manager = supportFragmentManager
+            val fragment = manager.findFragmentByTag("hosted") ?: return false
+            if (fragment.isDetached) {
+                manager.beginTransaction()
+                    .attach(fragment)
+                    .commitNow()
+            }
+            Log.d(TAG, "CAR STREAM FRAGMENT ATTACHED")
+            true
+        } catch (exception: Exception) {
+            Log.e(TAG, "CAR STREAM FRAGMENT ATTACH FAILED", exception)
+            false
+        }
+    }
+
+    private fun ensureHostedPage() {
+        if (rootColumn != null) {
+            return
+        }
+        val root = hostRoot ?: return
+        root.addView(buildHostedPage())
+    }
+
+    private fun revealHostedPage() {
+        attachHostedFragment()
+        ensureHostedPage()
+        CarContentSlot.hideMenu(this)
+        (rootColumn ?: hostRoot)?.let { root ->
+            CarContentSlot.attach(this, root)
+        }
+        if (!hostedReady && rootColumn != null) {
+            hostedReady = true
+            showHostedDestination(destination)
+            applyVideoFocus(request = true)
         }
     }
 
@@ -200,6 +228,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     override fun onStart() {
         super.onStart()
+        revealHostedPage()
         rootColumn?.let { root ->
             CarContentSlot.rebind(this, root)
             root.post { CarContentSlot.rebind(this, root) }
@@ -229,6 +258,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     override fun onDestroy() {
         destroyed = true
+        BoundCarHost.unbind(this)
         applyVideoFocus(request = false)
         CarVideoPlayerHolder.setPlayWhenReady(false)
         chromeClient?.hideCustomViewIfPresent()

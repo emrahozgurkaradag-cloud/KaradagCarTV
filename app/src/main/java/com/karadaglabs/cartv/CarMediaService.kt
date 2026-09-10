@@ -708,6 +708,15 @@ class CarMediaService : MediaLibraryService() {
             mediaItems: List<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
 
+            mediaItems.forEach { requested ->
+                val destination = hostedDestination(requested.mediaId) ?: return@forEach
+                val bound = BoundCarHost.show(destination)
+                Log.i(
+                    TAG,
+                    "MEDIA_HOSTED_DESTINATION=${destination.name} bound=$bound"
+                )
+            }
+
             val resolved =
                 mediaItems.mapNotNull { requested ->
 
@@ -995,6 +1004,15 @@ class CarMediaService : MediaLibraryService() {
         private const val CONTENT_STYLE_LIST = 1
 
         private const val CONTENT_STYLE_GRID = 2
+
+        internal fun hostedDestination(mediaId: String?): ProjectionDestination? {
+            return when (mediaId) {
+                LIVE_TV_HOSTED_ID -> ProjectionDestination.LIVE_TV
+                YOUTUBE_PHONE_ID -> ProjectionDestination.YOUTUBE
+                GOOGLE_PHONE_ID -> ProjectionDestination.GOOGLE
+                else -> null
+            }
+        }
     }
 }
 
