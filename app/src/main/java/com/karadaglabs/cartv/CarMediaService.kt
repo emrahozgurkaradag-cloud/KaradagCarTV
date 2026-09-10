@@ -1168,12 +1168,6 @@ class CarMediaService : MediaLibraryService() {
                         true
                     )
 
-                    .setExtras(
-                        browseGroupExtras(
-                            "YouTube"
-                        )
-                    )
-
                     .build()
             )
 
@@ -1212,12 +1206,6 @@ class CarMediaService : MediaLibraryService() {
 
                     .setIsPlayable(
                         true
-                    )
-
-                    .setExtras(
-                        browseGroupExtras(
-                            "Google"
-                        )
                     )
 
                     .build()

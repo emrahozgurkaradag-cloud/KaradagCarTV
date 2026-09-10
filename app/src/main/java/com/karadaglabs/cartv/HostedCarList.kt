@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.apps.auto.sdk.CarActivity
@@ -23,6 +24,7 @@ import java.util.WeakHashMap
 object HostedCarList {
 
     private const val TAG = "KaradagCarList"
+    private const val ROW_TAG = "karadag_host_rows"
     private val mainHandler = Handler(Looper.getMainLooper())
     private val bindDelays = longArrayOf(0L, 50L, 250L, 500L, 1000L, 2000L)
     private val pending = WeakHashMap<CarActivity, PendingBind>()
@@ -43,21 +45,29 @@ object HostedCarList {
         rows: List<Row>,
         onClick: (Row) -> Unit
     ) {
-        val paged = listView as? PagedListView ?: return
-        paged.isFocusable = true
-        paged.isFocusableInTouchMode = true
-        paged.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-        try {
-            val existing = paged.adapter as? Adapter
-            if (existing != null) {
-                existing.replace(rows, onClick)
+        val paged = listView as? PagedListView
+        if (paged != null) {
+            paged.isFocusable = true
+            paged.isFocusableInTouchMode = true
+            paged.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            try {
+                val existing = paged.adapter as? Adapter
+                if (existing != null) {
+                    existing.replace(rows, onClick)
+                    return
+                }
+                paged.setAdapter(Adapter(rows, onClick))
+                paged.requestFocus()
                 return
+            } catch (exception: Exception) {
+                Log.e(TAG, "HOST_LIST_ATTACH failed", exception)
             }
-            paged.setAdapter(Adapter(rows, onClick))
-            paged.requestFocus()
-        } catch (exception: Exception) {
-            Log.e(TAG, "HOST_LIST_ATTACH failed", exception)
         }
+        val group = listView as? ViewGroup ?: return
+        if (!isHostList(group)) {
+            return
+        }
+        overlayRows(group, rows, onClick)
     }
 
     fun bindActivity(
@@ -100,24 +110,28 @@ object HostedCarList {
         val bound = pending[activity] ?: return
         val seen = HashSet<View>()
         hostRoots(activity, bound.extra).forEach { root ->
-            collectPaged(root).forEach { paged ->
-                if (seen.add(paged) && shouldFill(paged)) {
-                    attach(paged, bound.rows, bound.onClick)
+            collectHostLists(root).forEach { host ->
+                if (seen.add(host) && shouldFill(host)) {
+                    attach(host, bound.rows, bound.onClick)
                 }
             }
         }
         Log.d(TAG, "HOST_LIST_BOUND count=${seen.size} rows=${bound.rows.size}")
     }
 
-    private fun shouldFill(paged: PagedListView): Boolean {
-        return try {
-            val adapter = paged.adapter
-            adapter == null ||
-                adapter is Adapter ||
-                adapter.itemCount == 0
-        } catch (_: Exception) {
-            false
+    private fun shouldFill(host: View): Boolean {
+        val paged = host as? PagedListView
+        if (paged != null) {
+            return try {
+                val adapter = paged.adapter
+                adapter == null ||
+                    adapter is Adapter ||
+                    adapter.itemCount == 0
+            } catch (_: Exception) {
+                true
+            }
         }
+        return host is ViewGroup
     }
 
     private fun hostRoots(activity: CarActivity, extra: View?): List<View> {
@@ -129,9 +143,11 @@ object HostedCarList {
     }
 
     private fun visibleHost(activity: CarActivity): ViewGroup? {
-        val lists = ArrayList<PagedListView>()
+        val lists = ArrayList<ViewGroup>()
         hostRoots(activity, null).forEach { root ->
-            lists.addAll(collectPaged(root))
+            collectHostLists(root).forEach { host ->
+                (host as? ViewGroup)?.let { lists.add(it) }
+            }
         }
         return lists
             .filter { list ->
@@ -163,10 +179,10 @@ object HostedCarList {
         }
     }
 
-    private fun collectPaged(root: View?): List<PagedListView> {
-        val out = ArrayList<PagedListView>()
+    private fun collectHostLists(root: View?): List<View> {
+        val out = ArrayList<View>()
         fun walk(view: View) {
-            if (view is PagedListView) {
+            if (isHostList(view)) {
                 out.add(view)
             }
             if (view is ViewGroup) {
@@ -179,6 +195,58 @@ object HostedCarList {
             walk(root)
         }
         return out
+    }
+
+    private fun isHostList(view: View): Boolean {
+        if (view is PagedListView) {
+            return true
+        }
+        return view.javaClass.name.contains("PagedListView")
+    }
+
+    private fun overlayRows(
+        group: ViewGroup,
+        rows: List<Row>,
+        onClick: (Row) -> Unit
+    ) {
+        val existing = group.findViewWithTag<View>(ROW_TAG) as? LinearLayout
+        val column = existing ?: LinearLayout(group.context).apply {
+            tag = ROW_TAG
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(Color.BLACK)
+            isFocusable = true
+            isClickable = true
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            group.addView(this)
+        }
+        column.removeAllViews()
+        val density = group.resources.displayMetrics.density
+        val pad = (16 * density).toInt()
+        rows.forEach { row ->
+            val text = TextView(group.context).apply {
+                text = row.title
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+                setPadding(pad, pad, pad, pad)
+                isFocusable = true
+                isClickable = true
+                isFocusableInTouchMode = true
+                setOnClickListener { onClick(row) }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+            column.addView(text)
+        }
+        Log.d(
+            TAG,
+            "HOST_LIST_OVERLAY_ROWS class=${group.javaClass.name} rows=${rows.size}"
+        )
     }
 
     private class Adapter(
