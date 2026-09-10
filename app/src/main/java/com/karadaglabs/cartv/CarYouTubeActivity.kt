@@ -1,18 +1,16 @@
 package com.karadaglabs.cartv
 
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import android.view.ViewGroup
-import android.webkit.WebView
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import com.google.android.apps.auto.sdk.CarActivity
 
 /**
- * Hosted YouTube WebView for a projection host that already opened
- * a CarActivity window. Does not change phone YouTubeActivity and
- * does not attempt to remove Android Auto driving restrictions.
+ * Hosted YouTube WebView. Uses the same Gearhead MenuAdapter so the
+ * native list is never empty if this window is opened directly.
  */
 class CarYouTubeActivity : CarActivity() {
 
@@ -21,9 +19,8 @@ class CarYouTubeActivity : CarActivity() {
         const val YOUTUBE_URL = "https://www.youtube.com/"
     }
 
-    private var webView: WebView? = null
-    private var chromeClient: HostedWebChromeClient? = null
     private var overlay: FrameLayout? = null
+    private var webPane: HostedWebPane? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,84 +28,70 @@ class CarYouTubeActivity : CarActivity() {
         Log.d(TAG, "CAR YOUTUBE ACTIVITY AÇILDI")
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
 
         val overlay = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-        }
-        this.overlay = overlay
-
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
+            setBackgroundColor(Color.BLACK)
             keepScreenOn = true
         }
-
-        root.addView(
-            HostedNavigation.menuBar(this, ProjectionDestination.YOUTUBE) { destination ->
-                if (destination != ProjectionDestination.YOUTUBE) {
-                    HostedNavigation.open(this, destination)
-                }
-            }
-        )
-
-        val view = CarProjectionWebView(HostedWebView.themedContext(this))
-        webView = view
-        HostedWebView.configure(view, desktopUserAgent = true)
-
-        view.webViewClient = HostedWebViewClient {
-            Log.d(TAG, "CAR YOUTUBE URL LOADED")
-        }
-
-        val chrome = HostedWebChromeClient(overlay) {
-            applyVideoFocus(request = true)
-        }
-        chromeClient = chrome
-        view.webChromeClient = chrome
-        view.layoutParams = LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            0,
-            1f
-        )
-
-        root.addView(view)
-        overlay.addView(root)
+        this.overlay = overlay
         setContentView(overlay)
+        HostedCarChrome.fillHostContent(overlay)
 
+        val menu = HostedRootMenuAdapter(
+            onAction = { entry ->
+                when (entry.action) {
+                    HostedMenuAction.YOUTUBE -> showYouTube()
+                    HostedMenuAction.GOOGLE,
+                    HostedMenuAction.LIVE_TV,
+                    HostedMenuAction.RADIO,
+                    HostedMenuAction.CHANNEL,
+                    HostedMenuAction.RADIO_STATION ->
+                        HostedNavigation.open(
+                            this,
+                            when (entry.action) {
+                                HostedMenuAction.GOOGLE -> ProjectionDestination.GOOGLE
+                                HostedMenuAction.RADIO,
+                                HostedMenuAction.RADIO_STATION ->
+                                    ProjectionDestination.RADIO
+                                else -> ProjectionDestination.LIVE_TV
+                            }
+                        )
+                    HostedMenuAction.PLACEHOLDER -> Unit
+                }
+            },
+            channels = { IptvRepository.loadCached(this) },
+            channelLoading = { false },
+            channelError = { "" }
+        )
+        HostedCarChrome.install(this, menu, "YouTube")
+
+        showYouTube()
         applyVideoFocus(request = true)
-
         Log.d(TAG, "CAR YOUTUBE WEBVIEW READY")
-        view.loadUrl(YOUTUBE_URL)
     }
 
     override fun onPause() {
         applyVideoFocus(request = false)
-        webView?.onPause()
+        webPane?.onPause()
         super.onPause()
     }
 
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
-        webView?.onResume()
+        webPane?.onResume()
+        HostedCarChrome.showContent(this, "YouTube")
     }
 
     override fun onDestroy() {
         applyVideoFocus(request = false)
-        chromeClient?.hideCustomViewIfPresent()
-        chromeClient = null
+        webPane?.destroy()
+        webPane = null
         overlay = null
-
-        val view = webView
-        webView = null
-        HostedWebView.destroy(view)
-
         super.onDestroy()
     }
 
@@ -125,15 +108,23 @@ class CarYouTubeActivity : CarActivity() {
         return super.onKeyUp(keyCode, keyEvent)
     }
 
+    private fun showYouTube() {
+        val overlay = this.overlay ?: return
+        val pane = webPane ?: HostedWebPane(this, overlay, TAG).also { webPane = it }
+        pane.show(YOUTUBE_URL, desktopUserAgent = true) {
+            Log.d(TAG, "CAR YOUTUBE URL LOADED")
+        }
+        HostedCarChrome.showContent(this, "YouTube")
+    }
+
     private fun navigateBack() {
-        if (chromeClient?.hideCustomViewIfPresent() == true) {
+        val view = webPane?.webView
+        if (view != null && view.canGoBack()) {
+            view.goBack()
             return
         }
 
-        val view = webView
-
-        if (view != null && view.canGoBack()) {
-            view.goBack()
+        if (webPane?.goBack() == true) {
             return
         }
 

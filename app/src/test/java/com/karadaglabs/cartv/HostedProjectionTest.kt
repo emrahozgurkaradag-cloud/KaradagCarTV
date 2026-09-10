@@ -53,6 +53,7 @@ class HostedProjectionDestinationTest {
         assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
         assertTrue(nav.contains("CAR HOST NAVIGATION FAILED"))
         assertTrue(nav.contains("startCarActivity"))
+        assertTrue(nav.contains("showHostedDestination"))
         assertTrue(nav.contains("CarVideoPlayerHolder.setPlayWhenReady(false)"))
     }
 
@@ -84,12 +85,18 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
         assertTrue(video.contains("setCarSurfaceView"))
         assertTrue(video.contains("SurfaceHolder.Callback"))
+        val chrome = source("java/com/karadaglabs/cartv/HostedCarChrome.kt")
+        assertTrue(chrome.contains("setRootMenuAdapter"))
+        assertTrue(video.contains("HostedRootMenuAdapter"))
+        assertTrue(video.contains("HostedCarChrome.install"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
         assertTrue(holder.contains("onRenderedFirstFrame"))
         assertFalse(video.contains("PlayerView"))
         assertFalse(video.contains("IptvActivity"))
+        assertFalse(video.contains("PagedListView"))
+        assertFalse(video.contains("car_list_item_empty"))
     }
 
     @Test
@@ -99,13 +106,20 @@ class HostedProjectionSourceTest {
         val projection = source("java/com/karadaglabs/cartv/CarProjectionWebView.kt")
         val phone = source("java/com/karadaglabs/cartv/YouTubeActivity.kt")
 
+        val pane = source("java/com/karadaglabs/cartv/HostedWebPane.kt")
+        val menu = source("java/com/karadaglabs/cartv/HostedCarMenu.kt")
+
         assertTrue(youtube.contains("CAR YOUTUBE ACTIVITY AÇILDI"))
         assertTrue(youtube.contains("CAR YOUTUBE WEBVIEW READY"))
         assertTrue(youtube.contains("CAR YOUTUBE URL LOADED"))
-        assertTrue(youtube.contains("CarProjectionWebView"))
-        assertTrue(youtube.contains("HostedWebView.configure"))
+        assertTrue(youtube.contains("HostedWebPane"))
+        assertTrue(youtube.contains("HostedRootMenuAdapter"))
         assertTrue(youtube.contains("CarVideoFocus.request"))
         assertTrue(youtube.contains("canGoBack()"))
+        assertTrue(pane.contains("CarProjectionWebView"))
+        assertTrue(pane.contains("HostedWebView.configure"))
+        assertTrue(menu.contains("setRootMenuAdapter").not())
+        assertTrue(menu.contains("MenuAdapter"))
         assertTrue(hosted.contains("javaScriptEnabled = true"))
         assertTrue(hosted.contains("mediaPlaybackRequiresUserGesture = false"))
         assertTrue(hosted.contains("view.destroy()"))
@@ -125,7 +139,8 @@ class HostedProjectionSourceTest {
         assertTrue(google.contains("CAR GOOGLE ACTIVITY AÇILDI"))
         assertTrue(google.contains("CAR GOOGLE WEBVIEW READY"))
         assertTrue(google.contains("CAR GOOGLE URL LOADED"))
-        assertTrue(google.contains("CarProjectionWebView"))
+        assertTrue(google.contains("HostedWebPane"))
+        assertTrue(google.contains("HostedRootMenuAdapter"))
         assertTrue(google.contains("https://www.google.com/"))
         assertTrue(google.contains("searchController"))
         assertTrue(google.contains("SearchCallback"))
@@ -167,9 +182,9 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("removeCallback"))
         assertTrue(holder.contains("clearVideoSurface()"))
         assertTrue(youtube.contains("onDestroy()"))
-        assertTrue(youtube.contains("HostedWebView.destroy"))
+        assertTrue(youtube.contains("webPane?.destroy()"))
         assertTrue(google.contains("onDestroy()"))
-        assertTrue(google.contains("HostedWebView.destroy"))
+        assertTrue(google.contains("webPane?.destroy()"))
         assertTrue(youtube.contains("onPause()"))
         assertTrue(google.contains("onPause()"))
     }
@@ -197,6 +212,7 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("prepareAudio"))
         assertTrue(video.contains("RadioStations.saveLastSelectedId"))
         assertTrue(video.contains("RadioStations.lastSelectedId"))
+        assertTrue(video.contains("HostedMenuAction.RADIO_STATION"))
     }
 
     private fun source(relativeFromMain: String): String {
@@ -212,6 +228,54 @@ class HostedProjectionSourceTest {
         }
 
         throw IllegalStateException("Source file not found: $relativeFromMain")
+    }
+}
+
+class HostedCarMenuModelTest {
+
+    @Test
+    fun rootMenuAlwaysHasLiveTvYoutubeGoogleAndRadio() {
+        val root = HostedCarMenuModel.root(channelCount = 12)
+
+        assertEquals(4, root.size)
+        assertEquals("Canlı TV", root[0].title)
+        assertEquals(HostedMenuType.SUBMENU, root[0].type)
+        assertEquals("Canlı Radyo", root[1].title)
+        assertEquals("YouTube", root[2].title)
+        assertEquals(HostedMenuType.ITEM, root[2].type)
+        assertEquals("Google", root[3].title)
+        assertEquals("12 kanal", root[0].subtitle)
+        assertTrue(RadioStations.all.isNotEmpty())
+    }
+
+    @Test
+    fun channelMenuIsNeverEmpty() {
+        val loading = HostedCarMenuModel.channels(emptyList(), loading = true)
+        val missing = HostedCarMenuModel.channels(emptyList(), loading = false)
+        val loaded = HostedCarMenuModel.channels(
+            listOf(
+                IptvChannel(1, "TRT 1", "https://example.com/1.m3u8", null, "News")
+            ),
+            loading = false
+        )
+
+        assertEquals(1, loading.size)
+        assertEquals("Kanallar yükleniyor...", loading[0].title)
+        assertEquals(HostedMenuAction.PLACEHOLDER, loading[0].action)
+        assertEquals(1, missing.size)
+        assertEquals("Kanal listesi yok", missing[0].title)
+        assertEquals("TRT 1", loaded[0].title)
+        assertEquals(1, loaded[0].channelId)
+        assertEquals(1, HostedCarMenuModel.neverEmpty(emptyList()).size)
+    }
+
+    @Test
+    fun radioMenuUsesRealStations() {
+        val radios = HostedCarMenuModel.radios()
+
+        assertTrue(radios.isNotEmpty())
+        assertTrue(radios.any { it.radioId == "power-fm" })
+        assertTrue(radios.all { it.action == HostedMenuAction.RADIO_STATION })
     }
 }
 
