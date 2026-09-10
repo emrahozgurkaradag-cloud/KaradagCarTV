@@ -316,8 +316,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             return
         }
         hostRoot = view.parent as? FrameLayout ?: hostRoot
-        if (view is ViewGroup) {
-            rootColumn = view
+        if (gridView == null || rootColumn !== view) {
+            bindHostedPage(view)
         }
         CarContentSlot.keepInSlot(this, view)
         if (!hostedReady) {
@@ -351,71 +351,101 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     internal fun buildHostedPage(): View {
-        val page = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.BLACK)
-            keepScreenOn = true
-            isFocusable = true
-            isFocusableInTouchMode = true
-            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+        val page = try {
+            layoutInflater.inflate(R.layout.car_hosted_page, hostRoot, false)
+        } catch (exception: Exception) {
+            Log.e(TAG, "HOST_PAGE_INFLATE failed", exception)
+            FrameLayout(this).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(Color.BLACK)
+                keepScreenOn = true
+                isFocusable = true
+                isFocusableInTouchMode = true
+                descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            }
         }
-
-        val content = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.BLACK)
-        }
-
-        val list = buildListUi()
-        listContainer = list
-        content.addView(list)
-
-        val view = SurfaceView(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            keepScreenOn = true
-            visibility = View.GONE
-        }
-
-        configureSurfaceZOrder(view)
-        view.holder.addCallback(surfaceCallback)
-        content.addView(view)
-        surfaceView = view
-
-        val webOverlay = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            visibility = View.GONE
-            setBackgroundColor(Color.BLACK)
-            isFocusable = true
-            isFocusableInTouchMode = true
-            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-        }
-        content.addView(webOverlay)
-        this.webOverlay = webOverlay
-
-        page.addView(content)
-
-        val menu = HostedNavigation.menuBar(this, destination) { next ->
-            onMenuSelected(next)
-        }
-        menu.layoutParams = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        )
-        menuContainer = menu
-        page.addView(menu)
-        rootColumn = page
+        bindHostedPage(page)
         return page
+    }
+
+    internal fun bindHostedPage(page: View) {
+        val root = page as? ViewGroup ?: return
+        rootColumn = root
+        root.keepScreenOn = true
+        root.isFocusable = true
+        root.isFocusableInTouchMode = true
+        root.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+
+        val list = root.findViewById<View>(R.id.car_list_container) ?: buildListUi().also {
+            root.addView(
+                it,
+                0,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        listContainer = list
+        statusView = root.findViewById(R.id.car_status) ?: statusView
+        val grid = root.findViewById<GridView>(R.id.car_grid)
+        if (grid != null) {
+            if (adapter == null) {
+                adapter = ChannelAdapter(
+                    density = resources.displayMetrics.density,
+                    onClick = { onChannelClicked(it) }
+                )
+            }
+            grid.isFocusable = true
+            grid.isFocusableInTouchMode = true
+            grid.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            grid.adapter = adapter
+            gridView = grid
+        } else if (gridView == null) {
+            buildListUi()
+        }
+
+        val surface = root.findViewById<SurfaceView>(R.id.car_surface)
+            ?: SurfaceView(this).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                keepScreenOn = true
+                visibility = View.GONE
+                root.addView(this)
+            }
+        if (surface !== surfaceView) {
+            surfaceView?.holder?.removeCallback(surfaceCallback)
+            configureSurfaceZOrder(surface)
+            surface.holder.addCallback(surfaceCallback)
+            surfaceView = surface
+        }
+
+        val overlay = root.findViewById<FrameLayout>(R.id.car_web_overlay)
+            ?: FrameLayout(this).apply {
+                layoutParams = FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                visibility = View.GONE
+                setBackgroundColor(Color.BLACK)
+                isFocusable = true
+                isFocusableInTouchMode = true
+                descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                root.addView(this)
+            }
+        overlay.isFocusable = true
+        overlay.isFocusableInTouchMode = true
+        webOverlay = overlay
+
+        val menuHolder = root.findViewById<ViewGroup>(R.id.car_menu_bar) ?: root
+        if (menuContainer?.parent != menuHolder) {
+            refreshMenu()
+        }
     }
 
     override fun showHostedDestination(destination: ProjectionDestination) {
@@ -769,17 +799,25 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun refreshMenu() {
         val root = rootColumn ?: return
-        val previous = menuContainer ?: return
+        val holder = root.findViewById<ViewGroup>(R.id.car_menu_bar) ?: root
+        val previous = menuContainer
         val menu = HostedNavigation.menuBar(this, destination) { next ->
             onMenuSelected(next)
         }
-        root.removeView(previous)
         menu.layoutParams = FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
-        root.addView(menu)
-        menu.bringToFront()
+        if (holder.id == R.id.car_menu_bar) {
+            holder.removeAllViews()
+            holder.addView(menu)
+        } else {
+            if (previous != null) {
+                root.removeView(previous)
+            }
+            root.addView(menu)
+            menu.bringToFront()
+        }
         menuContainer = menu
     }
 

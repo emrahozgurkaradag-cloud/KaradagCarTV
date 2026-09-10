@@ -7,7 +7,6 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.FrameLayout
 import androidx.fragment.app.Fragment
 
 /**
@@ -28,17 +27,15 @@ class HostedProjectionFragment : Fragment() {
         val car = carActivity(inflater.context)
         if (car == null) {
             Log.e(TAG, "HOST_FRAGMENT_NO_CAR context=${inflater.context.javaClass.name}")
-            return FrameLayout(inflater.context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                isFocusable = true
-                isFocusableInTouchMode = true
-                keepScreenOn = true
-            }
+            return inflater.inflate(R.layout.car_hosted_page, container, false)
         }
-        return car.hostedPageIfPresent() ?: car.buildHostedPage()
+        val existing = car.hostedPageIfPresent()
+        if (existing != null) {
+            return existing
+        }
+        val page = inflater.inflate(R.layout.car_hosted_page, container, false)
+        car.bindHostedPage(page)
+        return page
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
