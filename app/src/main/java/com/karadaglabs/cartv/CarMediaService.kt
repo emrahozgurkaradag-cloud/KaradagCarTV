@@ -272,66 +272,26 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * Android Auto ana menüyü açtığında
-                 * IPTV API'yi kontrol ediyoruz.
-                 *
-                 * Böylece telefon uygulamasının cache'ine
-                 * bağımlı kalmıyoruz.
+                 * Media browse is radio only. Live TV, YouTube, and
+                 * Google are CarVideoActivity destinations. Listing
+                 * them here made Android Auto show those names and
+                 * then Öğe yok when the host opened media instead of
+                 * CarActivity.g.
                  */
+                return Futures.immediateFuture(
 
-                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
-
-                    val channels =
-                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
-
-                    Log.d(
-                        TAG,
-                        "ROOT IPTV count = ${channels.size}"
-                    )
-
-                    val items =
-                        listOf(
-
-                            createCategoryItem(
-                                id = LIVE_TV_ID,
-                                title = "📺 Canlı TV",
-                                subtitle =
-                                    if (
-                                        channels.isNotEmpty()
-                                    ) {
-                                        "${channels.size} kanal"
-                                    } else {
-                                        "Canlı TV"
-                                    }
-                            ),
-
+                    LibraryResult.ofItemList(
+                        ImmutableList.of(
                             createCategoryItem(
                                 id = RADIO_ID,
                                 title = "📻 Canlı Radyo",
                                 subtitle =
                                     "${radios.size} radyo"
-                            ),
-
-                            createCategoryItem(
-                                id = YOUTUBE_ID,
-                                title = "▶️ YouTube",
-                                subtitle = "YouTube"
-                            ),
-
-                            createCategoryItem(
-                                id = GOOGLE_ID,
-                                title = "🔎 Google Arama",
-                                subtitle = "Web"
                             )
-                        )
-
-                    LibraryResult.ofItemList(
-                        ImmutableList.copyOf(
-                            items
                         ),
                         params
                     )
-                }
+                )
             }
 
             /*

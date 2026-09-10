@@ -127,6 +127,10 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             xml.contains("com.google.android.projection.gearhead")
         )
+        assertFalse(
+            "Phone registration must not be the car launcher",
+            xml.contains("android.intent.category.CAR_LAUNCHER")
+        )
     }
 
     @Test
@@ -134,17 +138,35 @@ class AndroidAutoDiscoveryTest {
         val media = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
+        val video = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
+        val destinations = sourceFile(
+            "java/com/karadaglabs/cartv/ProjectionDestination.kt"
+        ).readText()
 
-        assertTrue(media.contains("📺 Canlı TV"))
-        assertTrue(media.contains("▶️ YouTube"))
-        assertTrue(media.contains("📻 Canlı Radyo"))
-        assertTrue(media.contains("🔎 Google Arama"))
+        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
+        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
+        val rootBlock = media.substring(
+            rootStart,
+            if (radioStart > rootStart) radioStart else media.length
+        )
+        assertTrue(rootBlock.contains("📻 Canlı Radyo"))
+        assertFalse(rootBlock.contains("📺 Canlı TV"))
+        assertFalse(rootBlock.contains("▶️ YouTube"))
+        assertFalse(rootBlock.contains("🔎 Google Arama"))
         assertTrue(media.contains("CONTENT_STYLE_BROWSABLE_HINT"))
         assertTrue(media.contains("YouTube araç ekranında açılır"))
         assertTrue(media.contains("Google araç ekranında açılır"))
         assertTrue(media.contains("Canlı TV araç ekranında açılır"))
         assertFalse(media.contains("YouTube telefonda açılır"))
         assertFalse(media.contains("Google telefonda açılır"))
+        assertTrue(video.contains("showYouTube()"))
+        assertTrue(video.contains("showGoogle()"))
+        assertTrue(video.contains("showLiveTv()"))
+        assertTrue(destinations.contains("Canlı TV"))
+        assertTrue(destinations.contains("YouTube"))
+        assertTrue(destinations.contains("Google"))
         assertFalse(
             "YouTube browse must not return an empty list",
             media.contains("if (parentId == YOUTUBE_ID)") &&
