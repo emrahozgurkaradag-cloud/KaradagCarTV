@@ -63,7 +63,10 @@ class CarYouTubeActivity : CarActivity() {
         HostedWebView.configure(view, desktopUserAgent = true)
 
         view.webViewClient = HostedWebViewClient {
+            Log.d(TAG, "YOUTUBE_PAGE_FINISHED url=$it")
+            Log.d(TAG, "CAR YOUTUBE PAGE FINISHED")
             Log.d(TAG, "CAR YOUTUBE URL LOADED")
+            logWebView()
         }
 
         val chrome = HostedWebChromeClient(overlay) {
@@ -79,12 +82,19 @@ class CarYouTubeActivity : CarActivity() {
 
         root.addView(view)
         overlay.addView(root)
-        setContentView(overlay)
+        CarContentSlot.attach(this, overlay)
 
         applyVideoFocus(request = true)
 
         Log.d(TAG, "CAR YOUTUBE WEBVIEW READY")
+        logWebView()
         view.loadUrl(YOUTUBE_URL)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        overlay?.let { CarContentSlot.rebind(this, it) }
+        logWebView()
     }
 
     override fun onPause() {
@@ -97,6 +107,8 @@ class CarYouTubeActivity : CarActivity() {
         super.onResume()
         applyVideoFocus(request = true)
         webView?.onResume()
+        overlay?.let { CarContentSlot.rebind(this, it) }
+        logWebView()
     }
 
     override fun onDestroy() {
@@ -151,5 +163,14 @@ class CarYouTubeActivity : CarActivity() {
             TAG,
             "videoFocus request=$request granted=${result.granted} reason=${result.reason}"
         )
+    }
+
+    private fun logWebView() {
+        val view = webView ?: return
+        Log.d(
+            TAG,
+            "YOUTUBE_WEBVIEW_PARENT parent=${view.parent?.javaClass?.name}"
+        )
+        Log.d(TAG, "YOUTUBE_WEBVIEW_SIZE ${view.width}x${view.height}")
     }
 }

@@ -1050,6 +1050,11 @@ object CarVideoPlayerHolder {
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "surface=${surfaceView?.holder?.surface}"
                 )
+                Log.d(
+                    TAG,
+                    "LIVE_TV_FIRST_FRAME " +
+                        "${surfaceView?.width ?: 0}x${surfaceView?.height ?: 0}"
+                )
             }
 
             override fun onVideoSizeChanged(
@@ -1332,13 +1337,21 @@ object CarVideoPlayerHolder {
             return
         }
 
+        val surfaceView = carSurfaceView
         val surfaceValid =
-            carSurfaceView?.holder?.surface?.isValid == true
+            surfaceView?.holder?.surface?.isValid == true
+        val sized = surfaceView != null &&
+            surfaceView.visibility == android.view.View.VISIBLE &&
+            surfaceView.width > 0 &&
+            surfaceView.height > 0
 
-        if (requireSurface && !surfaceValid) {
+        if (requireSurface && (!surfaceValid || !sized)) {
             Log.d(
                 TAG,
-                "play deferred: surface not valid"
+                "play deferred: surface not valid " +
+                    "valid=$surfaceValid sized=$sized " +
+                    "${surfaceView?.width ?: 0}x${surfaceView?.height ?: 0} " +
+                    "visibility=${surfaceView?.visibility}"
             )
             return
         }
@@ -1372,6 +1385,20 @@ object CarVideoPlayerHolder {
                 )
                 .build()
 
+        if (
+            surfaceView.visibility != android.view.View.VISIBLE ||
+            surfaceView.width <= 0 ||
+            surfaceView.height <= 0
+        ) {
+            Log.d(
+                TAG,
+                "LIVE_TV_PLAYER_BOUND false " +
+                    "${surfaceView.width}x${surfaceView.height} " +
+                    "visibility=${surfaceView.visibility}"
+            )
+            return
+        }
+
         val holder = surfaceView.holder
         val surface = holder.surface
 
@@ -1384,6 +1411,11 @@ object CarVideoPlayerHolder {
                 "CAR VIDEO SURFACE BOUND " +
                     "${surfaceView.width}x${surfaceView.height} " +
                     "surface=$surface"
+            )
+            Log.d(
+                TAG,
+                "LIVE_TV_PLAYER_BOUND true " +
+                    "${surfaceView.width}x${surfaceView.height}"
             )
         }
     }
@@ -1408,17 +1440,6 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CREATED surface=${holder.surface}"
                     )
-
-                    val exoPlayer =
-                        player
-                            ?: return
-
-                    exoPlayer.setVideoSurfaceHolder(holder)
-
-                    if (exoPlayer.currentMediaItem != null) {
-
-                        exoPlayer.playWhenReady = true
-                    }
                 }
 
                 override fun surfaceChanged(
@@ -1432,8 +1453,19 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CHANGED width=$width height=$height"
                     )
+                    Log.d(
+                        TAG,
+                        "LIVE_TV_SURFACE_SIZE ${width}x$height"
+                    )
 
-                    player?.setVideoSurfaceHolder(holder)
+                    if (width <= 0 || height <= 0) {
+                        return
+                    }
+
+                    bindLocked()
+                    if (player?.currentMediaItem != null) {
+                        setPlayWhenReadyLocked(true)
+                    }
                 }
 
                 override fun surfaceDestroyed(
@@ -1458,6 +1490,15 @@ object CarVideoPlayerHolder {
         if (existing != null && existing.isValid) {
 
             callback.surfaceCreated(surfaceView.holder)
+
+            if (surfaceView.width > 0 && surfaceView.height > 0) {
+                callback.surfaceChanged(
+                    surfaceView.holder,
+                    0,
+                    surfaceView.width,
+                    surfaceView.height
+                )
+            }
         }
     }
 

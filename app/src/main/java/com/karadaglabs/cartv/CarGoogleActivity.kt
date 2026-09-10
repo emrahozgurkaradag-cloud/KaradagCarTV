@@ -65,7 +65,10 @@ class CarGoogleActivity : CarActivity() {
         HostedWebView.configure(view, desktopUserAgent = false)
 
         view.webViewClient = HostedWebViewClient {
+            Log.d(TAG, "GOOGLE_PAGE_FINISHED url=$it")
+            Log.d(TAG, "CAR GOOGLE PAGE FINISHED")
             Log.d(TAG, "CAR GOOGLE URL LOADED")
+            logWebView()
         }
 
         val chrome = HostedWebChromeClient(overlay) {
@@ -82,12 +85,19 @@ class CarGoogleActivity : CarActivity() {
 
         root.addView(view)
         overlay.addView(root)
-        setContentView(overlay)
+        CarContentSlot.attach(this, overlay)
 
         applyVideoFocus(request = true)
 
         Log.d(TAG, "CAR GOOGLE WEBVIEW READY")
+        logWebView()
         view.loadUrl(GOOGLE_URL)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        overlay?.let { CarContentSlot.rebind(this, it) }
+        logWebView()
     }
 
     override fun onPause() {
@@ -100,7 +110,9 @@ class CarGoogleActivity : CarActivity() {
         super.onResume()
         applyVideoFocus(request = true)
         webView?.onResume()
+        overlay?.let { CarContentSlot.rebind(this, it) }
         attachCarSearchBox()
+        logWebView()
     }
 
     override fun onDestroy() {
@@ -192,5 +204,14 @@ class CarGoogleActivity : CarActivity() {
         val view = webView
         webView = null
         HostedWebView.destroy(view)
+    }
+
+    private fun logWebView() {
+        val view = webView ?: return
+        Log.d(
+            TAG,
+            "GOOGLE_WEBVIEW_PARENT parent=${view.parent?.javaClass?.name}"
+        )
+        Log.d(TAG, "GOOGLE_WEBVIEW_SIZE ${view.width}x${view.height}")
     }
 }
