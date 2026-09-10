@@ -1192,15 +1192,17 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             destination == ProjectionDestination.GOOGLE
         val list = rootColumn?.findViewById<View>(R.id.car_paged_list)
         if (list != null) {
-            list.visibility = if (hide) View.GONE else View.VISIBLE
+            // Gearhead's native list often stays empty ("Öğe yok").
+            // The hosted GridView is the catalog that actually paints
+            // YouTube / Google / Live TV rows in slot g.
+            list.visibility = View.GONE
             if (!hide) {
                 HostedCarList.attach(list, rows, ::onHostedRow)
             }
         }
         val grid = gridView
         if (grid != null) {
-            val showGrid = !hide && list == null
-            grid.visibility = if (showGrid) View.VISIBLE else View.GONE
+            grid.visibility = if (hide) View.GONE else View.VISIBLE
             if (!hide) {
                 adapter?.update(hostedGridChannels(rows), state.selectedId)
             }
