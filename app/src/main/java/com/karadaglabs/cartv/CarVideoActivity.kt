@@ -75,6 +75,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private var slotCommitted = false
     private var pendingWebUrl: String? = null
     private var pendingDesktopUa = false
+    private var hostStarted = false
+    private var installedAfterStart = false
 
     private val hostAttachListener = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(v: View) {
@@ -263,13 +265,21 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private fun revealHostedPage(force: Boolean = false) {
         val liveRoot = hostRoot
         val painted = hostedContentPainted()
+        // Fermata setContentView runs after CarUiController.a() in
+        // super.onStart. onCreate's inflate is still "painted" in g
+        // until chrome restore covers it; skip-if-painted then leaves
+        // Gearhead's empty list. First post-onStart install always
+        // writes car_host_root into g after that restore.
+        val afterStartInstall = hostStarted && !installedAfterStart
         val needsInstall = liveRoot == null ||
             !CarContentSlot.isInLiveSlot(this, liveRoot) ||
+            afterStartInstall ||
             (force && !painted)
         Log.d(
             TAG,
             "HOST_SLOT_LIVE inLive=${liveRoot != null && CarContentSlot.isInLiveSlot(this, liveRoot)} " +
-                "force=$force painted=$painted attached=${liveRoot?.isAttachedToWindow == true}"
+                "force=$force painted=$painted afterStart=$afterStartInstall " +
+                "attached=${liveRoot?.isAttachedToWindow == true}"
         )
         if (needsInstall) {
             val page = rootColumn
@@ -287,7 +297,13 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 rootColumn = page
             }
             slotCommitted = true
+            if (hostStarted) {
+                installedAfterStart = true
+            }
             Log.d(TAG, "HOST_SLOT_REINSTALL")
+            if (afterStartInstall) {
+                Log.d(TAG, "HOST_SLOT_AFTER_START")
+            }
         } else {
             Log.d(
                 TAG,
@@ -515,6 +531,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     override fun onStart() {
         super.onStart()
+        hostStarted = true
         revealHostedPage(force = true)
         rebindHostedPage()
         rootColumn?.post { rebindHostedPage() }

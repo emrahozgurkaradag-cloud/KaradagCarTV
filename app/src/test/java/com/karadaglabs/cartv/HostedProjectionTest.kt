@@ -201,6 +201,8 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains(".commit()"))
         assertTrue(video.contains("HOST_SLOT_REUSE"))
         assertTrue(video.contains("HOST_SLOT_REINSTALL"))
+        assertTrue(video.contains("HOST_SLOT_AFTER_START"))
+        assertTrue(video.contains("installedAfterStart"))
         val onCreateStart = video.indexOf("override fun onCreate")
         val onCreateBlock = video.substring(
             onCreateStart,
