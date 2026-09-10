@@ -142,24 +142,21 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun revealHostedPage() {
-        if (!hostedReady) {
+        if (rootColumn == null) {
             hostRoot = CarContentSlot.install(this)
             attachHostedFragment()
             ensureHostedPage()
-            val page = rootColumn
-            if (page != null) {
-                CarContentSlot.putPage(this, page)
-                hostRoot = page as? FrameLayout
-            }
         }
         CarContentSlot.hideMenu(this)
-        (rootColumn ?: hostRoot)?.let { root ->
-            CarContentSlot.attach(this, root)
-        }
-        if (!hostedReady && rootColumn != null) {
-            hostedReady = true
-            showHostedDestination(destination)
-            applyVideoFocus(request = true)
+        val page = rootColumn
+        if (page != null) {
+            CarContentSlot.keepInSlot(this, page)
+            hostRoot = page as? FrameLayout
+            if (!hostedReady) {
+                hostedReady = true
+                showHostedDestination(destination)
+                applyVideoFocus(request = true)
+            }
         }
     }
 
@@ -266,6 +263,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     override fun onDestroy() {
         destroyed = true
+        CarContentSlot.stopKeep(this)
         BoundCarHost.unbind(this)
         applyVideoFocus(request = false)
         CarVideoPlayerHolder.setPlayWhenReady(false)

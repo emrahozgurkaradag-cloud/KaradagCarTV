@@ -311,7 +311,7 @@ class AndroidAutoDiscoveryTest {
         assertTrue(activity.contains("SurfaceView"))
         assertTrue(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
-        assertTrue(activity.contains("CarContentSlot.attach"))
+        assertTrue(activity.contains("CarContentSlot.keepInSlot"))
         assertTrue(activity.contains("CarContentSlot.rebind"))
         assertTrue(chrome.contains("Karadag Car TV"))
         assertTrue(destinations.contains("Canlı TV"))

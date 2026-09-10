@@ -37,6 +37,9 @@ import com.google.android.apps.auto.sdk.CarActivity
  * onStart replaces the window layout, g can point at a detached
  * view. bindLiveSlotField reassigns g to the live window container
  * from the same public ID before inflate.
+ *
+ * keepInSlot retries that put on the main Handler. View.postDelayed
+ * only drains after attach, so a detached page would never retry.
  */
 object CarContentSlot {
 
@@ -46,6 +49,9 @@ object CarContentSlot {
         "com.google.android.apps.auto.sdk.CarActivity"
     private const val SLOT_FIELD = "g"
     private val dumpDelays = longArrayOf(0L, 50L, 250L)
+    private val attachDelays = longArrayOf(0L, 16L, 50L, 250L, 500L, 1000L, 2000L)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val keepCallbacks = mutableMapOf<Int, MutableList<Runnable>>()
 
     fun prepareHost(activity: CarActivity) {
         hideHeader(activity)
@@ -149,6 +155,29 @@ object CarContentSlot {
         return page
     }
 
+    fun keepInSlot(activity: CarActivity, page: View) {
+        stopKeep(activity)
+        val token = System.identityHashCode(activity)
+        val posted = mutableListOf<Runnable>()
+        keepCallbacks[token] = posted
+        attachDelays.forEach { delay ->
+            val runnable = Runnable {
+                try {
+                    keepOnce(activity, page, delay)
+                } catch (exception: Exception) {
+                    Log.e(TAG, "HOST_SLOT_KEEP failed delay=$delay", exception)
+                }
+            }
+            posted.add(runnable)
+            mainHandler.postDelayed(runnable, delay)
+        }
+    }
+
+    fun stopKeep(activity: CarActivity) {
+        val token = System.identityHashCode(activity)
+        keepCallbacks.remove(token)?.forEach { mainHandler.removeCallbacks(it) }
+    }
+
     fun isInLiveSlot(activity: CarActivity, view: View): Boolean {
         bindLiveSlotField(activity)
         val slot = resolveSlot(activity) ?: return false
@@ -175,6 +204,27 @@ object CarContentSlot {
         return view.visibility == View.VISIBLE &&
             view.width > 0 &&
             view.height > 0
+    }
+
+    private fun keepOnce(activity: CarActivity, page: View, delay: Long) {
+        bindLiveSlotField(activity)
+        val slot = resolveSlot(activity)
+        val inSlot = slot != null &&
+            slot.isAttachedToWindow &&
+            isUnder(slot, page)
+        Log.d(
+            TAG,
+            "HOST_SLOT_KEEP delay=$delay inSlot=$inSlot " +
+                "slotAttached=${slot?.isAttachedToWindow == true} " +
+                "pageAttached=${page.isAttachedToWindow}"
+        )
+        if (!inSlot) {
+            putPage(activity, page)
+            return
+        }
+        prepareHost(activity)
+        Log.d(TAG, "HOST_SLOT_ATTACHED")
+        dumpHost(activity, page)
     }
 
     private fun hostRootFromSlot(activity: CarActivity): FrameLayout? {
@@ -381,7 +431,7 @@ object CarContentSlot {
 
     private fun scheduleDump(activity: CarActivity, root: View) {
         dumpDelays.forEach { delay ->
-            root.postDelayed({ dumpHost(activity, root) }, delay)
+            mainHandler.postDelayed({ dumpHost(activity, root) }, delay)
         }
     }
 
