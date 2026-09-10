@@ -27,6 +27,7 @@
             android:layout_height="wrap_content"
             android:paddingTop="4dp"
             android:paddingBottom="8dp"
+            android:text="YouTube · Google · Canlı TV"
             android:textColor="#FFCCCCCC"
             android:textSize="16sp" />
 
@@ -40,7 +41,7 @@
             android:horizontalSpacing="10dp"
             android:numColumns="2"
             android:verticalSpacing="10dp"
-            android:visibility="gone" />
+            android:visibility="visible" />
 
         <com.google.android.apps.auto.sdk.ui.PagedListView
             android:id="@+id/car_paged_list"
@@ -49,7 +50,7 @@
             android:layout_weight="1"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:visibility="visible" />
+            android:visibility="gone" />
     </LinearLayout>
 
     <SurfaceView
@@ -73,5 +74,7 @@
         android:id="@+id/car_menu_bar"
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="#FF101010"
         android:orientation="vertical" />
 </FrameLayout>
