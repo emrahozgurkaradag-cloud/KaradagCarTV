@@ -16,6 +16,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.WebView
 import android.widget.BaseAdapter
 import android.widget.FrameLayout
 import android.widget.GridView
@@ -24,20 +25,30 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.SearchCallback
+import com.google.android.apps.auto.sdk.SearchItem
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Hosted CarActivity window. IPTV channel UI is Android Views.
- * Video renders into a SurfaceView with setZOrderMediaOverlay.
- * Phone IPTV Compose screen is not used here.
+ * Single hosted CarActivity. App UI is attached to CarActivity field
+ * `g` (getContentContainerId), not to CarActivityHost.setContentView.
+ * Destinations switch inside that slot: Live TV list/SurfaceView,
+ * YouTube WebView, Google WebView.
+ *
+ * The hosted fragment is added+detached after Gearhead
+ * CarUiController.onStart, then attached with commitNow, so chrome
+ * restore cannot cover car_host_root. Fermata also setContentView
+ * after onCreate (after media connect).
  */
 @UnstableApi
-class CarVideoActivity : CarActivity() {
+class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     companion object {
         private const val TAG = "KaradagCarVideo"
         private val logoCache = object : LruCache<String, Bitmap>(24) {}
+        private const val YOUTUBE_URL = "https://www.youtube.com/"
+        private const val GOOGLE_URL = "https://www.google.com/"
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -45,7 +56,11 @@ class CarVideoActivity : CarActivity() {
     private var surfaceView: SurfaceView? = null
     private var listContainer: View? = null
     private var menuContainer: View? = null
-    private var rootColumn: LinearLayout? = null
+    private var rootColumn: ViewGroup? = null
+    private var webOverlay: FrameLayout? = null
+    private var webView: WebView? = null
+    private var chromeClient: HostedWebChromeClient? = null
+    private var loadedWebUrl: String? = null
     private var statusView: TextView? = null
     private var gridView: GridView? = null
     private var adapter: ChannelAdapter? = null
@@ -54,23 +69,135 @@ class CarVideoActivity : CarActivity() {
     private var selectedRadioId: String? = null
     private var state = ProjectionUiState()
     private var destroyed = false
+    private var hostRoot: FrameLayout? = null
+    private var hostedReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_KaradagCarTV_Car)
         super.onCreate(savedInstanceState)
 
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
+        Log.d(TAG, "HOST_ACTIVITY_CREATED class=${javaClass.name}")
+
+        BoundCarHost.bind(this)
+
+        CarContentSlot.hideHeader(this)
+        CarContentSlot.hideMenu(this)
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
 
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
+        try {
+            startService(Intent(this, CarMediaService::class.java))
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to start CarMediaService", exception)
+        }
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = ViewGroup.LayoutParams(
+        loadChannels()
+    }
+
+    fun getWindow(): android.view.Window {
+        return CarContentSlot.hostWindow(this)
+    }
+
+    private fun hostProjectionFragment(): Boolean {
+        return try {
+            val manager = supportFragmentManager
+            if (manager.findFragmentByTag("hosted") != null) {
+                return true
+            }
+
+            val fragment = HostedProjectionFragment()
+            manager.beginTransaction()
+                .add(R.id.car_host_root, fragment, "hosted")
+                .detach(fragment)
+                .commitNow()
+            true
+        } catch (exception: Exception) {
+            Log.e(TAG, "CAR STREAM FRAGMENT HOST FAILED", exception)
+            false
+        }
+    }
+
+    private fun queueHostedFragmentAttach() {
+        try {
+            val manager = supportFragmentManager
+            val fragment = manager.findFragmentByTag("hosted") ?: return
+            if (fragment.isDetached) {
+                manager.beginTransaction()
+                    .attach(fragment)
+                    .commit()
+                Log.d(TAG, "CAR STREAM FRAGMENT ATTACH QUEUED")
+            }
+        } catch (exception: Exception) {
+            Log.e(TAG, "CAR STREAM FRAGMENT ATTACH QUEUE FAILED", exception)
+        }
+    }
+
+    private fun attachHostedFragment(): Boolean {
+        return try {
+            val manager = supportFragmentManager
+            val fragment = manager.findFragmentByTag("hosted") ?: return false
+            if (fragment.isDetached) {
+                manager.beginTransaction()
+                    .attach(fragment)
+                    .commitNow()
+            }
+            Log.d(TAG, "CAR STREAM FRAGMENT ATTACHED")
+            true
+        } catch (exception: Exception) {
+            Log.e(TAG, "CAR STREAM FRAGMENT ATTACH FAILED", exception)
+            false
+        }
+    }
+
+    private fun ensureHostedPage() {
+        if (rootColumn != null) {
+            return
+        }
+        val root = hostRoot ?: return
+        root.addView(buildHostedPage())
+    }
+
+    private fun revealHostedPage() {
+        if (hostRoot == null) {
+            hostRoot = CarContentSlot.install(this)
+            Log.d(TAG, "HOST_SLOT_REINSTALL")
+        } else {
+            Log.d(
+                TAG,
+                "HOST_SLOT_REUSE attached=${hostRoot?.isAttachedToWindow == true}"
+            )
+        }
+        hostProjectionFragment()
+        if (rootColumn == null) {
+            attachHostedFragment()
+            if (rootColumn == null) {
+                queueHostedFragmentAttach()
+            }
+            ensureHostedPage()
+        }
+        CarContentSlot.hideMenu(this)
+        val page = rootColumn
+        if (page != null) {
+            CarContentSlot.keepInSlot(this, page)
+            if (!hostedReady) {
+                hostedReady = true
+                if (BoundCarHost.consumePending(this) == null) {
+                    showHostedDestination(destination)
+                }
+                applyVideoFocus(request = true)
+            } else {
+                BoundCarHost.consumePending(this)
+            }
+        }
+    }
+
+    internal fun buildHostedPage(): View {
+        val page = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
@@ -78,18 +205,10 @@ class CarVideoActivity : CarActivity() {
             keepScreenOn = true
         }
 
-        val menu = HostedNavigation.menuBar(this, destination) { next ->
-            onMenuSelected(next)
-        }
-        menuContainer = menu
-        root.addView(menu)
-        rootColumn = root
-
         val content = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.BLACK)
         }
@@ -112,41 +231,91 @@ class CarVideoActivity : CarActivity() {
         content.addView(view)
         surfaceView = view
 
-        root.addView(content)
-        setContentView(root)
-
-        applyVideoFocus(request = true)
-
-        try {
-            startService(Intent(this, CarMediaService::class.java))
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to start CarMediaService", exception)
+        val webOverlay = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            visibility = View.GONE
+            setBackgroundColor(Color.BLACK)
         }
+        content.addView(webOverlay)
+        this.webOverlay = webOverlay
 
-        loadChannels()
-        applyState()
+        page.addView(content)
+
+        val menu = HostedNavigation.menuBar(this, destination) { next ->
+            onMenuSelected(next)
+        }
+        menu.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        menuContainer = menu
+        page.addView(menu)
+        rootColumn = page
+        return page
+    }
+
+    override fun showHostedDestination(destination: ProjectionDestination) {
+        this.destination = destination
+        if (rootColumn == null) {
+            Log.d(
+                TAG,
+                "HOST_SLOT_PENDING destination=${destination.name} page=false"
+            )
+            return
+        }
+        when (destination) {
+            ProjectionDestination.LIVE_TV -> showLiveTv()
+            ProjectionDestination.RADIO -> showRadio()
+            ProjectionDestination.YOUTUBE -> showYouTube()
+            ProjectionDestination.GOOGLE -> showGoogle()
+        }
     }
 
     override fun onStart() {
         super.onStart()
+        revealHostedPage()
+        rootColumn?.let { root ->
+            CarContentSlot.rebind(this, root)
+            root.post { CarContentSlot.rebind(this, root) }
+        }
         bindIfPlaying()
+        webView?.onResume()
+        logWebAttachment()
     }
 
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
+        rootColumn?.let { root ->
+            CarContentSlot.rebind(this, root)
+            root.post { CarContentSlot.rebind(this, root) }
+        }
         bindIfPlaying()
+        webView?.onResume()
+        logWebAttachment()
     }
 
     override fun onPause() {
         applyVideoFocus(request = false)
+        webView?.onPause()
         super.onPause()
     }
 
     override fun onDestroy() {
         destroyed = true
+        CarContentSlot.stopKeep(this)
+        BoundCarHost.unbind(this)
         applyVideoFocus(request = false)
         CarVideoPlayerHolder.setPlayWhenReady(false)
+        chromeClient?.hideCustomViewIfPresent()
+        chromeClient = null
+        HostedWebView.destroy(webView)
+        webView = null
+        webOverlay = null
+        loadedWebUrl = null
 
         surfaceView?.let { view ->
             view.holder.removeCallback(surfaceCallback)
@@ -158,11 +327,7 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onBackPressed() {
-        if (
-            destination == ProjectionDestination.LIVE_TV &&
-            state.mode == ProjectionMode.PLAYING
-        ) {
-            showChannelList()
+        if (handleBack()) {
             return
         }
 
@@ -170,8 +335,29 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, keyEvent: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && handleBack()) {
+            return true
+        }
+
+        return super.onKeyUp(keyCode, keyEvent)
+    }
+
+    private fun handleBack(): Boolean {
+        if (chromeClient?.hideCustomViewIfPresent() == true) {
+            return true
+        }
+
+        val view = webView
         if (
-            keyCode == KeyEvent.KEYCODE_BACK &&
+            view != null &&
+            view.visibility == View.VISIBLE &&
+            view.canGoBack()
+        ) {
+            view.goBack()
+            return true
+        }
+
+        if (
             destination == ProjectionDestination.LIVE_TV &&
             state.mode == ProjectionMode.PLAYING
         ) {
@@ -179,43 +365,211 @@ class CarVideoActivity : CarActivity() {
             return true
         }
 
-        return super.onKeyUp(keyCode, keyEvent)
+        if (
+            destination == ProjectionDestination.YOUTUBE ||
+            destination == ProjectionDestination.GOOGLE
+        ) {
+            showLiveTv()
+            return true
+        }
+
+        return false
     }
 
     private fun onMenuSelected(next: ProjectionDestination) {
-        if (next == destination) {
-            if (next == ProjectionDestination.LIVE_TV) {
-                showChannelList()
-            }
-            return
-        }
+        showHostedDestination(next)
+    }
 
-        if (
-            next == ProjectionDestination.YOUTUBE ||
-            next == ProjectionDestination.GOOGLE
-        ) {
-            HostedNavigation.open(this, next)
-            return
-        }
+    private fun showLiveTv() {
+        destination = ProjectionDestination.LIVE_TV
+        hideCarSearchBox()
+        hideWeb()
+        showChannelList()
+        refreshMenu()
+        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        Log.d(TAG, "CAR HOST LIVE TV")
+    }
 
-        destination = next
-        if (next == ProjectionDestination.RADIO) {
-            state = state.showList()
-            CarVideoPlayerHolder.setPlayWhenReady(false)
-        }
+    private fun showRadio() {
+        destination = ProjectionDestination.RADIO
+        hideCarSearchBox()
+        hideWeb()
+        state = state.showList()
+        CarVideoPlayerHolder.setPlayWhenReady(false)
         refreshMenu()
         applyState()
+        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        Log.d(TAG, "CAR HOST RADIO")
+    }
+
+    private fun showYouTube() {
+        destination = ProjectionDestination.YOUTUBE
+        hideCarSearchBox()
+        CarVideoPlayerHolder.setPlayWhenReady(false)
+        listContainer?.visibility = View.GONE
+        surfaceView?.let { view ->
+            view.visibility = View.GONE
+            CarVideoPlayerHolder.clearCarSurfaceView(view)
+        }
+        attachWeb(YOUTUBE_URL, desktopUserAgent = true)
+        refreshMenu()
+        applyVideoFocus(request = true)
+        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        logWebAttachment()
+        Log.d(TAG, "CAR YOUTUBE WEBVIEW READY")
+        Log.d(TAG, "CAR YOUTUBE URL LOADED")
+    }
+
+    private fun showGoogle() {
+        destination = ProjectionDestination.GOOGLE
+        CarVideoPlayerHolder.setPlayWhenReady(false)
+        listContainer?.visibility = View.GONE
+        surfaceView?.let { view ->
+            view.visibility = View.GONE
+            CarVideoPlayerHolder.clearCarSurfaceView(view)
+        }
+        attachWeb(GOOGLE_URL, desktopUserAgent = false)
+        attachCarSearchBox()
+        refreshMenu()
+        applyVideoFocus(request = true)
+        rootColumn?.let { CarContentSlot.rebind(this, it) }
+        logWebAttachment()
+        Log.d(TAG, "CAR GOOGLE WEBVIEW READY")
+        Log.d(TAG, "CAR GOOGLE URL LOADED")
+    }
+
+    private fun attachWeb(
+        url: String,
+        desktopUserAgent: Boolean
+    ) {
+        val overlay = webOverlay ?: return
+
+        if (webView != null && loadedWebUrl != null && loadedWebUrl != url) {
+            HostedWebView.destroy(webView)
+            webView = null
+            chromeClient = null
+            loadedWebUrl = null
+        }
+
+        if (webView == null) {
+            val view = CarProjectionWebView(HostedWebView.themedContext(this))
+            HostedWebView.configure(view, desktopUserAgent = desktopUserAgent)
+            view.layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            view.webViewClient = HostedWebViewClient { loaded ->
+                logWebAttachment()
+                if (destination == ProjectionDestination.YOUTUBE) {
+                    Log.d(TAG, "YOUTUBE_PAGE_FINISHED url=$loaded")
+                    Log.d(TAG, "CAR YOUTUBE PAGE FINISHED url=$loaded")
+                } else {
+                    Log.d(TAG, "GOOGLE_PAGE_FINISHED url=$loaded")
+                    Log.d(TAG, "CAR GOOGLE PAGE FINISHED url=$loaded")
+                }
+            }
+
+            val chrome = HostedWebChromeClient(overlay) { }
+            chromeClient = chrome
+            view.webChromeClient = chrome
+            overlay.addView(view)
+            webView = view
+        }
+
+        val view = webView ?: return
+        view.visibility = View.VISIBLE
+        overlay.visibility = View.VISIBLE
+
+        if (loadedWebUrl != url) {
+            loadedWebUrl = url
+            view.loadUrl(url)
+        }
+
+        overlay.bringToFront()
+        view.bringToFront()
+        logWebAttachment()
+    }
+
+    private fun hideWeb() {
+        webOverlay?.visibility = View.GONE
+        webView?.visibility = View.GONE
+    }
+
+    private fun attachCarSearchBox() {
+        try {
+            val ui = carUiController
+            ui.statusBarController.showAppHeader()
+            ui.statusBarController.setTitle("Google")
+
+            val search = ui.searchController
+            search.setSearchHint("Google")
+            search.setSearchCallback(
+                object : SearchCallback() {
+                    override fun onSearchSubmitted(query: String): Boolean {
+                        Log.d(TAG, "CAR GOOGLE SEARCH SUBMITTED")
+                        webView?.loadUrl(HostedWebView.searchUrl(query))
+                        search.stopSearch()
+                        return true
+                    }
+
+                    override fun onSearchTextChanged(query: String) {
+                    }
+
+                    override fun onSearchItemSelected(item: SearchItem) {
+                        val title = item.title?.toString().orEmpty()
+                        if (title.isNotBlank()) {
+                            webView?.loadUrl(HostedWebView.searchUrl(title))
+                        }
+                    }
+                }
+            )
+            search.showSearchBox()
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to show car search box", exception)
+        }
+    }
+
+    private fun hideCarSearchBox() {
+        try {
+            carUiController.searchController.hideSearchBox()
+        } catch (exception: Exception) {
+            Log.w(TAG, "hideSearchBox unavailable", exception)
+        }
+        CarContentSlot.hideHeader(this)
+        CarContentSlot.hideMenu(this)
+    }
+
+    private fun logWebAttachment() {
+        val view = webView ?: return
+        if (view.visibility != View.VISIBLE) {
+            return
+        }
+
+        val parent = view.parent?.javaClass?.name ?: "null"
+        val size = "${view.width}x${view.height}"
+
+        if (destination == ProjectionDestination.YOUTUBE) {
+            Log.d(TAG, "YOUTUBE_WEBVIEW_PARENT parent=$parent")
+            Log.d(TAG, "YOUTUBE_WEBVIEW_SIZE $size")
+        } else if (destination == ProjectionDestination.GOOGLE) {
+            Log.d(TAG, "GOOGLE_WEBVIEW_PARENT parent=$parent")
+            Log.d(TAG, "GOOGLE_WEBVIEW_SIZE $size")
+        }
     }
 
     private fun refreshMenu() {
         val root = rootColumn ?: return
         val previous = menuContainer ?: return
-        val index = root.indexOfChild(previous)
         val menu = HostedNavigation.menuBar(this, destination) { next ->
             onMenuSelected(next)
         }
         root.removeView(previous)
-        root.addView(menu, index)
+        menu.layoutParams = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
+        root.addView(menu)
+        menu.bringToFront()
         menuContainer = menu
     }
 
@@ -231,6 +585,7 @@ class CarVideoActivity : CarActivity() {
         if (cached.isNotEmpty()) {
             state = state.withChannels(cached, loading = true)
             persistSelection()
+            Log.d(TAG, "LIVE_TV_CHANNEL_COUNT count=${state.channels.size}")
             applyState()
         } else {
             applyState()
@@ -260,6 +615,7 @@ class CarVideoActivity : CarActivity() {
                     state.copy(loading = false)
                 }
 
+                Log.d(TAG, "LIVE_TV_CHANNEL_COUNT count=${state.channels.size}")
                 persistSelection()
                 applyState()
             }
@@ -281,6 +637,13 @@ class CarVideoActivity : CarActivity() {
             return
         }
 
+        if (
+            destination == ProjectionDestination.YOUTUBE ||
+            destination == ProjectionDestination.GOOGLE
+        ) {
+            return
+        }
+
         if (destination == ProjectionDestination.RADIO) {
             applyRadioState()
             return
@@ -296,22 +659,65 @@ class CarVideoActivity : CarActivity() {
         listContainer?.visibility = if (playing) View.GONE else View.VISIBLE
         surfaceView?.visibility = if (playing) View.VISIBLE else View.GONE
 
+        val view = surfaceView
+        if (playing && view != null) {
+            sizeSurfaceToHost(view)
+            view.requestLayout()
+        }
+
+        val surfaceReady = view != null &&
+            CarContentSlot.isSurfaceReadyForPlayback(view) &&
+            view.holder.surface?.isValid == true
+
+        if (playing) {
+            state = state.surfaceChanged(surfaceReady)
+        }
+
         val plan = state.bindPlan()
         val selected = state.selected
-        val view = surfaceView
 
         if (plan.shouldSetMediaItem && selected != null) {
             CarVideoPlayerHolder.prepareChannel(selected)
         }
 
-        if (plan.shouldBindSurface && view != null) {
+        if (plan.shouldBindSurface && view != null && surfaceReady) {
             configureSurfaceZOrder(view)
             CarVideoPlayerHolder.setCarSurfaceView(view)
         } else if (view != null && !playing) {
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
 
-        CarVideoPlayerHolder.setPlayWhenReady(plan.shouldPlay)
+        if (plan.shouldPlay && surfaceReady) {
+            CarVideoPlayerHolder.setPlayWhenReady(true)
+        } else {
+            CarVideoPlayerHolder.setPlayWhenReady(false)
+        }
+    }
+
+    private fun sizeSurfaceToHost(view: SurfaceView) {
+        val root = rootColumn
+        val width = firstPositive(view.width, root?.width ?: 0)
+        val height = firstPositive(
+            view.height,
+            (root?.height ?: 0) - (menuContainer?.height ?: 0)
+        )
+        if (width <= 0 || height <= 0) {
+            return
+        }
+
+        view.minimumWidth = width
+        view.minimumHeight = height
+        val params = view.layoutParams ?: FrameLayout.LayoutParams(width, height)
+        if (params.width == width && params.height == height) {
+            return
+        }
+        params.width = width
+        params.height = height
+        view.layoutParams = params
+    }
+
+    private fun firstPositive(vararg values: Int): Int {
+        return values.firstOrNull { it > 0 } ?: 0
     }
 
     private fun applyRadioState() {
@@ -365,6 +771,7 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun showChannelList() {
+        hideWeb()
         state = state.showList()
         applyState()
     }
@@ -451,8 +858,6 @@ class CarVideoActivity : CarActivity() {
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
             Log.d(TAG, "CAR VIDEO SURFACE CREATED")
-            state = state.surfaceChanged(true)
-            applyState()
         }
 
         override fun surfaceChanged(
@@ -462,6 +867,16 @@ class CarVideoActivity : CarActivity() {
             height: Int
         ) {
             Log.d(TAG, "CAR VIDEO SURFACE CHANGED width=$width height=$height")
+            Log.d(TAG, "LIVE_TV_SURFACE_SIZE ${width}x$height")
+
+            val view = surfaceView
+            val ready = view != null &&
+                view.visibility == View.VISIBLE &&
+                width > 0 &&
+                height > 0
+
+            state = state.surfaceChanged(ready)
+            applyState()
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {

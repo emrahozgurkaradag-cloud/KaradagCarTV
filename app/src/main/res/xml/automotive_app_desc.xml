@@ -1,22 +1,20 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        media: CarMediaService — resmi Android Auto medya menüsü
-        (Canlı TV, YouTube, Radyo, Google doğrudan kökte).
-        Sürüşte yalnızca ses; video host park/OEM projection
-        destekliyorsa CarVideoActivity SurfaceView yolundan gider.
-        template: CarMirrorService (izin yalnızca Mirror yüzeyinde).
-        service + projection: CarVideoService (aauto.aar OEM).
-        video: park halinde host video yeteneği bildirimi.
-        Kategori kısıtları bypass edilmez.
+        Current Fermata: media + service + projection. No notification
+        (that tag made AA open the empty message surface). No template.
+        video: park/OEM host SurfaceView capability.
+        Live TV / YouTube / Google render in CarActivity.g. Media
+        browse is radio stations only (empty hosted folders were
+        Öğe yok).
     -->
-    <uses name="media" />
-    <uses name="template" />
-    <uses
-        name="service"
-        tools:ignore="InvalidUsesTagAttribute" />
     <uses
         name="projection"
         tools:ignore="InvalidUsesTagAttribute" />
     <uses name="video" />
+    <uses
+        name="service"
+        tools:ignore="InvalidUsesTagAttribute" />
+    <uses name="media" />
+    <!-- <uses name="template" /> -->
 </automotiveApp>

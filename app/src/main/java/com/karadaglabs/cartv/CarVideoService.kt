@@ -10,6 +10,27 @@ class CarVideoService : CarActivityService() {
 
     companion object {
         private const val TAG = "KaradagCarVideo"
+
+        @Volatile
+        private var instance: CarVideoService? = null
+
+        fun hostedActivity(): CarDestinationHost? {
+            val service = instance ?: return null
+            return try {
+                val field = Class.forName("com.google.android.gms.car.d")
+                    .getDeclaredField("a")
+                field.isAccessible = true
+                val proxy = field.get(service) ?: return null
+                val method = proxy.javaClass.methods.firstOrNull { candidate ->
+                    candidate.name == "getActivityInstance" &&
+                        candidate.parameterTypes.isEmpty()
+                } ?: return null
+                method.invoke(proxy) as? CarDestinationHost
+            } catch (exception: Exception) {
+                Log.w(TAG, "HOST_ACTIVITY_INSTANCE unavailable", exception)
+                null
+            }
+        }
     }
 
     override fun getCarActivity(): Class<out CarActivity> {
@@ -21,6 +42,7 @@ class CarVideoService : CarActivityService() {
     }
 
     override fun onCreate() {
+        instance = this
         Log.d(TAG, "CAR VIDEO SERVICE ON CREATE")
 
         try {
@@ -57,5 +79,12 @@ class CarVideoService : CarActivityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         Log.d(TAG, "CAR VIDEO SERVICE ON UNBIND")
         return super.onUnbind(intent)
+    }
+
+    override fun onDestroy() {
+        if (instance === this) {
+            instance = null
+        }
+        super.onDestroy()
     }
 }

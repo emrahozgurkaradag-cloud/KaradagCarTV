@@ -1,6 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.util.Log
@@ -25,16 +24,16 @@ object HostedNavigation {
         try {
             CarVideoPlayerHolder.setPlayWhenReady(false)
 
-            val intent = Intent()
-            intent.setClassName(
-                from.packageName,
-                className(destination)
+            if (from is CarDestinationHost) {
+                from.showHostedDestination(destination)
+                return
+            }
+
+            Log.e(
+                TAG,
+                "CAR HOST NAVIGATION FAILED destination=${destination.name} " +
+                    "reason=single_car_activity_only"
             )
-            intent.putExtra(
-                ProjectionDestination.EXTRA,
-                destination.name
-            )
-            from.startCarActivity(intent)
         } catch (exception: Exception) {
             Log.e(
                 TAG,
@@ -47,14 +46,10 @@ object HostedNavigation {
     fun className(destination: ProjectionDestination): String {
         return when (destination) {
             ProjectionDestination.LIVE_TV,
-            ProjectionDestination.RADIO ->
-                CarVideoActivity::class.java.name
-
-            ProjectionDestination.YOUTUBE ->
-                CarYouTubeActivity::class.java.name
-
+            ProjectionDestination.RADIO,
+            ProjectionDestination.YOUTUBE,
             ProjectionDestination.GOOGLE ->
-                CarGoogleActivity::class.java.name
+                CarVideoActivity::class.java.name
         }
     }
 

@@ -269,79 +269,13 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == ROOT_ID) {
+            if (parentId == ROOT_ID || parentId == RADIO_ID) {
 
                 /*
-                 * Android Auto ana menüyü açtığında
-                 * IPTV API'yi kontrol ediyoruz.
-                 *
-                 * Böylece telefon uygulamasının cache'ine
-                 * bağımlı kalmıyoruz.
+                 * Media browse is radio only. Canlı TV / YouTube /
+                 * Google are hosted in CarActivity.g (that path was
+                 * Öğe yok when they were empty browse nodes).
                  */
-
-                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
-
-                    val channels =
-                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
-
-                    Log.d(
-                        TAG,
-                        "ROOT IPTV count = ${channels.size}"
-                    )
-
-                    val items =
-                        listOf(
-
-                            createCategoryItem(
-                                id = LIVE_TV_ID,
-                                title = "📺 Canlı TV",
-                                subtitle =
-                                    if (
-                                        channels.isNotEmpty()
-                                    ) {
-                                        "${channels.size} kanal"
-                                    } else {
-                                        "Canlı TV"
-                                    }
-                            ),
-
-                            createCategoryItem(
-                                id = RADIO_ID,
-                                title = "📻 Canlı Radyo",
-                                subtitle =
-                                    "${radios.size} radyo"
-                            ),
-
-                            createCategoryItem(
-                                id = YOUTUBE_ID,
-                                title = "▶️ YouTube",
-                                subtitle = "YouTube"
-                            ),
-
-                            createCategoryItem(
-                                id = GOOGLE_ID,
-                                title = "🔎 Google Arama",
-                                subtitle = "Web"
-                            )
-                        )
-
-                    LibraryResult.ofItemList(
-                        ImmutableList.copyOf(
-                            items
-                        ),
-                        params
-                    )
-                }
-            }
-
-            /*
-             * ====================================================
-             * RADYO
-             * ====================================================
-             */
-
-            if (parentId == RADIO_ID) {
-
                 val items =
                     radios.map { radio ->
 
@@ -708,6 +642,15 @@ class CarMediaService : MediaLibraryService() {
             mediaItems: List<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
 
+            mediaItems.forEach { requested ->
+                val destination = hostedDestination(requested.mediaId) ?: return@forEach
+                val bound = BoundCarHost.show(destination)
+                Log.i(
+                    TAG,
+                    "MEDIA_HOSTED_DESTINATION=${destination.name} bound=$bound"
+                )
+            }
+
             val resolved =
                 mediaItems.mapNotNull { requested ->
 
@@ -821,7 +764,7 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     .setIsPlayable(
-                        false
+                        true
                     )
 
                     .build()
@@ -995,6 +938,15 @@ class CarMediaService : MediaLibraryService() {
         private const val CONTENT_STYLE_LIST = 1
 
         private const val CONTENT_STYLE_GRID = 2
+
+        internal fun hostedDestination(mediaId: String?): ProjectionDestination? {
+            return when (mediaId) {
+                LIVE_TV_HOSTED_ID -> ProjectionDestination.LIVE_TV
+                YOUTUBE_PHONE_ID -> ProjectionDestination.YOUTUBE
+                GOOGLE_PHONE_ID -> ProjectionDestination.GOOGLE
+                else -> null
+            }
+        }
     }
 }
 
@@ -1049,6 +1001,11 @@ object CarVideoPlayerHolder {
                     "CAR VIDEO FIRST FRAME " +
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "surface=${surfaceView?.holder?.surface}"
+                )
+                Log.d(
+                    TAG,
+                    "LIVE_TV_FIRST_FRAME " +
+                        "${surfaceView?.width ?: 0}x${surfaceView?.height ?: 0}"
                 )
             }
 
@@ -1332,13 +1289,21 @@ object CarVideoPlayerHolder {
             return
         }
 
+        val surfaceView = carSurfaceView
         val surfaceValid =
-            carSurfaceView?.holder?.surface?.isValid == true
+            surfaceView?.holder?.surface?.isValid == true
+        val sized = surfaceView != null &&
+            surfaceView.visibility == android.view.View.VISIBLE &&
+            surfaceView.width > 0 &&
+            surfaceView.height > 0
 
-        if (requireSurface && !surfaceValid) {
+        if (requireSurface && (!surfaceValid || !sized)) {
             Log.d(
                 TAG,
-                "play deferred: surface not valid"
+                "play deferred: surface not valid " +
+                    "valid=$surfaceValid sized=$sized " +
+                    "${surfaceView?.width ?: 0}x${surfaceView?.height ?: 0} " +
+                    "visibility=${surfaceView?.visibility}"
             )
             return
         }
@@ -1372,6 +1337,20 @@ object CarVideoPlayerHolder {
                 )
                 .build()
 
+        if (
+            surfaceView.visibility != android.view.View.VISIBLE ||
+            surfaceView.width <= 0 ||
+            surfaceView.height <= 0
+        ) {
+            Log.d(
+                TAG,
+                "LIVE_TV_PLAYER_BOUND false " +
+                    "${surfaceView.width}x${surfaceView.height} " +
+                    "visibility=${surfaceView.visibility}"
+            )
+            return
+        }
+
         val holder = surfaceView.holder
         val surface = holder.surface
 
@@ -1384,6 +1363,11 @@ object CarVideoPlayerHolder {
                 "CAR VIDEO SURFACE BOUND " +
                     "${surfaceView.width}x${surfaceView.height} " +
                     "surface=$surface"
+            )
+            Log.d(
+                TAG,
+                "LIVE_TV_PLAYER_BOUND true " +
+                    "${surfaceView.width}x${surfaceView.height}"
             )
         }
     }
@@ -1408,17 +1392,6 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CREATED surface=${holder.surface}"
                     )
-
-                    val exoPlayer =
-                        player
-                            ?: return
-
-                    exoPlayer.setVideoSurfaceHolder(holder)
-
-                    if (exoPlayer.currentMediaItem != null) {
-
-                        exoPlayer.playWhenReady = true
-                    }
                 }
 
                 override fun surfaceChanged(
@@ -1432,8 +1405,19 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CHANGED width=$width height=$height"
                     )
+                    Log.d(
+                        TAG,
+                        "LIVE_TV_SURFACE_SIZE ${width}x$height"
+                    )
 
-                    player?.setVideoSurfaceHolder(holder)
+                    if (width <= 0 || height <= 0) {
+                        return
+                    }
+
+                    bindLocked()
+                    if (player?.currentMediaItem != null) {
+                        setPlayWhenReadyLocked(true)
+                    }
                 }
 
                 override fun surfaceDestroyed(
@@ -1458,6 +1442,15 @@ object CarVideoPlayerHolder {
         if (existing != null && existing.isValid) {
 
             callback.surfaceCreated(surfaceView.holder)
+
+            if (surfaceView.width > 0 && surfaceView.height > 0) {
+                callback.surfaceChanged(
+                    surfaceView.holder,
+                    0,
+                    surfaceView.width,
+                    surfaceView.height
+                )
+            }
         }
     }
 

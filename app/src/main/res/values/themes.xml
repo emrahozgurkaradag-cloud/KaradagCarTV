@@ -1,5 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <style name="Theme.KaradagCarTV" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+        aauto.aar CarAppTheme (Theme.Material.NoActionBar.Fullscreen plus
+        carButtonStyle / carCardStyle / carTextViewStyle). Martoreto
+        aauto-sdk-demo and Fermata set this before CarActivity.super.onCreate
+        so Gearhead getAppLayout() and the content slot inflate correctly.
+    -->
+    <style
+        name="Theme.KaradagCarTV.Car"
+        parent="@style/CarAppTheme"
+        tools:ignore="PrivateResource" />
+
 </resources>
