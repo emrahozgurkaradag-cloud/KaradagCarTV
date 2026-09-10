@@ -26,6 +26,6 @@ class HostedProjectionFragment : Fragment() {
         val car = inflater.context as? CarVideoActivity
             ?: context as? CarVideoActivity
             ?: error("HostedProjectionFragment requires CarVideoActivity")
-        return car.buildHostedPage()
+        return car.hostedPageIfPresent() ?: car.buildHostedPage()
     }
 }

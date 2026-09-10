@@ -112,6 +112,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun hostProjectionFragment(): Boolean {
+        if (rootColumn?.isAttachedToWindow == true) {
+            return true
+        }
         return try {
             val manager = supportFragmentManager
             if (manager.findFragmentByTag("hosted") != null) {
@@ -162,6 +165,11 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
     }
 
+    internal fun hostedPageIfPresent(): View? {
+        val page = rootColumn ?: return null
+        return page.takeIf { it.isAttachedToWindow }
+    }
+
     private fun ensureHostedPage() {
         if (rootColumn != null) {
             return
@@ -172,6 +180,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun revealHostedPage() {
         if (hostRoot == null || hostRoot?.isAttachedToWindow != true) {
+            rootColumn = null
             setContentView(R.layout.car_host_root)
             hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
                 ?: CarContentSlot.install(this)
