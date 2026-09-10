@@ -83,6 +83,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         selectedRadioId = RadioStations.lastSelectedId(this)
 
         hostProjectionFragment()
+        queueHostedFragmentAttach()
 
         try {
             startService(Intent(this, CarMediaService::class.java))
@@ -113,6 +114,21 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         } catch (exception: Exception) {
             Log.e(TAG, "CAR STREAM FRAGMENT HOST FAILED", exception)
             false
+        }
+    }
+
+    private fun queueHostedFragmentAttach() {
+        try {
+            val manager = supportFragmentManager
+            val fragment = manager.findFragmentByTag("hosted") ?: return
+            if (fragment.isDetached) {
+                manager.beginTransaction()
+                    .attach(fragment)
+                    .commit()
+                Log.d(TAG, "CAR STREAM FRAGMENT ATTACH QUEUED")
+            }
+        } catch (exception: Exception) {
+            Log.e(TAG, "CAR STREAM FRAGMENT ATTACH QUEUE FAILED", exception)
         }
     }
 
@@ -151,7 +167,6 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         val page = rootColumn
         if (page != null) {
             CarContentSlot.keepInSlot(this, page)
-            hostRoot = page as? FrameLayout
             if (!hostedReady) {
                 hostedReady = true
                 showHostedDestination(destination)

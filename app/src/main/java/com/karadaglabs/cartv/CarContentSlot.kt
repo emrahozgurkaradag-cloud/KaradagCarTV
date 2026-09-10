@@ -40,6 +40,12 @@ import com.google.android.apps.auto.sdk.CarActivity
  *
  * keepInSlot retries that put on the main Handler. View.postDelayed
  * only drains after attach, so a detached page would never retry.
+ *
+ * CarStream never setContentView's the fragment view. The MATCH_PARENT
+ * FrameLayout stays in g; the hosted page stays a child of that
+ * FrameLayout. Putting the fragment view into g removes car_host_root
+ * and leaves FragmentManager holding a container that is not in the
+ * window.
  */
 object CarContentSlot {
 
@@ -188,9 +194,11 @@ object CarContentSlot {
         prepareHost(activity)
         bindLiveSlotField(activity)
         val slot = resolveSlot(activity)
-        val attached = slot != null && isUnder(slot, root)
+        val attached = slot != null &&
+            slot.isAttachedToWindow &&
+            isUnder(slot, root)
         if (!attached) {
-            putInSlot(activity, root)
+            putHostRoot(activity, root)
         }
         dumpHost(activity, root)
         scheduleDump(activity, root)
@@ -209,6 +217,7 @@ object CarContentSlot {
     private fun keepOnce(activity: CarActivity, page: View, delay: Long) {
         bindLiveSlotField(activity)
         val slot = resolveSlot(activity)
+        val container = ancestorHostRoot(page)
         val inSlot = slot != null &&
             slot.isAttachedToWindow &&
             isUnder(slot, page)
@@ -216,15 +225,55 @@ object CarContentSlot {
             TAG,
             "HOST_SLOT_KEEP delay=$delay inSlot=$inSlot " +
                 "slotAttached=${slot?.isAttachedToWindow == true} " +
-                "pageAttached=${page.isAttachedToWindow}"
+                "pageAttached=${page.isAttachedToWindow} " +
+                "container=${container?.javaClass?.name}"
         )
         if (!inSlot) {
-            putPage(activity, page)
+            putHostRoot(activity, page)
             return
         }
         prepareHost(activity)
         Log.d(TAG, "HOST_SLOT_ATTACHED")
         dumpHost(activity, page)
+    }
+
+    private fun putHostRoot(activity: CarActivity, page: View) {
+        val existingRoot = ancestorHostRoot(page)
+        val container = when {
+            existingRoot != null -> existingRoot
+            page.id == R.id.car_host_root && page is FrameLayout -> page
+            else -> hostRootFromSlot(activity) ?: install(activity)
+        }
+        if (page !== container && !isUnder(container, page)) {
+            (page.parent as? ViewGroup)?.removeView(page)
+            fillParent(page)
+            container.addView(
+                page,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        Log.d(
+            TAG,
+            "HOST_SLOT_CONTAINER class=${container.javaClass.name} " +
+                "id=${container.id} children=${container.childCount}"
+        )
+        putInSlot(activity, container)
+        dumpHost(activity, page)
+        scheduleDump(activity, page)
+    }
+
+    private fun ancestorHostRoot(view: View): FrameLayout? {
+        var current: View? = view
+        while (current != null) {
+            if (current.id == R.id.car_host_root && current is FrameLayout) {
+                return current
+            }
+            current = current.parent as? View
+        }
+        return null
     }
 
     private fun hostRootFromSlot(activity: CarActivity): FrameLayout? {
