@@ -8,7 +8,6 @@ import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.media3.common.C
-import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -86,7 +85,7 @@ class CarMediaService : MediaLibraryService() {
         mediaLibrarySession =
             MediaLibrarySession.Builder(
                 this,
-                HostedSkipPlayer(player),
+                player,
                 CarMediaLibraryCallback()
             )
                 .setId("karadag-car-tv")
@@ -939,203 +938,12 @@ class CarMediaService : MediaLibraryService() {
         )
     }
 
-    /*
-     * YouTube / Google HTML URL'lerini ExoPlayer'a vermeyiz.
-     * Media browse öğesi radyo gibi playable kalır; görüntü
-     * BoundCarHost üzerinden hosted WebView'dedir.
-     */
-    private inner class HostedSkipPlayer(
-        player: ExoPlayer
-    ) : ForwardingPlayer(
-        player
-    ) {
-
-        override fun setMediaItem(
-            mediaItem: MediaItem
-        ) {
-
-            if (skipHostedWeb(mediaItem)) {
-                return
-            }
-
-            super.setMediaItem(
-                mediaItem
-            )
-        }
-
-        override fun setMediaItem(
-            mediaItem: MediaItem,
-            resetPosition: Boolean
-        ) {
-
-            if (skipHostedWeb(mediaItem)) {
-                return
-            }
-
-            super.setMediaItem(
-                mediaItem,
-                resetPosition
-            )
-        }
-
-        override fun setMediaItem(
-            mediaItem: MediaItem,
-            startPositionMs: Long
-        ) {
-
-            if (skipHostedWeb(mediaItem)) {
-                return
-            }
-
-            super.setMediaItem(
-                mediaItem,
-                startPositionMs
-            )
-        }
-
-        override fun setMediaItems(
-            mediaItems: List<MediaItem>
-        ) {
-
-            val playable =
-                withoutHostedWeb(
-                    mediaItems
-                )
-
-            if (playable.isEmpty()) {
-                return
-            }
-
-            super.setMediaItems(
-                playable
-            )
-        }
-
-        override fun setMediaItems(
-            mediaItems: List<MediaItem>,
-            resetPosition: Boolean
-        ) {
-
-            val playable =
-                withoutHostedWeb(
-                    mediaItems
-                )
-
-            if (playable.isEmpty()) {
-                return
-            }
-
-            super.setMediaItems(
-                playable,
-                resetPosition
-            )
-        }
-
-        override fun setMediaItems(
-            mediaItems: List<MediaItem>,
-            startIndex: Int,
-            startPositionMs: Long
-        ) {
-
-            val startItem =
-                mediaItems.getOrNull(
-                    startIndex
-                )
-
-            if (startItem != null && skipHostedWeb(startItem)) {
-                return
-            }
-
-            val playable =
-                withoutHostedWeb(
-                    mediaItems
-                )
-
-            if (playable.isEmpty()) {
-                return
-            }
-
-            val newIndex =
-                playable.indexOfFirst { item ->
-
-                    item.mediaId == startItem?.mediaId
-                }.coerceAtLeast(
-                    0
-                )
-
-            super.setMediaItems(
-                playable,
-                newIndex,
-                startPositionMs
-            )
-        }
-
-        override fun addMediaItem(
-            mediaItem: MediaItem
-        ) {
-
-            if (skipHostedWeb(mediaItem)) {
-                return
-            }
-
-            super.addMediaItem(
-                mediaItem
-            )
-        }
-
-        override fun addMediaItem(
-            index: Int,
-            mediaItem: MediaItem
-        ) {
-
-            if (skipHostedWeb(mediaItem)) {
-                return
-            }
-
-            super.addMediaItem(
-                index,
-                mediaItem
-            )
-        }
-
-        override fun addMediaItems(
-            mediaItems: List<MediaItem>
-        ) {
-
-            val playable =
-                withoutHostedWeb(
-                    mediaItems
-                )
-
-            if (playable.isEmpty()) {
-                return
-            }
-
-            super.addMediaItems(
-                playable
-            )
-        }
-
-        override fun addMediaItems(
-            index: Int,
-            mediaItems: List<MediaItem>
-        ) {
-
-            val playable =
-                withoutHostedWeb(
-                    mediaItems
-                )
-
-            if (playable.isEmpty()) {
-                return
-            }
-
-            super.addMediaItems(
-                index,
-                playable
-            )
-        }
+    private fun silenceUri(): Uri {
+        return Uri.parse(
+            "android.resource://" + packageName + "/raw/silence"
+        )
     }
+
 
     /*
      * ============================================================
@@ -1202,9 +1010,7 @@ class CarMediaService : MediaLibraryService() {
             )
 
             .setUri(
-                Uri.parse(
-                    YOUTUBE_URL
-                )
+                silenceUri()
             )
 
             .setMediaMetadata(
@@ -1248,9 +1054,7 @@ class CarMediaService : MediaLibraryService() {
             )
 
             .setUri(
-                Uri.parse(
-                    GOOGLE_URL
-                )
+                silenceUri()
             )
 
             .setMediaMetadata(
@@ -1304,35 +1108,6 @@ class CarMediaService : MediaLibraryService() {
             putString(
                 "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT",
                 groupTitle
-            )
-        }
-    }
-
-    private fun skipHostedWeb(
-        mediaItem: MediaItem
-    ): Boolean {
-
-        return when (
-            hostedDestination(
-                mediaItem.mediaId
-            )
-        ) {
-            ProjectionDestination.YOUTUBE,
-            ProjectionDestination.GOOGLE ->
-                true
-            else ->
-                false
-        }
-    }
-
-    private fun withoutHostedWeb(
-        mediaItems: List<MediaItem>
-    ): List<MediaItem> {
-
-        return mediaItems.filterNot { item ->
-
-            skipHostedWeb(
-                item
             )
         }
     }
@@ -1508,12 +1283,6 @@ class CarMediaService : MediaLibraryService() {
 
         private const val GOOGLE_PHONE_ID =
             "karadag-google-phone"
-
-        private const val YOUTUBE_URL =
-            "https://www.youtube.com/"
-
-        private const val GOOGLE_URL =
-            "https://www.google.com/"
 
         private const val CONTENT_STYLE_LIST = 1
 
