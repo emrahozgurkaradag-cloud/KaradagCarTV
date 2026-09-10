@@ -84,7 +84,11 @@ class AndroidAutoDiscoveryTest {
         val xml = sourceFile("res/xml/automotive_app_desc.xml").readText()
 
         assertTrue(xml.contains("""<uses name="media" />"""))
-        assertTrue(xml.contains("""<uses name="template" />"""))
+        assertFalse(
+            xml.lineSequence().any {
+                it.trim() == """<uses name="template" />"""
+            }
+        )
         assertTrue(xml.contains("""name="projection""""))
         assertTrue(xml.contains("""<uses name="video" />"""))
         assertTrue(xml.contains("""name="service""""))

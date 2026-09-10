@@ -1,17 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        media: CarMediaService — resmi Android Auto medya menüsü
-        (Canlı TV, YouTube, Radyo, Google doğrudan kökte).
-        Sürüşte yalnızca ses; video host park/OEM projection
-        destekliyorsa CarVideoActivity SurfaceView yolundan gider.
-        template: CarMirrorService (izin yalnızca Mirror yüzeyinde).
-        service + projection: CarVideoService (aauto.aar OEM).
-        video: park halinde host video yeteneği bildirimi.
-        Kategori kısıtları bypass edilmez.
+        Fermata: media + service + projection. Template is commented
+        out so Android Auto does not open CarAppService
+        (NavigationTemplate) instead of CarVideoActivity.
+        video: park/OEM host video capability for SurfaceView.
+        Mirror stays in the manifest; it is not the launcher surface.
     -->
     <uses name="media" />
-    <uses name="template" />
+    <!-- <uses name="template" /> -->
     <uses
         name="service"
         tools:ignore="InvalidUsesTagAttribute" />
