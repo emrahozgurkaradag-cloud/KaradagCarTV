@@ -29,4 +29,12 @@ class HostedProjectionFragment : Fragment() {
             ?: error("HostedProjectionFragment requires CarVideoActivity")
         return car.hostedPageIfPresent() ?: car.buildHostedPage()
     }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val car = view.context as? CarVideoActivity
+            ?: BoundCarHost.currentHost() as? CarVideoActivity
+            ?: return
+        car.onHostedViewCreated(view)
+    }
 }

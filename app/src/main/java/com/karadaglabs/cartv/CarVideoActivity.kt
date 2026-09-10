@@ -96,6 +96,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             showHostedDestination(destination)
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
+        slotCommitted = hostRoot != null
 
         try {
             startService(Intent(this, CarMediaService::class.java))
@@ -164,7 +165,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             if (fragment.isDetached) {
                 manager.beginTransaction()
                     .attach(fragment)
-                    .commitNow()
+                    .commit()
             }
             Log.d(TAG, "CAR STREAM FRAGMENT ATTACHED")
             true
@@ -230,13 +231,17 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
         hostProjectionFragment()
         attachHostedFragment()
-        if (rootColumn == null || rootColumn?.parent == null) {
-            queueHostedFragmentAttach()
-            ensureHostedPage()
+        queueHostedFragmentAttach()
+        val hosted = supportFragmentManager.findFragmentByTag("hosted")
+        val waitingForAttach = hosted != null && hosted.isDetached
+        if (!waitingForAttach) {
+            if (rootColumn == null || rootColumn?.parent == null) {
+                ensureHostedPage()
+            }
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
         val page = rootColumn
-        if (page != null) {
+        if (page != null && !waitingForAttach) {
             CarContentSlot.keepInSlot(this, page)
             if (!hostedReady) {
                 hostedReady = true
@@ -248,6 +253,27 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 showHostedDestination(destination)
             }
         }
+    }
+
+    internal fun onHostedViewCreated(view: View) {
+        if (destroyed) {
+            return
+        }
+        hostRoot = view.parent as? FrameLayout ?: hostRoot
+        if (view is ViewGroup) {
+            rootColumn = view
+        }
+        CarContentSlot.keepInSlot(this, view)
+        if (!hostedReady) {
+            hostedReady = true
+            if (BoundCarHost.consumePending(this) == null) {
+                showHostedDestination(destination)
+            }
+            applyVideoFocus(request = true)
+        } else if (BoundCarHost.consumePending(this) == null) {
+            showHostedDestination(destination)
+        }
+        Log.d(TAG, "CAR STREAM FRAGMENT ATTACHED")
     }
 
     internal fun buildHostedPage(): View {
@@ -343,7 +369,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     override fun onStart() {
         super.onStart()
-        revealHostedPage(force = !slotCommitted)
+        revealHostedPage(force = hostRoot?.isAttachedToWindow != true)
         rootColumn?.let { root ->
             CarContentSlot.rebind(this, root)
             root.post { CarContentSlot.rebind(this, root) }
