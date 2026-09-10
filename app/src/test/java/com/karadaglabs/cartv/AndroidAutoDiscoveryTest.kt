@@ -156,20 +156,18 @@ class AndroidAutoDiscoveryTest {
             "java/com/karadaglabs/cartv/ProjectionDestination.kt"
         ).readText()
 
-        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
-        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
+        val rootStart = media.indexOf("if (parentId == ROOT_ID || parentId == RADIO_ID)")
+        val liveStart = media.indexOf("if (parentId == LIVE_TV_ID)", rootStart)
         val rootBlock = media.substring(
             rootStart,
-            if (radioStart > rootStart) radioStart else media.length
+            if (liveStart > rootStart) liveStart else media.length
         )
-        assertTrue(rootBlock.contains("Canlı Radyo"))
-        assertTrue(rootBlock.contains("Canlı TV"))
-        assertTrue(rootBlock.contains("YouTube"))
-        assertTrue(rootBlock.contains("Google"))
-        assertTrue(rootBlock.contains("LIVE_TV_HOSTED_ID"))
-        assertTrue(rootBlock.contains("YOUTUBE_PHONE_ID"))
-        assertTrue(rootBlock.contains("GOOGLE_PHONE_ID"))
-        assertTrue(rootBlock.contains("createInfoItem"))
+        assertTrue(rootBlock.contains("parentId == ROOT_ID || parentId == RADIO_ID"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertFalse(rootBlock.contains("LIVE_TV_HOSTED_ID"))
+        assertFalse(rootBlock.contains("YOUTUBE_PHONE_ID"))
+        assertFalse(rootBlock.contains("GOOGLE_PHONE_ID"))
+        assertFalse(rootBlock.contains("createInfoItem"))
         assertFalse(rootBlock.contains("📺 Canlı TV"))
         assertFalse(rootBlock.contains("▶️ YouTube"))
         assertFalse(rootBlock.contains("🔎 Google Arama"))

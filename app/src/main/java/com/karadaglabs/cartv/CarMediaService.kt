@@ -269,56 +269,13 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == ROOT_ID) {
+            if (parentId == ROOT_ID || parentId == RADIO_ID) {
 
                 /*
-                 * Playable hosted items do not have children, so the
-                 * host cannot show Öğe yok. Taps route to the bound
-                 * CarVideoActivity via BoundCarHost. Radio stays a
-                 * real browsable list of stations.
+                 * Media browse is radio only. Canlı TV / YouTube /
+                 * Google are hosted in CarActivity.g (that path was
+                 * Öğe yok when they were empty browse nodes).
                  */
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createInfoItem(
-                                id = LIVE_TV_HOSTED_ID,
-                                title = "Canlı TV",
-                                subtitle =
-                                    "Canlı TV araç ekranında açılır"
-                            ),
-                            createCategoryItem(
-                                id = RADIO_ID,
-                                title = "Canlı Radyo",
-                                subtitle =
-                                    "${radios.size} radyo"
-                            ),
-                            createInfoItem(
-                                id = YOUTUBE_PHONE_ID,
-                                title = "YouTube",
-                                subtitle =
-                                    "YouTube araç ekranında açılır"
-                            ),
-                            createInfoItem(
-                                id = GOOGLE_PHONE_ID,
-                                title = "Google",
-                                subtitle =
-                                    "Google araç ekranında açılır"
-                            )
-                        ),
-                        params
-                    )
-                )
-            }
-
-            /*
-             * ====================================================
-             * RADYO
-             * ====================================================
-             */
-
-            if (parentId == RADIO_ID) {
-
                 val items =
                     radios.map { radio ->
 
