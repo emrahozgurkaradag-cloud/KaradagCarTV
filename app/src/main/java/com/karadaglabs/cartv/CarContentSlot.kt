@@ -72,10 +72,6 @@ object CarContentSlot {
         } catch (exception: Exception) {
             Log.w(TAG, "setIgnoreConfigChanges unavailable", exception)
         }
-        // Fermata initCarActivity / CarStream onCreate: hide Gearhead
-        // chrome so setContentView into g is the visible surface.
-        hideHeader(activity)
-        hideMenu(activity)
     }
 
     fun hideHeader(activity: CarActivity) {

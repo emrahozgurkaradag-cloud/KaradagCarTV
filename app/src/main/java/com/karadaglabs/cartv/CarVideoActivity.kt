@@ -113,16 +113,13 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         setContentView(R.layout.car_host_root)
         hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
         CarContentSlot.hideHeader(this)
-        CarContentSlot.hideMenu(this)
         ensureHostedPage()
         if (rootColumn != null) {
             showHostedDestination(destination)
         }
         seedHostedFragment()
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
-        HostedNavigation.hideChrome(this)
         CarContentSlot.hideHeader(this)
-        CarContentSlot.hideMenu(this)
         slotCommitted = hostRoot != null
         watchHostRoot(hostRoot)
 
@@ -305,13 +302,10 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             ensureHostedPage()
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
-        // bindDrawerMenu shows the Gearhead title/menu; hide them again
-        // so slot g stays the content surface, like Fermata. Google
-        // keeps the header because attachCarSearchBox uses it.
+        // Keep the Gearhead drawer (Live TV / YouTube / Google) visible.
+        // hideMenuButton here would cover that native list with Öğe yok.
         if (destination != ProjectionDestination.GOOGLE) {
-            HostedNavigation.hideChrome(this)
             CarContentSlot.hideHeader(this)
-            CarContentSlot.hideMenu(this)
         }
         val page = rootColumn
         if (page != null) {
