@@ -60,6 +60,8 @@ class HostedProjectionDestinationTest {
         assertTrue(slot.contains("getDeclaredField(SLOT_FIELD)"))
         assertTrue(slot.contains("bringToFront()"))
         assertTrue(slot.contains("chooseVisibleHost"))
+        assertTrue(slot.contains("android.R.id.content"))
+        assertTrue(slot.contains("canOverlay"))
         assertTrue(slot.contains("HOST_CHOSEN_CLASS"))
         assertTrue(slot.contains("NATIVE_LIST_CLASS"))
         assertFalse(slot.contains("closeDrawer"))

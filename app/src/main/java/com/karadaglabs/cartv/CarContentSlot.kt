@@ -22,11 +22,14 @@ import java.util.WeakHashMap
  * Field CarActivity.g is the content_frame analogue. Gearhead's empty PagedListView
  * lives in the same getAppLayout() and is what paints "Öğe yok".
  *
- * If `g` is attached and has real area, the app root stays there.
- * If `g` is 0-size or smaller than the native list, the root is reparented
- * onto the list's parent or getAppLayout() as a covering sibling — the
- * views CarActivity.onCreate already installed. The list is not GONE,
- * the drawer is not closed, and Window.setContentView is not used.
+ * After the official add into `g`, the app root is lifted onto an
+ * overlay-capable parent that already exists in the hosted Window:
+ * android.R.id.content (FrameLayout from CarActivityHost.setContentView),
+ * or the nearest FrameLayout/DrawerLayout ancestor. That is addView on
+ * the existing container, not Window.setContentView, so Gearhead's
+ * getAppLayout stays as a sibling underneath. LinearLayout parents are
+ * never used as overlay hosts. The list is not GONE and the drawer is
+ * not closed.
  *
  * Rebind after onStart: CarUiController.a() → Gearhead onStart().
  */
@@ -75,7 +78,13 @@ object CarContentSlot {
         val slot = resolveSlot(activity)
         val appLayout = resolveAppLayout(activity) as? ViewGroup
         val nativeList = findNativeList(appLayout) ?: findNativeList(decor(activity))
-        val host = chooseVisibleHost(slot, appLayout, nativeList) ?: return
+        val windowContent = findWindowContent(activity)
+        val host = chooseVisibleHost(
+            windowContent,
+            slot,
+            appLayout,
+            nativeList
+        ) ?: return
         val size = hostSize(activity, appLayout, host)
         val key = BindKey(
             hostIdentity = System.identityHashCode(host),
@@ -89,8 +98,11 @@ object CarContentSlot {
         }
 
         lastBind[root] = key
-        ensureChild(host, root, replaceChildren = host === slot)
-        applyHostPixels(host, size.width, size.height)
+        val overlayHost = host !== slot
+        ensureChild(host, root, replaceChildren = !overlayHost)
+        if (!overlayHost) {
+            applyHostPixels(host, size.width, size.height)
+        }
         applyHostPixels(root, size.width, size.height)
         unclipAncestors(host, appLayout)
         promote(host, root)
@@ -100,6 +112,8 @@ object CarContentSlot {
         Log.d(
             TAG,
             "HOST_CHOSEN_CLASS class=${host.javaClass.name} " +
+                "overlay=$overlayHost " +
+                "windowContent=${windowContent?.javaClass?.name} " +
                 "slot=${slot?.javaClass?.name} " +
                 "appLayout=${appLayout?.javaClass?.name} " +
                 "list=${nativeList?.javaClass?.name} " +
@@ -109,14 +123,31 @@ object CarContentSlot {
     }
 
     private fun chooseVisibleHost(
+        windowContent: ViewGroup?,
         slot: ViewGroup?,
         appLayout: ViewGroup?,
         nativeList: View?
     ): ViewGroup? {
-        val slotArea = area(slot)
-        val listArea = area(nativeList)
-        val appArea = area(appLayout)
+        if (canOverlay(windowContent)) {
+            return windowContent
+        }
 
+        val fromList = overlayAncestor(nativeList)
+        if (fromList != null) {
+            return fromList
+        }
+
+        val fromSlot = overlayAncestor(slot)
+        if (fromSlot != null) {
+            return fromSlot
+        }
+
+        if (canOverlay(appLayout)) {
+            return appLayout
+        }
+
+        val slotArea = area(slot)
+        val appArea = area(appLayout)
         if (
             slot != null &&
             slot.isAttachedToWindow &&
@@ -126,27 +157,72 @@ object CarContentSlot {
             return slot
         }
 
-        val listParent = nativeList?.parent as? ViewGroup
-        if (listParent != null && listArea > slotArea) {
-            return listParent
-        }
-
-        if (appLayout != null) {
-            return appLayout
-        }
-
         return slot
     }
 
+    private fun findWindowContent(activity: CarActivity): ViewGroup? {
+        val fromActivity = try {
+            activity.findViewById(android.R.id.content) as? ViewGroup
+        } catch (_: Exception) {
+            null
+        }
+        if (fromActivity != null) {
+            return fromActivity
+        }
+
+        return try {
+            hostWindow(activity).decorView.findViewById(android.R.id.content)
+                as? ViewGroup
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun overlayAncestor(start: View?): ViewGroup? {
+        var node: View? = start?.parent as? View
+        while (node != null) {
+            if (canOverlay(node)) {
+                return node as ViewGroup
+            }
+            node = node.parent as? View
+        }
+        return null
+    }
+
+    private fun canOverlay(view: View?): Boolean {
+        if (view !is ViewGroup) {
+            return false
+        }
+
+        val name = view.javaClass.name
+        if (
+            view is android.widget.LinearLayout ||
+            name.contains("LinearLayout") ||
+            name.contains("Recycler") ||
+            name.contains("PagedList") ||
+            name.contains("ScrollView")
+        ) {
+            return false
+        }
+
+        return view is android.widget.FrameLayout ||
+            view is android.widget.RelativeLayout ||
+            name.contains("FrameLayout") ||
+            name.contains("ContentFrame") ||
+            name.contains("DrawerLayout") ||
+            name.contains("ConstraintLayout")
+    }
+
     private fun promote(host: ViewGroup, root: View) {
-        host.elevation = SLOT_ELEVATION
-        host.translationZ = SLOT_ELEVATION
-        host.isClickable = true
-        host.bringToFront()
         root.elevation = SLOT_ELEVATION
         root.translationZ = SLOT_ELEVATION
         root.isClickable = true
         root.bringToFront()
+        if (host.id != android.R.id.content) {
+            host.elevation = SLOT_ELEVATION
+            host.translationZ = SLOT_ELEVATION
+            host.bringToFront()
+        }
     }
 
     private fun unclipAncestors(from: View, appLayout: View?) {
@@ -389,6 +465,7 @@ object CarContentSlot {
                 "slot=${slot?.width ?: 0}x${slot?.height ?: 0}"
         )
         dumpChildren("HOST_APP_LAYOUT", appLayout)
+        dumpChildren("HOST_WINDOW_CONTENT", findWindowContent(activity))
     }
 
     private fun dumpChildren(label: String, view: View?) {
