@@ -111,9 +111,6 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun hostProjectionFragment(): Boolean {
-        if (rootColumn != null) {
-            return true
-        }
         return try {
             val manager = supportFragmentManager
             if (manager.findFragmentByTag("hosted") != null) {
@@ -166,7 +163,8 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     internal fun hostedPageIfPresent(): View? {
         val page = rootColumn ?: return null
-        return page.takeIf { it.parent == null }
+        (page.parent as? ViewGroup)?.removeView(page)
+        return page
     }
 
     private fun ensureHostedPage() {
@@ -207,11 +205,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             )
         }
         hostProjectionFragment()
+        attachHostedFragment()
         if (rootColumn == null) {
-            attachHostedFragment()
-            if (rootColumn == null) {
-                queueHostedFragmentAttach()
-            }
+            queueHostedFragmentAttach()
             ensureHostedPage()
         }
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
