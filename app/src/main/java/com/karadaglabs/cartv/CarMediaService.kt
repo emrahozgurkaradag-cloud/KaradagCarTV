@@ -859,9 +859,17 @@ class CarMediaService : MediaLibraryService() {
             mediaId == YOUTUBE_LEGACY_ID
         ) {
 
+            // Root browse item keeps the YouTube URI. The player
+            // cannot decode that page; silence keeps the session
+            // playing after DESTINATION_OPEN.
             return createYouTubeMediaItem(
                 mediaId
             )
+                .buildUpon()
+                .setUri(
+                    silenceUri()
+                )
+                .build()
         }
 
         if (
@@ -873,6 +881,11 @@ class CarMediaService : MediaLibraryService() {
             return createGoogleMediaItem(
                 mediaId
             )
+                .buildUpon()
+                .setUri(
+                    silenceUri()
+                )
+                .build()
         }
 
         if (mediaId.startsWith("live-tv-")) {
