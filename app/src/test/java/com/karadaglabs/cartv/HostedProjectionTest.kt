@@ -380,6 +380,19 @@ class HostedProjectionSourceTest {
         assertTrue(media.contains("createLiveTvOpenItem"))
         assertTrue(media.contains("createYouTubeMediaItem"))
         assertTrue(media.contains("createGoogleMediaItem"))
+        val youtubeItem = media.substring(
+            media.indexOf("private fun createYouTubeMediaItem"),
+            media.indexOf("private fun createGoogleMediaItem")
+        )
+        val googleItem = media.substring(
+            media.indexOf("private fun createGoogleMediaItem"),
+            media.indexOf("private fun browseGroupExtras")
+        )
+        assertFalse(youtubeItem.contains("id == YOUTUBE_ID"))
+        assertFalse(googleItem.contains("id == GOOGLE_ID"))
+        assertTrue(youtubeItem.contains("setIsBrowsable"))
+        assertTrue(googleItem.contains("setIsBrowsable"))
+        assertFalse(media.contains("MEDIA_TYPE_FOLDER_TV_CHANNELS"))
         assertFalse(media.contains("YouTube telefonda açılır"))
         val addStart = media.indexOf("private fun resolvePlayableMediaItem")
         val addBlock = media.substring(

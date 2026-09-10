@@ -1046,11 +1046,17 @@ class CarMediaService : MediaLibraryService() {
 
         if (id == LIVE_TV_ID) {
 
+            // Same shape as createRadioMediaItem: a playable root
+            // leaf. FLAG_BROWSABLE / FOLDER_TV_CHANNELS makes Android
+            // Auto open an empty folder ("Öğe yok") instead of playing.
+            metadataBuilder.setIsBrowsable(
+                false
+            )
             metadataBuilder.setIsPlayable(
                 true
             )
             metadataBuilder.setMediaType(
-                MediaMetadata.MEDIA_TYPE_FOLDER_TV_CHANNELS
+                MediaMetadata.MEDIA_TYPE_TV_CHANNEL
             )
             metadataBuilder.setExtras(
                 browseGroupExtras(
@@ -1059,17 +1065,25 @@ class CarMediaService : MediaLibraryService() {
             )
         }
 
-        return MediaItem.Builder()
+        val item =
+            MediaItem.Builder()
 
-            .setMediaId(
-                id
+                .setMediaId(
+                    id
+                )
+
+                .setMediaMetadata(
+                    metadataBuilder.build()
+                )
+
+        if (id == LIVE_TV_ID) {
+
+            item.setUri(
+                silenceUri()
             )
+        }
 
-            .setMediaMetadata(
-                metadataBuilder.build()
-            )
-
-            .build()
+        return item.build()
     }
 
     private fun createLiveTvOpenItem(): MediaItem {
@@ -1147,7 +1161,7 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     .setIsBrowsable(
-                        id == YOUTUBE_ID
+                        false
                     )
 
                     .setIsPlayable(
@@ -1193,7 +1207,7 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     .setIsBrowsable(
-                        id == GOOGLE_ID
+                        false
                     )
 
                     .setIsPlayable(
