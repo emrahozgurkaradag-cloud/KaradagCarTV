@@ -917,7 +917,6 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
 
         statusView?.text = state.statusText
-        adapter?.update(state.channels, state.selectedId)
         refreshHostedList()
 
         val playing = state.mode == ProjectionMode.PLAYING &&
@@ -1047,6 +1046,24 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun onChannelClicked(channel: IptvChannel) {
+        when (channel.id) {
+            -1 -> {
+                showYouTube()
+                return
+            }
+            -2 -> {
+                showGoogle()
+                return
+            }
+            -3 -> {
+                showRadio()
+                return
+            }
+            -4 -> {
+                showLiveTv()
+                return
+            }
+        }
         if (destination == ProjectionDestination.RADIO) {
             val radio = RadioStations.all.getOrNull(channel.id) ?: return
             selectedRadioId = radio.id
@@ -1118,13 +1135,17 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun refreshHostedList() {
         val rows = hostedRows()
-        val list = rootColumn?.findViewById<View>(R.id.car_paged_list)
         val hide = destination == ProjectionDestination.YOUTUBE ||
             destination == ProjectionDestination.GOOGLE
+        val list = rootColumn?.findViewById<View>(R.id.car_paged_list)
         if (list != null) {
-            list.visibility = if (hide) View.GONE else View.VISIBLE
+            HostedCarList.attach(list, rows, ::onHostedRow)
+        }
+        val grid = gridView
+        if (grid != null) {
+            grid.visibility = if (hide) View.GONE else View.VISIBLE
             if (!hide) {
-                HostedCarList.attach(list, rows, ::onHostedRow)
+                adapter?.update(hostedGridChannels(rows), state.selectedId)
             }
         }
         HostedCarList.bindActivity(
@@ -1133,6 +1154,40 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             rows,
             ::onHostedRow
         )
+    }
+
+    private fun hostedGridChannels(
+        rows: List<HostedCarList.Row>
+    ): List<IptvChannel> {
+        return rows.mapIndexed { index, row ->
+            when (row.key) {
+                "youtube" -> IptvChannel(-1, row.title, "", null, "YouTube")
+                "google" -> IptvChannel(-2, row.title, "", null, "Google")
+                "radio" -> IptvChannel(-3, row.title, "", null, "Radyo")
+                "live-tv" -> IptvChannel(-4, row.title, "", null, "Canlı TV")
+                else -> {
+                    if (row.key.startsWith("live-tv-")) {
+                        val channelId = row.key.removePrefix("live-tv-").toIntOrNull()
+                        state.channels.firstOrNull { candidate ->
+                            candidate.id == channelId
+                        } ?: IptvChannel(index, row.title, "", null, "Canlı TV")
+                    } else {
+                        val radioIndex = RadioStations.all.indexOfFirst { it.id == row.key }
+                        if (radioIndex >= 0) {
+                            IptvChannel(
+                                radioIndex,
+                                row.title,
+                                RadioStations.all[radioIndex].url,
+                                null,
+                                "Radyo"
+                            )
+                        } else {
+                            IptvChannel(index, row.title, "", null, row.title)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun hostedRows(): List<HostedCarList.Row> {

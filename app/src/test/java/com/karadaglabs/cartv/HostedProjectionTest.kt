@@ -284,6 +284,8 @@ class HostedProjectionSourceTest {
         assertTrue(hostedList.contains("YouTube") || hostedList.contains("setAdapter"))
         assertTrue(video.contains("HostedCarList.bindActivity"))
         assertTrue(video.contains("HostedCarList.showInSlot"))
+        assertTrue(video.contains("hostedGridChannels"))
+        assertTrue(video.contains("car_grid"))
         assertFalse(video.contains("HostedCarWindow"))
         assertFalse(video.contains("HostedWebPane"))
     }
