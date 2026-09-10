@@ -333,6 +333,8 @@ class ProjectionSourceContractTest {
         assertTrue(service.contains("CarVideoActivity::class.java"))
         assertTrue(service.contains("CAR VIDEO SERVICE HOST BIND FAILED"))
         assertTrue(service.contains("CAR VIDEO SERVICE ON BIND"))
+        assertTrue(service.contains("fun hostedActivity"))
+        assertTrue(service.contains("getActivityInstance"))
         assertFalse(service.contains("CarYouTubeActivity"))
         val google = source(
             "java/com/karadaglabs/cartv/CarGoogleActivity.kt"

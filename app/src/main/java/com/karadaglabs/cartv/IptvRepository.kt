@@ -77,7 +77,11 @@ object IptvRepository {
             .apply()
     }
 
-    fun fetchFromApi(context: Context): List<IptvChannel> {
+    fun fetchFromApi(
+        context: Context,
+        connectTimeout: Int = 10_000,
+        readTimeout: Int = 15_000
+    ): List<IptvChannel> {
         val licenseKey = AppSession.licenseKey(context)
 
         if (licenseKey.isBlank()) {
@@ -91,8 +95,8 @@ object IptvRepository {
 
         try {
             connection.requestMethod = "POST"
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 15_000
+            connection.connectTimeout = connectTimeout
+            connection.readTimeout = readTimeout
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Accept", "application/json")
@@ -182,5 +186,27 @@ object IptvRepository {
         }
 
         return loadCached(context)
+    }
+
+    fun loadCachedOrFastApi(context: Context): List<IptvChannel> {
+        val cached = loadCached(context)
+        if (cached.isNotEmpty()) {
+            return cached
+        }
+
+        return try {
+            val channels = fetchFromApi(
+                context,
+                connectTimeout = 2_000,
+                readTimeout = 3_000
+            )
+            if (channels.isNotEmpty()) {
+                save(context, channels)
+            }
+            channels
+        } catch (exception: Exception) {
+            Log.e(TAG, "IPTV fast browse load failed", exception)
+            emptyList()
+        }
     }
 }

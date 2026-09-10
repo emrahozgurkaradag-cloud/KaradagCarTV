@@ -1,6 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.util.Log
@@ -12,6 +11,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import java.util.Collections
+import java.util.WeakHashMap
 
 object HostedNavigation {
 
@@ -25,16 +26,16 @@ object HostedNavigation {
         try {
             CarVideoPlayerHolder.setPlayWhenReady(false)
 
-            val intent = Intent()
-            intent.setClassName(
-                from.packageName,
-                className(destination)
+            if (from is CarDestinationHost) {
+                from.showHostedDestination(destination)
+                return
+            }
+
+            Log.e(
+                TAG,
+                "CAR HOST NAVIGATION FAILED destination=${destination.name} " +
+                    "reason=single_car_activity_only"
             )
-            intent.putExtra(
-                ProjectionDestination.EXTRA,
-                destination.name
-            )
-            from.startCarActivity(intent)
         } catch (exception: Exception) {
             Log.e(
                 TAG,
@@ -47,14 +48,10 @@ object HostedNavigation {
     fun className(destination: ProjectionDestination): String {
         return when (destination) {
             ProjectionDestination.LIVE_TV,
-            ProjectionDestination.RADIO ->
-                CarVideoActivity::class.java.name
-
-            ProjectionDestination.YOUTUBE ->
-                CarYouTubeActivity::class.java.name
-
+            ProjectionDestination.RADIO,
+            ProjectionDestination.YOUTUBE,
             ProjectionDestination.GOOGLE ->
-                CarGoogleActivity::class.java.name
+                CarVideoActivity::class.java.name
         }
     }
 
@@ -65,6 +62,73 @@ object HostedNavigation {
             carUiController.menuController.hideMenuButton()
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to hide car chrome", exception)
+        }
+    }
+
+    private val boundMenus: MutableSet<CarActivity> =
+        Collections.newSetFromMap(WeakHashMap())
+
+    fun bindDrawerMenu(
+        activity: CarActivity,
+        current: ProjectionDestination,
+        onSelect: (ProjectionDestination) -> Unit,
+        openDrawerOnce: Boolean = false
+    ) {
+        try {
+            val ui = activity.carUiController
+            // Gearhead onStart wipes an onCreate adapter. Set it on
+            // every bind so Canlı TV / YouTube / Google stay in the
+            // official drawer after chrome restore.
+            ui.menuController.setRootMenuAdapter(
+                DestinationMenuAdapter(activity, onSelect)
+            )
+            ui.menuController.showMenuButton()
+            if (openDrawerOnce && boundMenus.add(activity)) {
+                try {
+                    ui.drawerController.openDrawer()
+                } catch (exception: Exception) {
+                    Log.w(TAG, "openDrawer unavailable", exception)
+                }
+                Log.d(TAG, "HOST_MENU_BOUND destination=${current.name}")
+            }
+            // Do not showTitle(): that restores Gearhead chrome and
+            // the empty PagedListView over slot g. CarStream keeps
+            // the header hidden and only setTitle on the hidden bar.
+            ui.statusBarController.setTitle(current.label)
+        } catch (exception: Exception) {
+            Log.e(TAG, "HOST_MENU_BIND failed", exception)
+        }
+    }
+
+    fun showHostContent(activity: CarActivity) {
+        try {
+            activity.carUiController.drawerController.closeDrawer()
+        } catch (exception: Exception) {
+            Log.w(TAG, "closeDrawer unavailable", exception)
+        }
+    }
+
+    private class DestinationMenuAdapter(
+        private val activity: CarActivity,
+        private val onSelect: (ProjectionDestination) -> Unit
+    ) : com.google.android.apps.auto.sdk.MenuAdapter() {
+
+        private val items = ProjectionDestination.entries
+
+        override fun getMenuItemCount(): Int = items.size
+
+        override fun getMenuItem(index: Int): com.google.android.apps.auto.sdk.MenuItem {
+            return com.google.android.apps.auto.sdk.MenuItem.Builder()
+                .setTitle(items[index].label)
+                .setType(com.google.android.apps.auto.sdk.MenuItem.Type.ITEM)
+                .build()
+        }
+
+        override fun onMenuItemClicked(index: Int) {
+            if (index in items.indices) {
+                onSelect(items[index])
+                showHostContent(activity)
+            }
         }
     }
 
@@ -108,6 +172,8 @@ object HostedNavigation {
             val button = Button(activity).apply {
                 text = destination.label
                 isSelected = selected
+                isFocusable = true
+                isFocusableInTouchMode = true
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                 setOnClickListener { onSelect(destination) }
                 val params = LinearLayout.LayoutParams(

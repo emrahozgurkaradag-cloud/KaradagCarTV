@@ -83,8 +83,22 @@ class AndroidAutoDiscoveryTest {
     fun automotiveDescriptorDeclaresAllHostCapabilities() {
         val xml = sourceFile("res/xml/automotive_app_desc.xml").readText()
 
-        assertTrue(xml.contains("""<uses name="media" />"""))
-        assertTrue(xml.contains("""<uses name="template" />"""))
+        assertTrue(
+            xml.lineSequence().any {
+                it.trim() == """<uses name="media" />"""
+            }
+        )
+        assertFalse(
+            xml.lineSequence().any {
+                it.trim() == """<uses name="template" />"""
+            }
+        )
+        assertFalse(
+            "notification makes AA open the empty message surface",
+            xml.lineSequence().any {
+                it.trim() == """<uses name="notification" />"""
+            }
+        )
         assertTrue(xml.contains("""name="projection""""))
         assertTrue(xml.contains("""<uses name="video" />"""))
         assertTrue(xml.contains("""name="service""""))
@@ -108,14 +122,14 @@ class AndroidAutoDiscoveryTest {
         assertTrue(xml.contains("""android:name=".CarVideoService""""))
         assertTrue(xml.contains("""android:name=".CarMirrorService""""))
         assertTrue(xml.contains("""android:name=".CarMediaService""""))
-        assertTrue(
-            xml.contains(
-                "android.media.browse.MediaBrowserService"
-            )
-        )
-        assertTrue(
-            xml.contains("androidx.car.app.CarAppService")
-        )
+        val mediaStart = xml.indexOf("""android:name=".CarMediaService"""")
+        val mirrorStart = xml.indexOf("""android:name=".CarMirrorService"""", mediaStart)
+        val mediaBlock = xml.substring(mediaStart, mirrorStart)
+        assertTrue(mediaBlock.contains("""android:exported="true""""))
+        assertTrue(mediaBlock.contains("MediaBrowserService"))
+        assertTrue(mediaBlock.contains("MediaLibraryService"))
+        assertTrue(xml.contains("""android:label="Karadag Radyo""""))
+        assertTrue(xml.contains("""android:label="Karadag Car TV""""))
         assertTrue(
             xml.contains(
                 "com.google.android.gms.car.category.CATEGORY_PROJECTION"
@@ -124,6 +138,10 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             xml.contains("com.google.android.projection.gearhead")
         )
+        assertFalse(
+            "Phone registration must not be the car launcher",
+            xml.contains("android.intent.category.CAR_LAUNCHER")
+        )
     }
 
     @Test
@@ -131,21 +149,71 @@ class AndroidAutoDiscoveryTest {
         val media = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
+        val video = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
+        val destinations = sourceFile(
+            "java/com/karadaglabs/cartv/ProjectionDestination.kt"
+        ).readText()
 
-        assertTrue(media.contains("📺 Canlı TV"))
+        val rootStart = media.indexOf("private fun buildRootMediaItems")
+        val notifyStart = media.indexOf("private fun notifyMediaTreeChanged", rootStart)
+        val rootBlock = media.substring(
+            rootStart,
+            if (notifyStart > rootStart) notifyStart else media.length
+        )
+        assertTrue(media.contains("parentId == ROOT_ID"))
+        assertTrue(media.contains("buildRootMediaItems()"))
+        assertFalse(
+            "TV / YouTube / Google must not be root category folders",
+            rootBlock.contains("createCategoryItem")
+        )
+        assertTrue(rootBlock.contains("createLiveTvPlayableItem"))
+        assertTrue(rootBlock.contains("LIVE_TV_ID"))
+        assertTrue(rootBlock.contains("liveTvSubtitle()"))
+        assertFalse(rootBlock.contains("channels.isNotEmpty()"))
+        assertTrue(rootBlock.contains("createYouTubeMediaItem"))
+        assertTrue(rootBlock.contains("createGoogleMediaItem"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertTrue(rootBlock.contains("createLiveTvMediaItem"))
+        assertTrue(media.contains("CONTENT_STYLE_GROUP_TITLE_HINT"))
+        assertFalse(rootBlock.contains("createInfoItem"))
+        assertTrue(rootBlock.contains("📺 Canlı TV"))
+        val liveStart = media.indexOf("parentId == LIVE_TV_ID")
+        val youtubeStart = media.indexOf("parentId == YOUTUBE_ID", liveStart)
+        val liveBlock = media.substring(
+            liveStart,
+            if (youtubeStart > liveStart) youtubeStart else media.length
+        )
+        assertTrue(liveBlock.contains("IptvRepository.loadCached"))
+        assertTrue(liveBlock.contains("loadCachedOrFastApi"))
+        assertTrue(liveBlock.contains("createLiveTvMediaItem"))
+        assertTrue(liveBlock.contains("createLiveTvOpenItem"))
+        assertTrue(liveBlock.contains("LIVE_TV_HOSTED_ID") || liveBlock.contains("createLiveTvOpenItem"))
+        assertTrue(liveBlock.contains("SessionError.ERROR_IO"))
+        assertFalse(liveBlock.contains("LibraryResult.ofError"))
         assertTrue(media.contains("▶️ YouTube"))
-        assertTrue(media.contains("📻 Canlı Radyo"))
         assertTrue(media.contains("🔎 Google Arama"))
+        assertTrue(media.contains("createLiveTvMediaItem"))
         assertTrue(media.contains("CONTENT_STYLE_BROWSABLE_HINT"))
         assertTrue(media.contains("YouTube araç ekranında açılır"))
         assertTrue(media.contains("Google araç ekranında açılır"))
         assertTrue(media.contains("Canlı TV araç ekranında açılır"))
         assertFalse(media.contains("YouTube telefonda açılır"))
         assertFalse(media.contains("Google telefonda açılır"))
+        assertTrue(video.contains("showYouTube()"))
+        assertTrue(video.contains("showGoogle()"))
+        assertTrue(video.contains("showLiveTv()"))
+        assertTrue(destinations.contains("Canlı TV"))
+        assertTrue(destinations.contains("YouTube"))
+        assertTrue(destinations.contains("Google"))
+        assertTrue(
+            media.contains("parentId == YOUTUBE_ID") &&
+                media.contains("createYouTubeMediaItem()")
+        )
         assertFalse(
             "YouTube browse must not return an empty list",
-            media.contains("if (parentId == YOUTUBE_ID)") &&
-                youtubeChildrenAreEmpty(media)
+            youtubeChildrenAreEmpty(media)
         )
     }
 
@@ -197,9 +265,12 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             manifest.contains("""android:name=".CarMirrorService"""")
         )
-        assertTrue(
-            manifest.contains("androidx.car.app.category.NAVIGATION")
-        )
+        val mirrorStart = manifest.indexOf("""android:name=".CarMirrorService"""")
+        val videoStart = manifest.indexOf("""android:name=".CarVideoService"""", mirrorStart)
+        val mirrorBlock = manifest.substring(mirrorStart, videoStart)
+        assertTrue(mirrorBlock.contains("""android:exported="false""""))
+        assertFalse(mirrorBlock.contains("androidx.car.app.CarAppService"))
+        assertFalse(mirrorBlock.contains("androidx.car.app.category.NAVIGATION"))
         assertTrue(
             manifest.contains("""android:name=".MediaProjectionPermissionActivity"""")
         )
@@ -210,18 +281,19 @@ class AndroidAutoDiscoveryTest {
     }
 
     private fun youtubeChildrenAreEmpty(media: String): Boolean {
-        val start = media.indexOf("if (parentId == YOUTUBE_ID)")
+        val start = media.indexOf("parentId == YOUTUBE_ID")
         if (start < 0) {
             return true
         }
 
-        val google = media.indexOf("if (parentId == GOOGLE_ID)", start)
+        val google = media.indexOf("parentId == GOOGLE_ID", start)
         val block = media.substring(
             start,
             if (google > start) google else media.length
         )
 
-        return block.contains("ImmutableList.of()")
+        return !block.contains("createYouTubeMediaItem") ||
+            !block.contains("YOUTUBE_PHONE_ID")
     }
 
     @Test
@@ -251,11 +323,15 @@ class AndroidAutoDiscoveryTest {
         val media = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
+        val video = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
 
         assertTrue(repository.contains("AppSession.deviceUuid"))
         assertTrue(repository.contains("AppSession.licenseKey"))
         assertTrue(media.contains("IptvRepository.loadCached"))
-        assertTrue(media.contains("IptvRepository.loadFromApiWithCacheFallback"))
+        assertTrue(repository.contains("loadCachedOrFastApi"))
+        assertTrue(video.contains("IptvRepository.loadFromApiWithCacheFallback"))
     }
 
     @Test
@@ -274,8 +350,11 @@ class AndroidAutoDiscoveryTest {
         ).readText()
 
         assertTrue(activity.contains("SurfaceView"))
+        assertTrue(activity.contains("setTheme(R.style.Theme_KaradagCarTV_Car)"))
         assertTrue(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
+        assertTrue(activity.contains("CarContentSlot.keepInSlot"))
+        assertTrue(activity.contains("CarContentSlot.rebind"))
         assertTrue(chrome.contains("Karadag Car TV"))
         assertTrue(destinations.contains("Canlı TV"))
         assertTrue(destinations.contains("Canlı Radyo"))

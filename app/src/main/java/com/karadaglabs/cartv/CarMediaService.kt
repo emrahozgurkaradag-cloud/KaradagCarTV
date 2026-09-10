@@ -1,5 +1,6 @@
 ﻿package com.karadaglabs.cartv
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -88,10 +89,19 @@ class CarMediaService : MediaLibraryService() {
                 player,
                 CarMediaLibraryCallback()
             )
-                .setId("karadag-car-tv")
+                .setId("karadag-car-tv-v90")
                 .build()
 
         CarVideoPlayerHolder.setPlayer(player)
+
+        BoundCarHost.onMediaConnected()
+
+        val cached =
+            IptvRepository.loadCached(this)
+
+        notifyMediaTreeChanged(
+            cached.size
+        )
 
         Log.d(
             TAG,
@@ -108,9 +118,6 @@ class CarMediaService : MediaLibraryService() {
             "Radio count = ${radios.size}"
         )
 
-        val cached =
-            IptvRepository.loadCached(this)
-
         Log.d(
             TAG,
             "Local IPTV cache count = ${cached.size}"
@@ -120,6 +127,20 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "======================================"
         )
+
+        executor.execute {
+            val channels =
+                IptvRepository.loadFromApiWithCacheFallback(this)
+
+            Log.d(
+                TAG,
+                "IPTV prefetch count=${channels.size}"
+            )
+
+            notifyMediaTreeChanged(
+                channels.size
+            )
+        }
     }
 
     override fun onGetSession(
@@ -271,74 +292,28 @@ class CarMediaService : MediaLibraryService() {
 
             if (parentId == ROOT_ID) {
 
-                /*
-                 * Android Auto ana menüyü açtığında
-                 * IPTV API'yi kontrol ediyoruz.
-                 *
-                 * Böylece telefon uygulamasının cache'ine
-                 * bağımlı kalmıyoruz.
-                 */
-
-                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
-
-                    val channels =
-                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
-
-                    Log.d(
+                val rootItems = buildRootMediaItems()
+                rootItems.forEach { item ->
+                    val metadata = item.mediaMetadata
+                    Log.i(
                         TAG,
-                        "ROOT IPTV count = ${channels.size}"
+                        "ROOT_ITEM id=${item.mediaId} " +
+                            "type=playable=${metadata.isPlayable} " +
+                            "browsable=${metadata.isBrowsable} " +
+                            "uri=${item.localConfiguration?.uri}"
                     )
+                }
 
-                    val items =
-                        listOf(
-
-                            createCategoryItem(
-                                id = LIVE_TV_ID,
-                                title = "📺 Canlı TV",
-                                subtitle =
-                                    if (
-                                        channels.isNotEmpty()
-                                    ) {
-                                        "${channels.size} kanal"
-                                    } else {
-                                        "Canlı TV"
-                                    }
-                            ),
-
-                            createCategoryItem(
-                                id = RADIO_ID,
-                                title = "📻 Canlı Radyo",
-                                subtitle =
-                                    "${radios.size} radyo"
-                            ),
-
-                            createCategoryItem(
-                                id = YOUTUBE_ID,
-                                title = "▶️ YouTube",
-                                subtitle = "YouTube"
-                            ),
-
-                            createCategoryItem(
-                                id = GOOGLE_ID,
-                                title = "🔎 Google Arama",
-                                subtitle = "Web"
-                            )
-                        )
+                return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.copyOf(
-                            items
+                            rootItems
                         ),
                         params
                     )
-                }
+                )
             }
-
-            /*
-             * ====================================================
-             * RADYO
-             * ====================================================
-             */
 
             if (parentId == RADIO_ID) {
 
@@ -367,24 +342,70 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == LIVE_TV_ID) {
+            if (
+                parentId == LIVE_TV_ID ||
+                parentId == LIVE_TV_LEGACY_ID ||
+                parentId == LIVE_TV_HOSTED_ID
+            ) {
 
-                return Futures.immediateFuture(
+                val cached =
+                    IptvRepository.loadCached(this@CarMediaService)
 
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createInfoItem(
-                                id = LIVE_TV_HOSTED_ID,
-                                title = "Canlı TV araç ekranında açılır",
-                                subtitle =
-                                    "Kanal listesi ve IPTV videosu " +
-                                        "projection penceresinde. " +
-                                        "MediaSession Now Playing kullanılmaz."
-                            )
-                        ),
-                        params
+                if (cached.isNotEmpty()) {
+
+                    return Futures.immediateFuture(
+
+                        LibraryResult.ofItemList(
+                            ImmutableList.copyOf(
+                                cached.map { channel ->
+
+                                    createLiveTvMediaItem(
+                                        channel
+                                    )
+                                }
+                            ),
+                            params
+                        )
                     )
-                )
+                }
+
+                return executor.submit<
+                    LibraryResult<ImmutableList<MediaItem>>
+                    > {
+
+                    val channels =
+                        IptvRepository.loadCachedOrFastApi(
+                            this@CarMediaService
+                        )
+
+                    if (channels.isEmpty()) {
+
+                        // SessionError.ERROR_IO becomes "Öğe yok" on the car.
+                        LibraryResult.ofItemList(
+                            ImmutableList.of(
+                                createLiveTvOpenItem()
+                            ),
+                            params
+                        )
+                    } else {
+
+                        notifyMediaTreeChanged(
+                            channels.size
+                        )
+
+                        LibraryResult.ofItemList(
+                            ImmutableList.copyOf(
+                                channels.map { channel ->
+
+                                    createLiveTvMediaItem(
+                                        channel
+                                    )
+                                }
+                            ),
+                            params
+                        )
+                    }
+                }
             }
 
             /*
@@ -393,18 +414,17 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == YOUTUBE_ID) {
+            if (
+                parentId == YOUTUBE_ID ||
+                parentId == YOUTUBE_LEGACY_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.of(
-                            createInfoItem(
-                                id = YOUTUBE_PHONE_ID,
-                                title = "YouTube araç ekranında açılır",
-                                subtitle =
-                                    "YouTube hosted WebView projection " +
-                                        "penceresinde gösterilir."
+                            createYouTubeMediaItem(
+                                YOUTUBE_PHONE_ID
                             )
                         ),
                         params
@@ -418,18 +438,17 @@ class CarMediaService : MediaLibraryService() {
              * ====================================================
              */
 
-            if (parentId == GOOGLE_ID) {
+            if (
+                parentId == GOOGLE_ID ||
+                parentId == GOOGLE_LEGACY_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItemList(
                         ImmutableList.of(
-                            createInfoItem(
-                                id = GOOGLE_PHONE_ID,
-                                title = "Google araç ekranında açılır",
-                                subtitle =
-                                    "Arama hosted WebView projection " +
-                                        "penceresinde gösterilir."
+                            createGoogleMediaItem(
+                                GOOGLE_PHONE_ID
                             )
                         ),
                         params
@@ -456,6 +475,48 @@ class CarMediaService : MediaLibraryService() {
             )
         }
 
+        override fun onSubscribe(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            params: MediaLibraryService.LibraryParams?
+        ): ListenableFuture<LibraryResult<Void>> {
+
+            if (
+                parentId == ROOT_ID ||
+                parentId == LIVE_TV_ID ||
+                parentId == LIVE_TV_LEGACY_ID ||
+                parentId == YOUTUBE_ID ||
+                parentId == YOUTUBE_LEGACY_ID ||
+                parentId == GOOGLE_ID ||
+                parentId == GOOGLE_LEGACY_ID ||
+                parentId == RADIO_ID
+            ) {
+                notifyMediaTreeChanged(
+                    IptvRepository.loadCached(this@CarMediaService).size
+                )
+
+                executor.execute {
+
+                    val channels =
+                        IptvRepository.loadFromApiWithCacheFallback(
+                            this@CarMediaService,
+                            maxAttempts = 1
+                        )
+
+                    notifyMediaTreeChanged(
+                        channels.size
+                    )
+                }
+            }
+
+            return Futures.immediateFuture(
+                LibraryResult.ofVoid(
+                    params
+                )
+            )
+        }
+
         /*
          * --------------------------------------------------------
          * GET ITEM
@@ -468,9 +529,9 @@ class CarMediaService : MediaLibraryService() {
             mediaId: String
         ): ListenableFuture<LibraryResult<MediaItem>> {
 
-            Log.d(
+            Log.i(
                 TAG,
-                "onGetItem mediaId=$mediaId"
+                "ON_GET_ITEM id=$mediaId"
             )
 
             /*
@@ -498,21 +559,15 @@ class CarMediaService : MediaLibraryService() {
              * CANLI TV KATEGORİ
              */
 
-            if (mediaId == LIVE_TV_ID) {
-
-                val channels =
-                    IptvRepository.loadCached(this@CarMediaService)
+            if (
+                mediaId == LIVE_TV_ID ||
+                mediaId == LIVE_TV_LEGACY_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
-
-                        createCategoryItem(
-                            LIVE_TV_ID,
-                            "📺 Canlı TV",
-                            "${channels.size} kanal"
-                        ),
-
+                        createLiveTvPlayableItem(),
                         null
                     )
                 )
@@ -543,16 +598,18 @@ class CarMediaService : MediaLibraryService() {
              * YOUTUBE
              */
 
-            if (mediaId == YOUTUBE_ID) {
+            if (
+                mediaId == YOUTUBE_ID ||
+                mediaId == YOUTUBE_PHONE_ID ||
+                mediaId == YOUTUBE_LEGACY_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
-                        createCategoryItem(
-                            YOUTUBE_ID,
-                            "▶️ YouTube",
-                            "YouTube"
+                        createYouTubeMediaItem(
+                            mediaId
                         ),
 
                         null
@@ -564,50 +621,18 @@ class CarMediaService : MediaLibraryService() {
              * GOOGLE
              */
 
-            if (mediaId == GOOGLE_ID) {
+            if (
+                mediaId == GOOGLE_ID ||
+                mediaId == GOOGLE_PHONE_ID ||
+                mediaId == GOOGLE_LEGACY_ID
+            ) {
 
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
-                        createCategoryItem(
-                            GOOGLE_ID,
-                            "🔎 Google Arama",
-                            "Web"
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == YOUTUBE_PHONE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            YOUTUBE_PHONE_ID,
-                            "YouTube araç ekranında açılır",
-                            "YouTube hosted WebView projection penceresinde."
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == GOOGLE_PHONE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            GOOGLE_PHONE_ID,
-                            "Google araç ekranında açılır",
-                            "Arama hosted WebView projection penceresinde."
+                        createGoogleMediaItem(
+                            mediaId
                         ),
 
                         null
@@ -617,15 +642,20 @@ class CarMediaService : MediaLibraryService() {
 
             if (mediaId == LIVE_TV_HOSTED_ID) {
 
+                val first =
+                    IptvRepository.loadCached(this@CarMediaService)
+                        .firstOrNull()
+
                 return Futures.immediateFuture(
 
                     LibraryResult.ofItem(
 
-                        createInfoItem(
-                            LIVE_TV_HOSTED_ID,
-                            "Canlı TV araç ekranında açılır",
-                            "IPTV videosu projection penceresinde."
-                        ),
+                        first?.let { channel ->
+
+                            createLiveTvMediaItem(
+                                channel
+                            )
+                        } ?: createLiveTvPlayableItem(),
 
                         null
                     )
@@ -658,25 +688,29 @@ class CarMediaService : MediaLibraryService() {
                 )
             }
 
-            /*
-             * IPTV kanalları MediaSession'da oynatılmaz.
-             */
-
             if (mediaId.startsWith("live-tv-")) {
 
-                return Futures.immediateFuture(
+                val channel =
+                    IptvRepository.loadCached(this@CarMediaService)
+                        .firstOrNull { candidate ->
 
-                    LibraryResult.ofItem(
+                            candidate.mediaId == mediaId
+                        }
 
-                        createInfoItem(
-                            LIVE_TV_HOSTED_ID,
-                            "Canlı TV araç ekranında açılır",
-                            "MediaSession Now Playing kullanılmaz."
-                        ),
+                if (channel != null) {
 
-                        null
+                    return Futures.immediateFuture(
+
+                        LibraryResult.ofItem(
+
+                            createLiveTvMediaItem(
+                                channel
+                            ),
+
+                            null
+                        )
                     )
-                )
+                }
             }
 
             /*
@@ -708,41 +742,434 @@ class CarMediaService : MediaLibraryService() {
             mediaItems: List<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
 
-            val resolved =
-                mediaItems.mapNotNull { requested ->
+            mediaItems.forEach { requested ->
+                Log.i(
+                    TAG,
+                    "ON_ADD_MEDIA_ITEMS id=${requested.mediaId}"
+                )
+                Log.i(
+                    TAG,
+                    "MEDIA_ITEM_CLICK id=${requested.mediaId}"
+                )
+            }
 
-                    Log.d(
-                        TAG,
-                        "Resolving mediaId=${requested.mediaId}"
-                    )
+            return executor.submit<List<MediaItem>> {
 
-                    /*
-                     * RADYO
-                     */
+                val resolved =
+                    mediaItems.mapNotNull { requested ->
 
-                    radios.firstOrNull {
+                        Log.d(
+                            TAG,
+                            "Resolving mediaId=${requested.mediaId}"
+                        )
 
-                        it.id ==
-                                requested.mediaId
-
-                    }?.let {
-
-                        createRadioMediaItem(
-                            it
+                        resolvePlayableMediaItem(
+                            requested.mediaId
                         )
                     }
-                }
 
-            Log.d(
-                TAG,
-                "Resolved media items=${resolved.size}"
-            )
+                Log.d(
+                    TAG,
+                    "Resolved media items=${resolved.size}"
+                )
 
-            return Futures.immediateFuture(
                 resolved
+            }
+        }
+
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: List<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+
+            mediaItems.forEach { requested ->
+                Log.i(
+                    TAG,
+                    "MEDIA_ITEM_CLICK id=${requested.mediaId}"
+                )
+            }
+
+            return Futures.transform(
+                onAddMediaItems(
+                    mediaSession,
+                    controller,
+                    mediaItems
+                ),
+                { resolved ->
+                    val index = if (resolved.isEmpty()) {
+                        0
+                    } else {
+                        startIndex.coerceIn(0, resolved.lastIndex)
+                    }
+                    MediaSession.MediaItemsWithStartPosition(
+                        resolved,
+                        index,
+                        startPositionMs
+                    )
+                },
+                MoreExecutors.directExecutor()
             )
         }
     }
+
+    private fun resolvePlayableMediaItem(
+        mediaId: String
+    ): MediaItem? {
+
+        Log.i(
+            TAG,
+            "MEDIA_ITEM_CLICK id=$mediaId"
+        )
+
+        val hosted =
+            hostedDestination(
+                mediaId
+            )
+
+        if (hosted != null) {
+
+            Log.i(
+                TAG,
+                "DESTINATION_REQUEST id=$mediaId destination=${hosted.name}"
+            )
+
+            revealHostedFromMedia(
+                hosted,
+                mediaId
+            )
+        }
+
+        radios.firstOrNull { radio ->
+
+            radio.id == mediaId
+
+        }?.let { radio ->
+
+            return createRadioMediaItem(
+                radio
+            )
+        }
+
+        if (
+            mediaId == YOUTUBE_ID ||
+            mediaId == YOUTUBE_PHONE_ID ||
+            mediaId == YOUTUBE_LEGACY_ID
+        ) {
+
+            // Root browse item keeps the YouTube URI. The player
+            // cannot decode that page; silence keeps the session
+            // playing after DESTINATION_OPEN.
+            return createYouTubeMediaItem(
+                mediaId
+            )
+                .buildUpon()
+                .setUri(
+                    silenceUri()
+                )
+                .build()
+        }
+
+        if (
+            mediaId == GOOGLE_ID ||
+            mediaId == GOOGLE_PHONE_ID ||
+            mediaId == GOOGLE_LEGACY_ID
+        ) {
+
+            return createGoogleMediaItem(
+                mediaId
+            )
+                .buildUpon()
+                .setUri(
+                    silenceUri()
+                )
+                .build()
+        }
+
+        if (mediaId.startsWith("live-tv-")) {
+
+            val channel =
+                loadLiveTvChannels()
+                    .firstOrNull { candidate ->
+
+                        candidate.mediaId == mediaId
+                    }
+
+            if (channel != null) {
+
+                CarVideoPlayerHolder.prepareChannel(
+                    channel,
+                    waitForSurface = false
+                )
+
+                return createLiveTvMediaItem(
+                    channel
+                )
+            }
+        }
+
+        if (
+            mediaId == LIVE_TV_HOSTED_ID ||
+            mediaId == LIVE_TV_ID ||
+            mediaId == LIVE_TV_LEGACY_ID
+        ) {
+
+            val channel =
+                loadLiveTvChannels()
+                    .firstOrNull()
+
+            if (channel != null) {
+
+                CarVideoPlayerHolder.prepareChannel(
+                    channel,
+                    waitForSurface = false
+                )
+
+                return createLiveTvMediaItem(
+                    channel
+                )
+            }
+
+            return createLiveTvOpenItem()
+        }
+
+        return null
+    }
+
+    private fun revealHostedFromMedia(
+        destination: ProjectionDestination,
+        mediaId: String
+    ) {
+        try {
+            startService(
+                Intent(
+                    this,
+                    CarVideoService::class.java
+                )
+            )
+        } catch (exception: Exception) {
+            Log.w(
+                TAG,
+                "Unable to start CarVideoService",
+                exception
+            )
+        }
+
+        val channelId =
+            mediaId
+                .removePrefix("live-tv-")
+                .toIntOrNull()
+                .takeIf {
+                    mediaId.startsWith("live-tv-")
+                }
+
+        val bound =
+            BoundCarHost.show(
+                destination,
+                channelId
+            )
+
+        Log.i(
+            TAG,
+            "DESTINATION_OPEN id=$mediaId destination=${destination.name} bound=$bound"
+        )
+        Log.i(
+            TAG,
+            "MEDIA_HOSTED_DESTINATION=${destination.name} bound=$bound"
+        )
+    }
+
+    private fun liveTvSubtitle(): String {
+
+        val count =
+            IptvRepository.loadCached(this)
+                .size
+
+        return if (count > 0) {
+            "$count kanal"
+        } else {
+            "Canlı TV araç ekranında açılır"
+        }
+    }
+
+    private fun buildRootMediaItems(): List<MediaItem> {
+
+        val channels =
+            IptvRepository.loadCached(this)
+
+        val items =
+            ArrayList<MediaItem>(
+                radios.size + channels.size + 3
+            )
+
+        items.add(
+            createLiveTvPlayableItem(
+                LIVE_TV_ID,
+                "📺 Canlı TV",
+                liveTvSubtitle()
+            )
+        )
+
+        items.add(
+            createYouTubeMediaItem()
+        )
+
+        items.add(
+            createGoogleMediaItem()
+        )
+
+        radios.forEach { radio ->
+
+            items.add(
+                createRadioMediaItem(
+                    radio
+                )
+            )
+        }
+
+        channels.forEach { channel ->
+
+            items.add(
+                createLiveTvMediaItem(
+                    channel
+                )
+            )
+        }
+
+        return items
+    }
+
+    private fun notifyMediaTreeChanged(
+        channelCount: Int
+    ) {
+
+        if (!::mediaLibrarySession.isInitialized) {
+            return
+        }
+
+        val rootCount =
+            radios.size + 3 + channelCount
+
+        mediaLibrarySession.notifyChildrenChanged(
+            ROOT_ID,
+            rootCount,
+            null
+        )
+
+        // Only the legacy folder IDs. notifyChildrenChanged on the
+        // playable YouTube / Google / Live TV leaf IDs makes Android
+        // Auto open them as empty folders ("Öğe yok") instead of
+        // playing them like radio.
+        mediaLibrarySession.notifyChildrenChanged(
+            LIVE_TV_LEGACY_ID,
+            channelCount.coerceAtLeast(1),
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
+            YOUTUBE_LEGACY_ID,
+            1,
+            null
+        )
+
+        mediaLibrarySession.notifyChildrenChanged(
+            GOOGLE_LEGACY_ID,
+            1,
+            null
+        )
+    }
+
+    private fun loadLiveTvChannels(): List<IptvChannel> {
+
+        val cached =
+            IptvRepository.loadCached(this)
+
+        if (cached.isNotEmpty()) {
+
+            return cached
+        }
+
+        return IptvRepository.loadFromApiWithCacheFallback(
+            this
+        )
+    }
+
+    private fun silenceUri(): Uri {
+        return Uri.parse(
+            "android.resource://" + packageName + "/raw/silence"
+        )
+    }
+
+    private fun youtubeDestinationUri(): Uri {
+        return Uri.parse("https://www.youtube.com/")
+    }
+
+    private fun googleDestinationUri(): Uri {
+        return Uri.parse("https://www.google.com/")
+    }
+
+    private fun createLiveTvPlayableItem(
+        mediaId: String = LIVE_TV_ID,
+        title: String = "📺 Canlı TV",
+        subtitle: String = liveTvSubtitle()
+    ): MediaItem {
+
+        val channel =
+            IptvRepository.loadCached(this)
+                .firstOrNull { candidate ->
+                    candidate.streamUrl.isNotBlank()
+                }
+
+        val streamUri =
+            if (channel != null) {
+                Uri.parse(channel.streamUrl)
+            } else {
+                Uri.parse("iptv://karadag-live-tv")
+            }
+
+        Log.d(
+            TAG,
+            "Creating Live TV playable item uri=$streamUri"
+        )
+
+        return MediaItem.Builder()
+
+            .setMediaId(
+                mediaId
+            )
+
+            .setUri(
+                streamUri
+            )
+
+            .setMediaMetadata(
+
+                MediaMetadata.Builder()
+
+                    .setTitle(
+                        title
+                    )
+
+                    .setArtist(
+                        subtitle
+                    )
+
+                    .setIsBrowsable(
+                        false
+                    )
+
+                    .setIsPlayable(
+                        true
+                    )
+
+                    .build()
+            )
+
+            .build()
+    }
+
 
     /*
      * ============================================================
@@ -756,10 +1183,70 @@ class CarMediaService : MediaLibraryService() {
         subtitle: String
     ): MediaItem {
 
+        val metadataBuilder =
+            MediaMetadata.Builder()
+
+                .setTitle(
+                    title
+                )
+
+                .setArtist(
+                    subtitle
+                )
+
+                .setIsBrowsable(
+                    true
+                )
+
+                .setIsPlayable(
+                    false
+                )
+
+        if (id == LIVE_TV_ID) {
+
+            // Same shape as createRadioMediaItem: a playable root
+            // leaf. FLAG_BROWSABLE / FOLDER_TV_CHANNELS / TV_CHANNEL
+            // extras make Android Auto open an empty folder
+            // ("Öğe yok") instead of playing.
+            metadataBuilder.setIsBrowsable(
+                false
+            )
+            metadataBuilder.setIsPlayable(
+                true
+            )
+        }
+
+        val item =
+            MediaItem.Builder()
+
+                .setMediaId(
+                    id
+                )
+
+                .setMediaMetadata(
+                    metadataBuilder.build()
+                )
+
+        if (id == LIVE_TV_ID) {
+
+            item.setUri(
+                silenceUri()
+            )
+        }
+
+        return item.build()
+    }
+
+    private fun createLiveTvOpenItem(): MediaItem {
+
         return MediaItem.Builder()
 
             .setMediaId(
-                id
+                LIVE_TV_HOSTED_ID
+            )
+
+            .setUri(
+                silenceUri()
             )
 
             .setMediaMetadata(
@@ -767,19 +1254,19 @@ class CarMediaService : MediaLibraryService() {
                 MediaMetadata.Builder()
 
                     .setTitle(
-                        title
+                        "📺 Canlı TV"
                     )
 
                     .setArtist(
-                        subtitle
+                        "Canlı TV araç ekranında açılır"
                     )
 
                     .setIsBrowsable(
-                        true
+                        false
                     )
 
                     .setIsPlayable(
-                        false
+                        true
                     )
 
                     .build()
@@ -788,14 +1275,8 @@ class CarMediaService : MediaLibraryService() {
             .build()
     }
 
-    /*
-     * Sürüşte video/web zorlanmaz. Bu öğeler yalnızca
-     * Android Auto menüsünün boş görünmesini önler.
-     */
-    private fun createInfoItem(
-        id: String,
-        title: String,
-        subtitle: String
+    private fun createYouTubeMediaItem(
+        id: String = YOUTUBE_ID
     ): MediaItem {
 
         return MediaItem.Builder()
@@ -804,16 +1285,20 @@ class CarMediaService : MediaLibraryService() {
                 id
             )
 
+            .setUri(
+                youtubeDestinationUri()
+            )
+
             .setMediaMetadata(
 
                 MediaMetadata.Builder()
 
                     .setTitle(
-                        title
+                        "▶️ YouTube"
                     )
 
                     .setArtist(
-                        subtitle
+                        "YouTube araç ekranında açılır"
                     )
 
                     .setIsBrowsable(
@@ -821,13 +1306,81 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     .setIsPlayable(
-                        false
+                        true
                     )
 
                     .build()
             )
 
             .build()
+    }
+
+    private fun createGoogleMediaItem(
+        id: String = GOOGLE_ID
+    ): MediaItem {
+
+        return MediaItem.Builder()
+
+            .setMediaId(
+                id
+            )
+
+            .setUri(
+                googleDestinationUri()
+            )
+
+            .setMediaMetadata(
+
+                MediaMetadata.Builder()
+
+                    .setTitle(
+                        "🔎 Google Arama"
+                    )
+
+                    .setArtist(
+                        "Google araç ekranında açılır"
+                    )
+
+                    .setIsBrowsable(
+                        false
+                    )
+
+                    .setIsPlayable(
+                        true
+                    )
+
+                    .build()
+            )
+
+            .build()
+    }
+
+    private fun browseGroupExtras(
+        groupTitle: String
+    ): Bundle {
+
+        return Bundle().apply {
+
+            putBoolean(
+                "android.media.browse.CONTENT_STYLE_SUPPORTED",
+                true
+            )
+
+            putInt(
+                "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT",
+                CONTENT_STYLE_LIST
+            )
+
+            putInt(
+                "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT",
+                CONTENT_STYLE_LIST
+            )
+
+            putString(
+                "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT",
+                groupTitle
+            )
+        }
     }
 
     /*
@@ -925,6 +1478,16 @@ class CarMediaService : MediaLibraryService() {
                     true
                 )
 
+                .setMediaType(
+                    MediaMetadata.MEDIA_TYPE_TV_CHANNEL
+                )
+
+                .setExtras(
+                    browseGroupExtras(
+                        "Canlı TV"
+                    )
+                )
+
         channel.logoUrl
             ?.takeIf {
                 it.isNotBlank()
@@ -969,9 +1532,12 @@ class CarMediaService : MediaLibraryService() {
             "KaradagCarMedia"
 
         private const val ROOT_ID =
-            "karadag-car-tv-root"
+            "karadag-car-tv-root-v90"
 
         private const val LIVE_TV_ID =
+            "karadag-live-tv-play"
+
+        private const val LIVE_TV_LEGACY_ID =
             "karadag-live-tv"
 
         private const val LIVE_TV_HOSTED_ID =
@@ -981,9 +1547,15 @@ class CarMediaService : MediaLibraryService() {
             "karadag-live-radio"
 
         private const val YOUTUBE_ID =
+            "karadag-youtube-play"
+
+        private const val YOUTUBE_LEGACY_ID =
             "karadag-youtube"
 
         private const val GOOGLE_ID =
+            "karadag-google-play"
+
+        private const val GOOGLE_LEGACY_ID =
             "karadag-google"
 
         private const val YOUTUBE_PHONE_ID =
@@ -995,6 +1567,30 @@ class CarMediaService : MediaLibraryService() {
         private const val CONTENT_STYLE_LIST = 1
 
         private const val CONTENT_STYLE_GRID = 2
+
+        internal fun hostedDestination(mediaId: String?): ProjectionDestination? {
+            if (mediaId.isNullOrBlank()) {
+                return null
+            }
+
+            return when {
+                mediaId == YOUTUBE_ID ||
+                    mediaId == YOUTUBE_PHONE_ID ||
+                    mediaId == YOUTUBE_LEGACY_ID ->
+                    ProjectionDestination.YOUTUBE
+                mediaId == GOOGLE_ID ||
+                    mediaId == GOOGLE_PHONE_ID ||
+                    mediaId == GOOGLE_LEGACY_ID ->
+                    ProjectionDestination.GOOGLE
+                mediaId == LIVE_TV_ID ||
+                    mediaId == LIVE_TV_LEGACY_ID ||
+                    mediaId == LIVE_TV_HOSTED_ID ||
+                    mediaId.startsWith("live-tv-") ->
+                    ProjectionDestination.LIVE_TV
+                else ->
+                    null
+            }
+        }
     }
 }
 
@@ -1049,6 +1645,11 @@ object CarVideoPlayerHolder {
                     "CAR VIDEO FIRST FRAME " +
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "surface=${surfaceView?.holder?.surface}"
+                )
+                Log.d(
+                    TAG,
+                    "LIVE_TV_FIRST_FRAME " +
+                        "${surfaceView?.width ?: 0}x${surfaceView?.height ?: 0}"
                 )
             }
 
@@ -1114,9 +1715,12 @@ object CarVideoPlayerHolder {
         }
     }
 
-    fun prepareChannel(channel: IptvChannel) {
+    fun prepareChannel(
+        channel: IptvChannel,
+        waitForSurface: Boolean = true
+    ) {
         runOnMainThread {
-            requireSurface = true
+            requireSurface = waitForSurface
             pendingAudio = null
             prepareChannelLocked(channel)
         }
@@ -1332,13 +1936,21 @@ object CarVideoPlayerHolder {
             return
         }
 
+        val surfaceView = carSurfaceView
         val surfaceValid =
-            carSurfaceView?.holder?.surface?.isValid == true
+            surfaceView?.holder?.surface?.isValid == true
+        val sized = surfaceView != null &&
+            surfaceView.visibility == android.view.View.VISIBLE &&
+            surfaceView.width > 0 &&
+            surfaceView.height > 0
 
-        if (requireSurface && !surfaceValid) {
+        if (requireSurface && (!surfaceValid || !sized)) {
             Log.d(
                 TAG,
-                "play deferred: surface not valid"
+                "play deferred: surface not valid " +
+                    "valid=$surfaceValid sized=$sized " +
+                    "${surfaceView?.width ?: 0}x${surfaceView?.height ?: 0} " +
+                    "visibility=${surfaceView?.visibility}"
             )
             return
         }
@@ -1372,6 +1984,20 @@ object CarVideoPlayerHolder {
                 )
                 .build()
 
+        if (
+            surfaceView.visibility != android.view.View.VISIBLE ||
+            surfaceView.width <= 0 ||
+            surfaceView.height <= 0
+        ) {
+            Log.d(
+                TAG,
+                "LIVE_TV_PLAYER_BOUND false " +
+                    "${surfaceView.width}x${surfaceView.height} " +
+                    "visibility=${surfaceView.visibility}"
+            )
+            return
+        }
+
         val holder = surfaceView.holder
         val surface = holder.surface
 
@@ -1384,6 +2010,11 @@ object CarVideoPlayerHolder {
                 "CAR VIDEO SURFACE BOUND " +
                     "${surfaceView.width}x${surfaceView.height} " +
                     "surface=$surface"
+            )
+            Log.d(
+                TAG,
+                "LIVE_TV_PLAYER_BOUND true " +
+                    "${surfaceView.width}x${surfaceView.height}"
             )
         }
     }
@@ -1408,17 +2039,6 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CREATED surface=${holder.surface}"
                     )
-
-                    val exoPlayer =
-                        player
-                            ?: return
-
-                    exoPlayer.setVideoSurfaceHolder(holder)
-
-                    if (exoPlayer.currentMediaItem != null) {
-
-                        exoPlayer.playWhenReady = true
-                    }
                 }
 
                 override fun surfaceChanged(
@@ -1432,8 +2052,19 @@ object CarVideoPlayerHolder {
                         TAG,
                         "CAR VIDEO SURFACE CHANGED width=$width height=$height"
                     )
+                    Log.d(
+                        TAG,
+                        "LIVE_TV_SURFACE_SIZE ${width}x$height"
+                    )
 
-                    player?.setVideoSurfaceHolder(holder)
+                    if (width <= 0 || height <= 0) {
+                        return
+                    }
+
+                    bindLocked()
+                    if (player?.currentMediaItem != null) {
+                        setPlayWhenReadyLocked(true)
+                    }
                 }
 
                 override fun surfaceDestroyed(
@@ -1458,6 +2089,15 @@ object CarVideoPlayerHolder {
         if (existing != null && existing.isValid) {
 
             callback.surfaceCreated(surfaceView.holder)
+
+            if (surfaceView.width > 0 && surfaceView.height > 0) {
+                callback.surfaceChanged(
+                    surfaceView.holder,
+                    0,
+                    surfaceView.width,
+                    surfaceView.height
+                )
+            }
         }
     }
 

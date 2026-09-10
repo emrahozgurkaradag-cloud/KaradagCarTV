@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/car_hosted_page"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:background="#FF000000"
+    android:clickable="true"
+    android:descendantFocusability="afterDescendants"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:keepScreenOn="true">
+
+    <LinearLayout
+        android:id="@+id/car_list_container"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:background="#FF000000"
+        android:orientation="vertical"
+        android:paddingLeft="16dp"
+        android:paddingTop="8dp"
+        android:paddingRight="16dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:id="@+id/car_status"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:paddingBottom="8dp"
+            android:text="YouTube · Google · Canlı TV"
+            android:textColor="#FFCCCCCC"
+            android:textSize="16sp" />
+
+        <GridView
+            android:id="@+id/car_grid"
+            android:layout_width="fill_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="280dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:horizontalSpacing="10dp"
+            android:numColumns="2"
+            android:verticalSpacing="10dp"
+            android:visibility="visible" />
+
+        <com.google.android.apps.auto.sdk.ui.PagedListView
+            android:id="@+id/car_paged_list"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <SurfaceView
+        android:id="@+id/car_surface"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:keepScreenOn="true"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/car_web_overlay"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:background="#FF000000"
+        android:descendantFocusability="afterDescendants"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/car_menu_bar"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="#FF101010"
+        android:orientation="vertical" />
+</FrameLayout>
