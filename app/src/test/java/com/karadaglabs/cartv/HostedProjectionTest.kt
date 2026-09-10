@@ -47,13 +47,22 @@ class HostedProjectionDestinationTest {
     @Test
     fun hostedClassNamesStayOnCarActivities() {
         val nav = source("java/com/karadaglabs/cartv/HostedNavigation.kt")
+        val window = source("java/com/karadaglabs/cartv/HostedCarWindow.kt")
 
         assertTrue(nav.contains("CarVideoActivity::class.java.name"))
-        assertTrue(nav.contains("CarYouTubeActivity::class.java.name"))
-        assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
         assertTrue(nav.contains("CAR HOST NAVIGATION FAILED"))
-        assertTrue(nav.contains("startCarActivity"))
+        assertTrue(nav.contains("showHostedDestination"))
         assertTrue(nav.contains("CarVideoPlayerHolder.setPlayWhenReady(false)"))
+        assertTrue(nav.contains("ProjectionDestination.entries"))
+        assertFalse(nav.contains("startCarActivity"))
+        assertTrue(window.contains("CAR HOST ROOT ATTACHED"))
+        assertTrue(window.contains("activity.c()"))
+        assertTrue(window.contains("setContentView(root"))
+        assertTrue(window.contains("hideAppHeader"))
+        assertTrue(window.contains("hideMenuButton"))
+        assertTrue(window.contains("closeDrawer"))
+        assertFalse(window.contains("PagedListView"))
+        assertFalse(window.contains("setRootMenuAdapter"))
     }
 
     private fun source(relativeFromMain: String): String {
@@ -84,12 +93,20 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
         assertTrue(video.contains("setCarSurfaceView"))
         assertTrue(video.contains("SurfaceHolder.Callback"))
+        assertTrue(video.contains("HostedCarWindow.install"))
+        assertTrue(video.contains("showYouTube()"))
+        assertTrue(video.contains("showGoogle()"))
+        assertTrue(video.contains("CAR YOUTUBE PAGE FINISHED"))
+        assertTrue(video.contains("CAR GOOGLE PAGE FINISHED"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
         assertTrue(holder.contains("onRenderedFirstFrame"))
         assertFalse(video.contains("PlayerView"))
         assertFalse(video.contains("IptvActivity"))
+        assertFalse(video.contains("startCarActivity"))
+        assertFalse(video.contains("setRootMenuAdapter"))
+        assertFalse(video.contains("PagedListView"))
     }
 
     @Test
@@ -147,6 +164,8 @@ class HostedProjectionSourceTest {
 
         assertTrue(video.contains("showChannelList()"))
         assertTrue(video.contains("KEYCODE_BACK"))
+        assertTrue(video.contains("showYouTube()"))
+        assertTrue(video.contains("showGoogle()"))
         assertTrue(youtube.contains("navigateBack()"))
         assertTrue(google.contains("navigateBack()"))
         assertTrue(youtube.contains("ProjectionDestination.LIVE_TV"))

@@ -31,7 +31,6 @@ class CarYouTubeActivity : CarActivity() {
         Log.d(TAG, "CAR YOUTUBE ACTIVITY AÇILDI")
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
 
         val overlay = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -63,6 +62,7 @@ class CarYouTubeActivity : CarActivity() {
         HostedWebView.configure(view, desktopUserAgent = true)
 
         view.webViewClient = HostedWebViewClient {
+            Log.d(TAG, "CAR YOUTUBE PAGE FINISHED")
             Log.d(TAG, "CAR YOUTUBE URL LOADED")
         }
 
@@ -79,7 +79,7 @@ class CarYouTubeActivity : CarActivity() {
 
         root.addView(view)
         overlay.addView(root)
-        setContentView(overlay)
+        HostedCarWindow.install(this, overlay)
 
         applyVideoFocus(request = true)
 
@@ -87,16 +87,17 @@ class CarYouTubeActivity : CarActivity() {
         view.loadUrl(YOUTUBE_URL)
     }
 
-    override fun onPause() {
-        applyVideoFocus(request = false)
-        webView?.onPause()
-        super.onPause()
-    }
-
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
         webView?.onResume()
+        overlay?.let { HostedCarWindow.install(this, it) }
+    }
+
+    override fun onPause() {
+        applyVideoFocus(request = false)
+        webView?.onPause()
+        super.onPause()
     }
 
     override fun onDestroy() {

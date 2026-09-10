@@ -28,16 +28,18 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Hosted CarActivity window. IPTV channel UI is Android Views.
- * Video renders into a SurfaceView with setZOrderMediaOverlay.
- * Phone IPTV Compose screen is not used here.
+ * Single hosted CarActivity. App UI is the CarActivityHost window
+ * root, not Gearhead's native list. Destinations switch inside this
+ * root: Live TV list/SurfaceView, YouTube WebView, Google WebView.
  */
 @UnstableApi
-class CarVideoActivity : CarActivity() {
+class CarVideoActivity : CarActivity(), HostedDestinationHost {
 
     companion object {
         private const val TAG = "KaradagCarVideo"
         private val logoCache = object : LruCache<String, Bitmap>(24) {}
+        private const val YOUTUBE_URL = "https://www.youtube.com/"
+        private const val GOOGLE_URL = "https://www.google.com/"
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -46,6 +48,8 @@ class CarVideoActivity : CarActivity() {
     private var listContainer: View? = null
     private var menuContainer: View? = null
     private var rootColumn: LinearLayout? = null
+    private var webOverlay: FrameLayout? = null
+    private var webPane: HostedWebPane? = null
     private var statusView: TextView? = null
     private var gridView: GridView? = null
     private var adapter: ChannelAdapter? = null
@@ -66,7 +70,6 @@ class CarVideoActivity : CarActivity() {
         selectedRadioId = RadioStations.lastSelectedId(this)
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -112,8 +115,19 @@ class CarVideoActivity : CarActivity() {
         content.addView(view)
         surfaceView = view
 
+        val webOverlay = FrameLayout(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            visibility = View.GONE
+            setBackgroundColor(Color.BLACK)
+        }
+        content.addView(webOverlay)
+        this.webOverlay = webOverlay
+
         root.addView(content)
-        setContentView(root)
+        HostedCarWindow.install(this, root)
 
         applyVideoFocus(request = true)
 
@@ -124,22 +138,36 @@ class CarVideoActivity : CarActivity() {
         }
 
         loadChannels()
-        applyState()
+        showHostedDestination(destination)
+    }
+
+    override fun showHostedDestination(destination: ProjectionDestination) {
+        when (destination) {
+            ProjectionDestination.LIVE_TV -> showLiveTv()
+            ProjectionDestination.RADIO -> showRadio()
+            ProjectionDestination.YOUTUBE -> showYouTube()
+            ProjectionDestination.GOOGLE -> showGoogle()
+        }
     }
 
     override fun onStart() {
         super.onStart()
+        rootColumn?.let { HostedCarWindow.install(this, it) }
         bindIfPlaying()
+        webPane?.onResume()
     }
 
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
+        rootColumn?.let { HostedCarWindow.install(this, it) }
         bindIfPlaying()
+        webPane?.onResume()
     }
 
     override fun onPause() {
         applyVideoFocus(request = false)
+        webPane?.onPause()
         super.onPause()
     }
 
@@ -147,6 +175,9 @@ class CarVideoActivity : CarActivity() {
         destroyed = true
         applyVideoFocus(request = false)
         CarVideoPlayerHolder.setPlayWhenReady(false)
+        webPane?.destroy()
+        webPane = null
+        webOverlay = null
 
         surfaceView?.let { view ->
             view.holder.removeCallback(surfaceCallback)
@@ -158,11 +189,7 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onBackPressed() {
-        if (
-            destination == ProjectionDestination.LIVE_TV &&
-            state.mode == ProjectionMode.PLAYING
-        ) {
-            showChannelList()
+        if (handleBack()) {
             return
         }
 
@@ -170,8 +197,19 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, keyEvent: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && handleBack()) {
+            return true
+        }
+
+        return super.onKeyUp(keyCode, keyEvent)
+    }
+
+    private fun handleBack(): Boolean {
+        if (webPane?.goBack() == true) {
+            return true
+        }
+
         if (
-            keyCode == KeyEvent.KEYCODE_BACK &&
             destination == ProjectionDestination.LIVE_TV &&
             state.mode == ProjectionMode.PLAYING
         ) {
@@ -179,32 +217,84 @@ class CarVideoActivity : CarActivity() {
             return true
         }
 
-        return super.onKeyUp(keyCode, keyEvent)
+        if (
+            destination == ProjectionDestination.YOUTUBE ||
+            destination == ProjectionDestination.GOOGLE
+        ) {
+            showLiveTv()
+            return true
+        }
+
+        return false
     }
 
     private fun onMenuSelected(next: ProjectionDestination) {
-        if (next == destination) {
-            if (next == ProjectionDestination.LIVE_TV) {
-                showChannelList()
-            }
-            return
-        }
+        showHostedDestination(next)
+    }
 
-        if (
-            next == ProjectionDestination.YOUTUBE ||
-            next == ProjectionDestination.GOOGLE
-        ) {
-            HostedNavigation.open(this, next)
-            return
-        }
+    private fun showLiveTv() {
+        destination = ProjectionDestination.LIVE_TV
+        hideWeb()
+        showChannelList()
+        refreshMenu()
+        Log.d(TAG, "CAR HOST LIVE TV")
+    }
 
-        destination = next
-        if (next == ProjectionDestination.RADIO) {
-            state = state.showList()
-            CarVideoPlayerHolder.setPlayWhenReady(false)
-        }
+    private fun showRadio() {
+        destination = ProjectionDestination.RADIO
+        hideWeb()
+        state = state.showList()
+        CarVideoPlayerHolder.setPlayWhenReady(false)
         refreshMenu()
         applyState()
+        Log.d(TAG, "CAR HOST RADIO")
+    }
+
+    private fun showYouTube() {
+        destination = ProjectionDestination.YOUTUBE
+        CarVideoPlayerHolder.setPlayWhenReady(false)
+        listContainer?.visibility = View.GONE
+        surfaceView?.let { view ->
+            view.visibility = View.GONE
+            CarVideoPlayerHolder.clearCarSurfaceView(view)
+        }
+        attachWeb(YOUTUBE_URL, desktopUserAgent = true, "CAR YOUTUBE PAGE FINISHED")
+        refreshMenu()
+        applyVideoFocus(request = true)
+        Log.d(TAG, "CAR YOUTUBE WEBVIEW READY")
+    }
+
+    private fun showGoogle() {
+        destination = ProjectionDestination.GOOGLE
+        CarVideoPlayerHolder.setPlayWhenReady(false)
+        listContainer?.visibility = View.GONE
+        surfaceView?.let { view ->
+            view.visibility = View.GONE
+            CarVideoPlayerHolder.clearCarSurfaceView(view)
+        }
+        attachWeb(GOOGLE_URL, desktopUserAgent = false, "CAR GOOGLE PAGE FINISHED")
+        refreshMenu()
+        applyVideoFocus(request = true)
+        Log.d(TAG, "CAR GOOGLE WEBVIEW READY")
+    }
+
+    private fun attachWeb(
+        url: String,
+        desktopUserAgent: Boolean,
+        finishedLog: String
+    ) {
+        val overlay = webOverlay ?: return
+        val pane = webPane ?: HostedWebPane(this, overlay, TAG).also { webPane = it }
+        pane.show(url, desktopUserAgent, finishedLog)
+        if (url.contains("youtube", ignoreCase = true)) {
+            Log.d(TAG, "CAR YOUTUBE URL LOADED")
+        } else {
+            Log.d(TAG, "CAR GOOGLE URL LOADED")
+        }
+    }
+
+    private fun hideWeb() {
+        webPane?.hide()
     }
 
     private fun refreshMenu() {
@@ -278,6 +368,13 @@ class CarVideoActivity : CarActivity() {
 
     private fun applyState() {
         if (destroyed) {
+            return
+        }
+
+        if (
+            destination == ProjectionDestination.YOUTUBE ||
+            destination == ProjectionDestination.GOOGLE
+        ) {
             return
         }
 
@@ -365,6 +462,7 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun showChannelList() {
+        hideWeb()
         state = state.showList()
         applyState()
     }
