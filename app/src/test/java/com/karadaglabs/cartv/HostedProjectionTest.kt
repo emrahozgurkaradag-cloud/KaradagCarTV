@@ -146,6 +146,8 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("CarContentSlot.rebind"))
         assertTrue(video.contains("queueHostedFragmentAttach"))
         assertTrue(video.contains(".commit()"))
+        assertTrue(video.contains("HOST_SLOT_REUSE"))
+        assertTrue(video.contains("HOST_SLOT_REINSTALL"))
         assertTrue(video.contains("HostedProjectionFragment"))
         assertTrue(video.contains("getSupportFragmentManager") || video.contains("supportFragmentManager"))
         assertTrue(video.contains("R.id.car_host_root"))

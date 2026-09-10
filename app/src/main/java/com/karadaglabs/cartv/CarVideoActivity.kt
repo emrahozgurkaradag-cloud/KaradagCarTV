@@ -74,6 +74,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         BoundCarHost.bind(this)
 
         CarContentSlot.hideHeader(this)
+        CarContentSlot.hideMenu(this)
         val root = CarContentSlot.install(this)
         hostRoot = root
 
@@ -158,8 +159,16 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     private fun revealHostedPage() {
-        if (rootColumn == null) {
+        if (hostRoot == null) {
             hostRoot = CarContentSlot.install(this)
+            Log.d(TAG, "HOST_SLOT_REINSTALL")
+        } else {
+            Log.d(
+                TAG,
+                "HOST_SLOT_REUSE attached=${hostRoot?.isAttachedToWindow == true}"
+            )
+        }
+        if (rootColumn == null) {
             attachHostedFragment()
             ensureHostedPage()
         }

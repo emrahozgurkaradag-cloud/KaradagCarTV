@@ -22,8 +22,13 @@ import com.google.android.apps.auto.sdk.CarActivity
  * CarStream MainCarActivity.onCreate:
  *   super.onCreate(bundle);
  *   setContentView(R.layout.activity_car_main); // MATCH_PARENT FrameLayout
- *   fragment replace into that container;
+ *   fragment add+detach commitNow, then attach commit();
  *   then hideAppHeader.
+ *
+ * Fermata initCarActivity hides chrome before setContentView.
+ * CarStream does not inflate a second container after onStart; it
+ * keeps the onCreate FrameLayout in g and attaches the fragment
+ * into that same id.
  *
  * Chrome is applied after app content is in g so Gearhead does not
  * lay out the empty PagedListView as the only pane.
