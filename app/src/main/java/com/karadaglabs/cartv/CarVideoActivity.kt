@@ -72,6 +72,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private var hostRoot: FrameLayout? = null
     private var hostedReady = false
     private var pendingLiveTvChannelId: Int? = null
+    private var slotCommitted = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.Theme_KaradagCarTV_Car)
@@ -93,9 +94,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         setContentView(R.layout.car_host_root)
         hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
         ensureHostedPage()
-        val page = rootColumn
-        if (page != null) {
-            hostedReady = true
+        if (rootColumn != null) {
             showHostedDestination(destination)
         }
 
@@ -179,8 +178,12 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         root.addView(buildHostedPage())
     }
 
-    private fun revealHostedPage() {
-        if (hostRoot == null || hostRoot?.isAttachedToWindow != true) {
+    private fun revealHostedPage(force: Boolean = false) {
+        val liveRoot = hostRoot
+        val needsInstall = force ||
+            liveRoot == null ||
+            liveRoot.isAttachedToWindow != true
+        if (needsInstall) {
             val page = rootColumn
             setContentView(R.layout.car_host_root)
             hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
@@ -196,6 +199,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
                 )
                 rootColumn = page
             }
+            slotCommitted = true
             Log.d(TAG, "HOST_SLOT_REINSTALL")
         } else {
             Log.d(
@@ -306,9 +310,20 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
     }
 
+    override fun attachAfterMediaConnect() {
+        if (destroyed) {
+            return
+        }
+        Log.d(TAG, "HOST_SLOT_MEDIA_CONNECT")
+        revealHostedPage(force = true)
+        rootColumn?.let { root ->
+            CarContentSlot.rebind(this, root)
+        }
+    }
+
     override fun onStart() {
         super.onStart()
-        revealHostedPage()
+        revealHostedPage(force = !slotCommitted)
         rootColumn?.let { root ->
             CarContentSlot.rebind(this, root)
             root.post { CarContentSlot.rebind(this, root) }

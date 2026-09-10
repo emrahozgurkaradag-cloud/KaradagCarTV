@@ -59,7 +59,9 @@ object CarContentSlot {
         "com.google.android.apps.auto.sdk.CarActivity"
     private const val SLOT_FIELD = "g"
     private val dumpDelays = longArrayOf(0L, 50L, 250L)
-    private val attachDelays = longArrayOf(0L, 16L, 50L, 250L, 500L, 1000L, 2000L)
+    private val attachDelays = longArrayOf(
+        0L, 16L, 50L, 250L, 500L, 1000L, 2000L, 4000L, 6000L
+    )
     private val mainHandler = Handler(Looper.getMainLooper())
     private val keepCallbacks = mutableMapOf<Int, MutableList<Runnable>>()
 
@@ -578,6 +580,7 @@ object CarContentSlot {
 
 interface CarDestinationHost {
     fun showHostedDestination(destination: ProjectionDestination)
+    fun attachAfterMediaConnect()
 }
 
 /**
@@ -597,8 +600,16 @@ object BoundCarHost {
     @Volatile
     private var pendingChannelId: Int? = null
 
+    @Volatile
+    private var mediaConnected = false
+
     fun bind(host: CarDestinationHost) {
         current = host
+        if (mediaConnected) {
+            Handler(Looper.getMainLooper()).post {
+                current?.attachAfterMediaConnect()
+            }
+        }
     }
 
     fun unbind(host: CarDestinationHost) {
@@ -648,5 +659,13 @@ object BoundCarHost {
         val channelId = pendingChannelId
         pendingChannelId = null
         return channelId
+    }
+
+    fun onMediaConnected() {
+        mediaConnected = true
+        Handler(Looper.getMainLooper()).post {
+            val live = current ?: CarVideoService.hostedActivity()
+            live?.attachAfterMediaConnect()
+        }
     }
 }

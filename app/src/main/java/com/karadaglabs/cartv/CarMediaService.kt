@@ -94,6 +94,8 @@ class CarMediaService : MediaLibraryService() {
 
         CarVideoPlayerHolder.setPlayer(player)
 
+        BoundCarHost.onMediaConnected()
+
         Log.d(
             TAG,
             "======================================"
