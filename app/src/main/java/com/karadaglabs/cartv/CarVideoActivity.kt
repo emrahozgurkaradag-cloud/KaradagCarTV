@@ -320,25 +320,25 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         HostedNavigation.bindDrawerMenu(
             this,
             destination,
-            ::onMenuSelected,
-            openDrawerOnce = true
+            ::onMenuSelected
         )
-        // Keep the Gearhead drawer (Live TV / YouTube / Google) visible.
-        // hideMenuButton here would cover that native list with Öğe yok.
+        // Do not openDrawer(): Gearhead's empty list ("Öğe yok") covers
+        // slot g. Keep the menu button; show Live TV / YouTube / Google
+        // in the hosted page that was just installed into g.
+        HostedNavigation.showHostContent(this)
         if (destination != ProjectionDestination.GOOGLE) {
             CarContentSlot.hideHeader(this)
         }
         val page = rootColumn
         if (page != null) {
             CarContentSlot.keepInSlot(this, page)
-            if (!hostedReady) {
+            val pending = BoundCarHost.consumePending(this)
+            if (afterStartInstall || needsInstall || !hostedReady) {
                 hostedReady = true
-                if (BoundCarHost.consumePending(this) == null) {
+                if (pending == null) {
                     showHostedDestination(destination)
                 }
                 applyVideoFocus(request = true)
-            } else if (BoundCarHost.consumePending(this) == null && needsInstall) {
-                showHostedDestination(destination)
             }
             requestHostedFocus()
         }
