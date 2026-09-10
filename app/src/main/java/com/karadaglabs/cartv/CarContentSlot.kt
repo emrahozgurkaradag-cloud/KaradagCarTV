@@ -128,7 +128,7 @@ object CarContentSlot {
             0
         }
         val fromId = if (containerId != 0) {
-            activity.findViewById<ViewGroup>(containerId)
+            activity.findViewById(containerId) as? ViewGroup
         } else {
             null
         }
