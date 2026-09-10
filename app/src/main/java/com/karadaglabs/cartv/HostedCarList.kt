@@ -63,10 +63,11 @@ object HostedCarList {
                 Log.e(TAG, "HOST_LIST_ATTACH failed", exception)
             }
         }
-        val group = listView as? ViewGroup ?: return
-        if (!isHostList(group)) {
-            return
-        }
+        val group = when {
+            listView.javaClass.name.contains("CarRecyclerView") ->
+                listView.parent as? ViewGroup
+            else -> listView as? ViewGroup
+        } ?: return
         overlayRows(group, rows, onClick)
     }
 
@@ -115,6 +116,12 @@ object HostedCarList {
                     attach(host, bound.rows, bound.onClick)
                 }
             }
+            emptyHost(root)?.let { host ->
+                if (seen.add(host)) {
+                    attach(host, bound.rows, bound.onClick)
+                }
+            }
+            relabelEmpty(root, bound.rows, bound.onClick)
         }
         Log.d(TAG, "HOST_LIST_BOUND count=${seen.size} rows=${bound.rows.size}")
     }
@@ -135,14 +142,22 @@ object HostedCarList {
     }
 
     private fun hostRoots(activity: CarActivity, extra: View?): List<View> {
-        val roots = ArrayList<View>(4)
+        val roots = ArrayList<View>(5)
         extra?.let { roots.add(it) }
         contentSlot(activity)?.let { roots.add(it) }
         appLayout(activity)?.let { roots.add(it) }
+        windowRoot(activity)?.let { roots.add(it) }
         return roots
     }
 
     private fun visibleHost(activity: CarActivity): ViewGroup? {
+        hostRoots(activity, null).forEach { root ->
+            emptyHost(root)?.let { empty ->
+                if (empty.isAttachedToWindow && empty.visibility == View.VISIBLE) {
+                    return empty
+                }
+            }
+        }
         val lists = ArrayList<ViewGroup>()
         hostRoots(activity, null).forEach { root ->
             collectHostLists(root).forEach { host ->
@@ -179,6 +194,15 @@ object HostedCarList {
         }
     }
 
+    private fun windowRoot(activity: CarActivity): View? {
+        return try {
+            activity.c().decorView
+        } catch (exception: Exception) {
+            Log.w(TAG, "HOST_LIST_WINDOW unavailable", exception)
+            null
+        }
+    }
+
     private fun collectHostLists(root: View?): List<View> {
         val out = ArrayList<View>()
         fun walk(view: View) {
@@ -201,7 +225,86 @@ object HostedCarList {
         if (view is PagedListView) {
             return true
         }
-        return view.javaClass.name.contains("PagedListView")
+        val name = view.javaClass.name
+        return name.contains("PagedListView") ||
+            name.contains("CarRecyclerView") ||
+            name.contains("PagedRecycler")
+    }
+
+    private fun relabelEmpty(
+        root: View?,
+        rows: List<Row>,
+        onClick: (Row) -> Unit
+    ) {
+        if (root == null || rows.isEmpty()) {
+            return
+        }
+        fun walk(view: View) {
+            if (view is TextView && view.visibility == View.VISIBLE) {
+                val text = view.text?.toString().orEmpty()
+                if (isEmptyLabel(text)) {
+                    val row = rows.first()
+                    view.text = row.title
+                    view.isClickable = true
+                    view.isFocusable = true
+                    view.setOnClickListener { onClick(row) }
+                    Log.d(TAG, "HOST_LIST_RELABEL title=${row.title}")
+                }
+            }
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) {
+                    walk(view.getChildAt(index))
+                }
+            }
+        }
+        walk(root)
+    }
+
+    private fun emptyHost(root: View?): ViewGroup? {
+        if (root == null) {
+            return null
+        }
+        val labels = ArrayList<TextView>()
+        fun walk(view: View) {
+            if (view is TextView && view.visibility == View.VISIBLE) {
+                val text = view.text?.toString().orEmpty()
+                if (isEmptyLabel(text)) {
+                    labels.add(view)
+                }
+            }
+            if (view is ViewGroup) {
+                for (index in 0 until view.childCount) {
+                    walk(view.getChildAt(index))
+                }
+            }
+        }
+        walk(root)
+        return labels.firstOrNull()?.let { hostContainer(it) }
+    }
+
+    private fun isEmptyLabel(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) {
+            return false
+        }
+        val lower = trimmed.lowercase()
+        return trimmed.contains("Öğe yok") ||
+            lower.contains("no items") ||
+            lower.contains("no item") ||
+            lower == "empty"
+    }
+
+    private fun hostContainer(start: View): ViewGroup? {
+        var current: View? = start
+        var fallback: ViewGroup? = start as? ViewGroup
+        while (current != null) {
+            if (isHostList(current) && current is ViewGroup) {
+                return current
+            }
+            fallback = current as? ViewGroup ?: fallback
+            current = current.parent as? View
+        }
+        return fallback
     }
 
     private fun overlayRows(
