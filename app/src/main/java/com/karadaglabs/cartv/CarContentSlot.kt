@@ -630,7 +630,7 @@ object BoundCarHost {
                 live.showHostedDestination(destination)
             } else {
                 Log.i(
-                    TAG,
+                    CarContentSlot.TAG,
                     "HOST_SLOT_PENDING destination=${destination.name}"
                 )
             }
@@ -644,7 +644,10 @@ object BoundCarHost {
     fun consumePending(host: CarDestinationHost): ProjectionDestination? {
         val destination = pending ?: return null
         pending = null
-        Log.d(TAG, "HOST_SLOT_PENDING_CONSUMED destination=${destination.name}")
+        Log.d(
+            CarContentSlot.TAG,
+            "HOST_SLOT_PENDING_CONSUMED destination=${destination.name}"
+        )
         host.showHostedDestination(destination)
         return destination
     }
