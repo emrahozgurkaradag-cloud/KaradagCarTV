@@ -36,6 +36,11 @@ object CarContentSlot {
     private val dumpDelays = longArrayOf(0L, 50L, 250L)
 
     fun prepareHost(activity: CarActivity) {
+        hideHeader(activity)
+        hideMenu(activity)
+    }
+
+    fun hideHeader(activity: CarActivity) {
         try {
             activity.setIgnoreConfigChanges(0xFFFFFFFF.toInt())
         } catch (exception: Exception) {
@@ -43,12 +48,19 @@ object CarContentSlot {
         }
 
         try {
-            val ui = activity.carUiController
-            ui.statusBarController.hideAppHeader()
-            ui.statusBarController.hideConnectivityLevel()
-            ui.menuController.hideMenuButton()
+            val bar = activity.carUiController.statusBarController
+            bar.hideAppHeader()
+            bar.hideConnectivityLevel()
         } catch (exception: Exception) {
-            Log.w(TAG, "hideAppHeader/hideMenuButton unavailable", exception)
+            Log.w(TAG, "hideAppHeader unavailable", exception)
+        }
+    }
+
+    fun hideMenu(activity: CarActivity) {
+        try {
+            activity.carUiController.menuController.hideMenuButton()
+        } catch (exception: Exception) {
+            Log.w(TAG, "hideMenuButton unavailable", exception)
         }
     }
 

@@ -70,6 +70,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         Log.d(TAG, "HOST_ACTIVITY_CREATED class=${javaClass.name}")
 
         val root = CarContentSlot.install(this)
+        CarContentSlot.hideHeader(this)
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
@@ -81,7 +82,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             root.addView(buildHostedPage())
         }
 
-        CarContentSlot.prepareHost(this)
+        CarContentSlot.hideMenu(this)
         CarContentSlot.attach(this, rootColumn ?: root)
 
         applyVideoFocus(request = true)
@@ -102,12 +103,22 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun hostProjectionFragment(): Boolean {
         return try {
-            supportFragmentManager.beginTransaction()
-                .replace(
-                    R.id.car_host_root,
-                    HostedProjectionFragment(),
-                    "hosted"
-                )
+            val manager = supportFragmentManager
+            val existing = manager.findFragmentByTag("hosted")
+            if (existing != null) {
+                if (existing.isDetached) {
+                    manager.beginTransaction().attach(existing).commitNow()
+                }
+                return true
+            }
+
+            val fragment = HostedProjectionFragment()
+            manager.beginTransaction()
+                .add(R.id.car_host_root, fragment, "hosted")
+                .detach(fragment)
+                .commitNow()
+            manager.beginTransaction()
+                .attach(fragment)
                 .commitNow()
             true
         } catch (exception: Exception) {
