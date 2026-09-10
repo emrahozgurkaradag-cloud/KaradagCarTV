@@ -54,14 +54,18 @@ object HostedCarList {
                 val existing = paged.adapter as? Adapter
                 if (existing != null) {
                     existing.replace(rows, onClick)
-                    return
+                } else {
+                    paged.setAdapter(Adapter(rows, onClick))
                 }
-                paged.setAdapter(Adapter(rows, onClick))
                 paged.requestFocus()
-                return
             } catch (exception: Exception) {
                 Log.e(TAG, "HOST_LIST_ATTACH failed", exception)
             }
+            // PagedListView is a FrameLayout. Gearhead's empty
+            // placeholder lives in the same widget; put the real
+            // YouTube / Google / Live TV rows on top of it.
+            overlayRows(paged, rows, onClick)
+            return
         }
         val group = when {
             listView.javaClass.name.contains("CarRecyclerView") ->
