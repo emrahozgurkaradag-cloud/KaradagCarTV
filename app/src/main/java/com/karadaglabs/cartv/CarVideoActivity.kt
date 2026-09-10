@@ -116,6 +116,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         if (rootColumn != null) {
             showHostedDestination(destination)
         }
+        seedHostedFragment()
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
         slotCommitted = hostRoot != null
         watchHostRoot(hostRoot)
@@ -131,6 +132,12 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     fun getWindow(): android.view.Window {
         return CarContentSlot.hostWindow(this)
+    }
+
+    private fun seedHostedFragment() {
+        hostProjectionFragment()
+        attachHostedFragment()
+        queueHostedFragmentAttach()
     }
 
     private fun dropHostedFragment() {

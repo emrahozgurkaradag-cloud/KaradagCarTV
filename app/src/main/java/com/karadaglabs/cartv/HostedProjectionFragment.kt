@@ -1,20 +1,22 @@
 package com.karadaglabs.cartv
 
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.fragment.app.Fragment
 
 /**
- * CarStream hosts YouTube by adding a support fragment to the
- * MATCH_PARENT FrameLayout inflated into CarActivity.g, then
- * attaching with commitNow after Gearhead onStart so the view is
- * created in that container after chrome restore. The fragment view
- * stays a child of car_host_root; it is not passed to
- * CarActivity.setContentView. Jetifier maps aauto.aar's
- * FragmentManager onto AndroidX, so this fragment receives
- * CarActivity lifecycle from gms.car.e FragmentController.
+ * aauto-sdk-demo hosts content by adding a support fragment to the
+ * MATCH_PARENT FrameLayout inflated into CarActivity.g. Gearhead
+ * often wraps the inflater in a ContextThemeWrapper, so the host
+ * CarVideoActivity is found by walking baseContext, then
+ * BoundCarHost. The fragment view stays a child of car_host_root;
+ * it is not passed to CarActivity.setContentView.
  */
 class HostedProjectionFragment : Fragment() {
 
@@ -23,18 +25,40 @@ class HostedProjectionFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val car = inflater.context as? CarVideoActivity
-            ?: context as? CarVideoActivity
-            ?: BoundCarHost.currentHost() as? CarVideoActivity
-            ?: error("HostedProjectionFragment requires CarVideoActivity")
+        val car = carActivity(inflater.context)
+        if (car == null) {
+            Log.e(TAG, "HOST_FRAGMENT_NO_CAR context=${inflater.context.javaClass.name}")
+            return FrameLayout(inflater.context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                isFocusable = true
+                isFocusableInTouchMode = true
+                keepScreenOn = true
+            }
+        }
         return car.hostedPageIfPresent() ?: car.buildHostedPage()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val car = view.context as? CarVideoActivity
-            ?: BoundCarHost.currentHost() as? CarVideoActivity
-            ?: return
+        val car = carActivity(view.context) ?: return
         car.onHostedViewCreated(view)
+    }
+
+    private fun carActivity(start: Context?): CarVideoActivity? {
+        var current: Context? = start
+        while (current != null) {
+            if (current is CarVideoActivity) {
+                return current
+            }
+            current = (current as? ContextWrapper)?.baseContext
+        }
+        return BoundCarHost.currentHost() as? CarVideoActivity
+    }
+
+    companion object {
+        private const val TAG = "KaradagCarVideo"
     }
 }
