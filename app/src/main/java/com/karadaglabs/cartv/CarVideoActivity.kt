@@ -83,13 +83,20 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
         CarContentSlot.hideHeader(this)
         CarContentSlot.hideMenu(this)
-        setContentView(R.layout.car_host_root)
-        hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
         )
         selectedRadioId = RadioStations.lastSelectedId(this)
+
+        setContentView(R.layout.car_host_root)
+        hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
+        ensureHostedPage()
+        val page = rootColumn
+        if (page != null) {
+            hostedReady = true
+            showHostedDestination(destination)
+        }
 
         try {
             startService(Intent(this, CarMediaService::class.java))
