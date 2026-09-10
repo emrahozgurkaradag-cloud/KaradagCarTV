@@ -112,12 +112,17 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         CarContentSlot.prepareHost(this)
         setContentView(R.layout.car_host_root)
         hostRoot = findViewById(R.id.car_host_root) as? FrameLayout
+        CarContentSlot.hideHeader(this)
+        CarContentSlot.hideMenu(this)
         ensureHostedPage()
         if (rootColumn != null) {
             showHostedDestination(destination)
         }
         seedHostedFragment()
         HostedNavigation.bindDrawerMenu(this, destination, ::onMenuSelected)
+        HostedNavigation.hideChrome(this)
+        CarContentSlot.hideHeader(this)
+        CarContentSlot.hideMenu(this)
         slotCommitted = hostRoot != null
         watchHostRoot(hostRoot)
 
