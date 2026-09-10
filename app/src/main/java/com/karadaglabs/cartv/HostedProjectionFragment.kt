@@ -9,12 +9,12 @@ import androidx.fragment.app.Fragment
 /**
  * CarStream hosts YouTube by adding a support fragment to the
  * MATCH_PARENT FrameLayout inflated into CarActivity.g, then
- * attaching with commit() so the view is created in that container
- * after Gearhead onStart. The fragment view stays a child of
- * car_host_root; it is not passed to CarActivity.setContentView.
- * Jetifier maps aauto.aar's FragmentManager onto AndroidX, so this
- * fragment receives CarActivity lifecycle from gms.car.e
- * FragmentController.
+ * attaching with commitNow after Gearhead onStart so the view is
+ * created in that container after chrome restore. The fragment view
+ * stays a child of car_host_root; it is not passed to
+ * CarActivity.setContentView. Jetifier maps aauto.aar's
+ * FragmentManager onto AndroidX, so this fragment receives
+ * CarActivity lifecycle from gms.car.e FragmentController.
  */
 class HostedProjectionFragment : Fragment() {
 

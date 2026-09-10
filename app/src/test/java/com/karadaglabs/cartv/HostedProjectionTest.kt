@@ -97,6 +97,9 @@ class HostedProjectionDestinationTest {
         assertTrue(slot.contains("object BoundCarHost"))
         assertTrue(slot.contains("fun bind(host: CarDestinationHost)"))
         assertTrue(slot.contains("showHostedDestination"))
+        assertTrue(slot.contains("HOST_SLOT_PENDING"))
+        assertTrue(slot.contains("fun consumePending"))
+        assertTrue(slot.contains("CarVideoService.hostedActivity"))
     }
 
     private fun source(relativeFromMain: String): String {
@@ -141,6 +144,8 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("revealHostedPage"))
         assertTrue(video.contains("BoundCarHost.bind"))
         assertTrue(video.contains("BoundCarHost.unbind"))
+        assertTrue(video.contains("BoundCarHost.consumePending"))
+        assertTrue(video.contains("HOST_SLOT_PENDING"))
         assertTrue(video.contains("CAR STREAM FRAGMENT ATTACHED"))
         assertTrue(video.contains("CarContentSlot.keepInSlot"))
         assertTrue(video.contains("CarContentSlot.stopKeep"))
@@ -156,6 +161,8 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("fun getWindow()"))
         assertTrue(video.contains("showYouTube()"))
         assertTrue(video.contains("showGoogle()"))
+        assertTrue(video.contains("attachCarSearchBox"))
+        assertTrue(video.contains("hideCarSearchBox"))
         assertTrue(video.contains("HOST_ACTIVITY_CREATED"))
         assertTrue(video.contains("LIVE_TV_CHANNEL_COUNT"))
         assertTrue(video.contains("LIVE_TV_SURFACE_SIZE"))

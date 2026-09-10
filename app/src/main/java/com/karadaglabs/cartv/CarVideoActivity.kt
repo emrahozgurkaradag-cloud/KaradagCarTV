@@ -25,6 +25,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.SearchCallback
+import com.google.android.apps.auto.sdk.SearchItem
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -33,6 +35,10 @@ import java.net.URL
  * `g` (getContentContainerId), not to CarActivityHost.setContentView.
  * Destinations switch inside that slot: Live TV list/SurfaceView,
  * YouTube WebView, Google WebView.
+ *
+ * The hosted fragment is added+detached in onCreate and attached
+ * with commitNow after Gearhead CarUiController.onStart so the empty
+ * PagedListView restore cannot cover car_host_root.
  */
 @UnstableApi
 class CarVideoActivity : CarActivity(), CarDestinationHost {
@@ -85,7 +91,6 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         selectedRadioId = RadioStations.lastSelectedId(this)
 
         hostProjectionFragment()
-        queueHostedFragmentAttach()
 
         try {
             startService(Intent(this, CarMediaService::class.java))
@@ -171,6 +176,9 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
         }
         if (rootColumn == null) {
             attachHostedFragment()
+            if (rootColumn == null) {
+                queueHostedFragmentAttach()
+            }
             ensureHostedPage()
         }
         CarContentSlot.hideMenu(this)
@@ -179,8 +187,12 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             CarContentSlot.keepInSlot(this, page)
             if (!hostedReady) {
                 hostedReady = true
-                showHostedDestination(destination)
+                if (BoundCarHost.consumePending(this) == null) {
+                    showHostedDestination(destination)
+                }
                 applyVideoFocus(request = true)
+            } else {
+                BoundCarHost.consumePending(this)
             }
         }
     }
@@ -248,6 +260,14 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     }
 
     override fun showHostedDestination(destination: ProjectionDestination) {
+        this.destination = destination
+        if (rootColumn == null) {
+            Log.d(
+                TAG,
+                "HOST_SLOT_PENDING destination=${destination.name} page=false"
+            )
+            return
+        }
         when (destination) {
             ProjectionDestination.LIVE_TV -> showLiveTv()
             ProjectionDestination.RADIO -> showRadio()
@@ -364,6 +384,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun showLiveTv() {
         destination = ProjectionDestination.LIVE_TV
+        hideCarSearchBox()
         hideWeb()
         showChannelList()
         refreshMenu()
@@ -373,6 +394,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun showRadio() {
         destination = ProjectionDestination.RADIO
+        hideCarSearchBox()
         hideWeb()
         state = state.showList()
         CarVideoPlayerHolder.setPlayWhenReady(false)
@@ -384,6 +406,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
 
     private fun showYouTube() {
         destination = ProjectionDestination.YOUTUBE
+        hideCarSearchBox()
         CarVideoPlayerHolder.setPlayWhenReady(false)
         listContainer?.visibility = View.GONE
         surfaceView?.let { view ->
@@ -408,6 +431,7 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
         attachWeb(GOOGLE_URL, desktopUserAgent = false)
+        attachCarSearchBox()
         refreshMenu()
         applyVideoFocus(request = true)
         rootColumn?.let { CarContentSlot.rebind(this, it) }
@@ -471,6 +495,50 @@ class CarVideoActivity : CarActivity(), CarDestinationHost {
     private fun hideWeb() {
         webOverlay?.visibility = View.GONE
         webView?.visibility = View.GONE
+    }
+
+    private fun attachCarSearchBox() {
+        try {
+            val ui = carUiController
+            ui.statusBarController.showAppHeader()
+            ui.statusBarController.setTitle("Google")
+
+            val search = ui.searchController
+            search.setSearchHint("Google")
+            search.setSearchCallback(
+                object : SearchCallback() {
+                    override fun onSearchSubmitted(query: String): Boolean {
+                        Log.d(TAG, "CAR GOOGLE SEARCH SUBMITTED")
+                        webView?.loadUrl(HostedWebView.searchUrl(query))
+                        search.stopSearch()
+                        return true
+                    }
+
+                    override fun onSearchTextChanged(query: String) {
+                    }
+
+                    override fun onSearchItemSelected(item: SearchItem) {
+                        val title = item.title?.toString().orEmpty()
+                        if (title.isNotBlank()) {
+                            webView?.loadUrl(HostedWebView.searchUrl(title))
+                        }
+                    }
+                }
+            )
+            search.showSearchBox()
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to show car search box", exception)
+        }
+    }
+
+    private fun hideCarSearchBox() {
+        try {
+            carUiController.searchController.hideSearchBox()
+        } catch (exception: Exception) {
+            Log.w(TAG, "hideSearchBox unavailable", exception)
+        }
+        CarContentSlot.hideHeader(this)
+        CarContentSlot.hideMenu(this)
     }
 
     private fun logWebAttachment() {

@@ -33,9 +33,12 @@ import com.google.android.apps.auto.sdk.CarActivity
  * Chrome is applied after app content is in g so Gearhead does not
  * lay out the empty PagedListView as the only pane.
  *
- * CarStream attaches the hosted fragment after CarActivity.onStart
- * (Gearhead CarUiController.onStart). Attaching in onCreate lets
- * that restore cover the slot with the empty list.
+ * CarActivity.onStart runs gms.car.e.onStart (execPendingActions)
+ * and then Gearhead CarUiController.a(). A commit() queued in
+ * onCreate therefore attaches the fragment BEFORE Gearhead onStart
+ * and that restore can cover g with the empty PagedListView.
+ * Attach with commitNow after super.onStart so the hosted page is
+ * created in car_host_root after chrome restore.
  *
  * CarActivity.setContentView always writes field g, assigned once in
  * onCreate from findViewById(getContentContainerId()). If Gearhead
@@ -605,6 +608,9 @@ object BoundCarHost {
     @Volatile
     private var current: CarDestinationHost? = null
 
+    @Volatile
+    private var pending: ProjectionDestination? = null
+
     fun bind(host: CarDestinationHost) {
         current = host
     }
@@ -616,10 +622,30 @@ object BoundCarHost {
     }
 
     fun show(destination: ProjectionDestination): Boolean {
-        val host = current ?: return false
+        pending = destination
+        val bound = current
         Handler(Looper.getMainLooper()).post {
-            current?.showHostedDestination(destination)
+            val live = current ?: CarVideoService.hostedActivity()
+            if (live != null) {
+                live.showHostedDestination(destination)
+            } else {
+                Log.i(
+                    TAG,
+                    "HOST_SLOT_PENDING destination=${destination.name}"
+                )
+            }
         }
-        return host === current
+        if (bound != null) {
+            return true
+        }
+        return CarVideoService.hostedActivity() != null
+    }
+
+    fun consumePending(host: CarDestinationHost): ProjectionDestination? {
+        val destination = pending ?: return null
+        pending = null
+        Log.d(TAG, "HOST_SLOT_PENDING_CONSUMED destination=${destination.name}")
+        host.showHostedDestination(destination)
+        return destination
     }
 }
