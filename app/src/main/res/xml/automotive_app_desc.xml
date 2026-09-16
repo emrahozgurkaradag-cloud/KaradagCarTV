@@ -1,10 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        media: CarMediaService — resmi Android Auto medya menüsü
-        (Canlı TV, YouTube, Radyo, Google doğrudan kökte).
-        Sürüşte yalnızca ses; video host park/OEM projection
-        destekliyorsa CarVideoActivity SurfaceView yolundan gider.
+        media: CarMediaService — yalnızca radyo (MediaSession).
+        Canlı TV MediaItem olarak gönderilmez; CarVideoService /
+        CarVideoActivity SurfaceView yolundan oynar.
         template: CarMirrorService (izin yalnızca Mirror yüzeyinde).
         service + projection: CarVideoService (aauto.aar OEM).
         video: park halinde host video yeteneği bildirimi.

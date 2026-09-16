@@ -131,22 +131,46 @@ class AndroidAutoDiscoveryTest {
         val media = sourceFile(
             "java/com/karadaglabs/cartv/CarMediaService.kt"
         ).readText()
+        val chrome = sourceFile(
+            "java/com/karadaglabs/cartv/HostedNavigation.kt"
+        ).readText()
+        val destinations = sourceFile(
+            "java/com/karadaglabs/cartv/ProjectionDestination.kt"
+        ).readText()
+        val activity = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
 
-        assertTrue(media.contains("📺 Canlı TV"))
-        assertTrue(media.contains("▶️ YouTube"))
-        assertTrue(media.contains("📻 Canlı Radyo"))
-        assertTrue(media.contains("🔎 Google Arama"))
-        assertTrue(media.contains("CONTENT_STYLE_BROWSABLE_HINT"))
-        assertTrue(media.contains("YouTube araç ekranında açılır"))
-        assertTrue(media.contains("Google araç ekranında açılır"))
-        assertTrue(media.contains("Canlı TV araç ekranında açılır"))
-        assertFalse(media.contains("YouTube telefonda açılır"))
-        assertFalse(media.contains("Google telefonda açılır"))
+        assertTrue(destinations.contains("Canlı TV"))
+        assertTrue(destinations.contains("Canlı Radyo"))
+        assertTrue(destinations.contains("YouTube"))
+        assertTrue(destinations.contains("Google"))
+        assertTrue(chrome.contains("ProjectionDestination.entries"))
+        assertTrue(chrome.contains("Karadag Car TV"))
+        assertTrue(activity.contains("selectChannel"))
+        assertTrue(activity.contains("showChannelList()"))
+        assertTrue(activity.contains("prepareChannel"))
+
+        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
+        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
+        assertTrue(rootStart >= 0)
+        assertTrue(radioStart > rootStart)
+        val rootBlock = media.substring(rootStart, radioStart)
         assertFalse(
-            "YouTube browse must not return an empty list",
-            media.contains("if (parentId == YOUTUBE_ID)") &&
-                youtubeChildrenAreEmpty(media)
+            "Live TV must not be a MediaLibrary root folder",
+            rootBlock.contains("LIVE_TV_ID")
         )
+        assertFalse(
+            "YouTube must not be a MediaLibrary root folder",
+            rootBlock.contains("YOUTUBE_ID")
+        )
+        assertFalse(
+            "Google must not be a MediaLibrary root folder",
+            rootBlock.contains("GOOGLE_ID")
+        )
+        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertFalse(media.contains("YouTube telefonda açılır"))
     }
 
     @Test
@@ -248,14 +272,14 @@ class AndroidAutoDiscoveryTest {
         val repository = sourceFile(
             "java/com/karadaglabs/cartv/IptvRepository.kt"
         ).readText()
-        val media = sourceFile(
-            "java/com/karadaglabs/cartv/CarMediaService.kt"
+        val video = sourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
         ).readText()
 
         assertTrue(repository.contains("AppSession.deviceUuid"))
         assertTrue(repository.contains("AppSession.licenseKey"))
-        assertTrue(media.contains("IptvRepository.loadCached"))
-        assertTrue(media.contains("IptvRepository.loadFromApiWithCacheFallback"))
+        assertTrue(video.contains("IptvRepository.loadCached"))
+        assertTrue(video.contains("IptvRepository.loadFromApiWithCacheFallback"))
     }
 
     @Test
@@ -276,6 +300,8 @@ class AndroidAutoDiscoveryTest {
         assertTrue(activity.contains("SurfaceView"))
         assertTrue(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
+        assertTrue(activity.contains("CarVideoPlayerHolder.setPlayer"))
+        assertTrue(activity.contains("ExoPlayer.Builder"))
         assertTrue(chrome.contains("Karadag Car TV"))
         assertTrue(destinations.contains("Canlı TV"))
         assertTrue(destinations.contains("Canlı Radyo"))
@@ -283,17 +309,21 @@ class AndroidAutoDiscoveryTest {
         assertTrue(destinations.contains("Google"))
         assertTrue(chrome.contains("ProjectionDestination.entries"))
         assertTrue(activity.contains("prepareChannel"))
+        assertTrue(activity.contains("selectChannel"))
         assertTrue(activity.contains("CAR VIDEO ACTIVITY AÇILDI"))
         assertTrue(activity.contains("CAR VIDEO SURFACE CREATED"))
         assertTrue(activity.contains("CarYouTubeActivity").not() || activity.contains("HostedNavigation"))
         assertFalse(activity.contains("PlayerView"))
         assertFalse(activity.contains("TextureView"))
         assertFalse(activity.contains("YouTubeActivity"))
+        assertFalse(activity.contains("CarMediaService::class.java"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("TRACK_TYPE_VIDEO"))
         assertTrue(holder.contains("prepareChannelLocked"))
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
         assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
+        assertTrue(holder.contains("ExoPlayer STATE_READY"))
+        assertFalse(holder.contains("CarVideoPlayerHolder.setPlayer(player)"))
     }
 
     @Test

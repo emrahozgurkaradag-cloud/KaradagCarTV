@@ -1,6 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -22,7 +21,9 @@ import android.widget.GridView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import com.google.android.apps.auto.sdk.CarActivity
 import java.net.HttpURLConnection
 import java.net.URL
@@ -54,6 +55,7 @@ class CarVideoActivity : CarActivity() {
     private var selectedRadioId: String? = null
     private var state = ProjectionUiState()
     private var destroyed = false
+    private var videoPlayer: ExoPlayer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,8 +70,24 @@ class CarVideoActivity : CarActivity() {
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
         HostedNavigation.hideChrome(this)
 
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
+        val player = ExoPlayer.Builder(this).build()
+        player.setAudioAttributes(
+            androidx.media3.common.AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                .build(),
+            true
+        )
+        player.trackSelectionParameters =
+            player.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+                .build()
+        player.setVideoScalingMode(C.VIDEO_SCALING_MODE_SCALE_TO_FIT)
+        videoPlayer = player
+        CarVideoPlayerHolder.setPlayer(player)
+
+        val root = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -78,18 +96,10 @@ class CarVideoActivity : CarActivity() {
             keepScreenOn = true
         }
 
-        val menu = HostedNavigation.menuBar(this, destination) { next ->
-            onMenuSelected(next)
-        }
-        menuContainer = menu
-        root.addView(menu)
-        rootColumn = root
-
         val content = FrameLayout(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
+                ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.BLACK)
         }
@@ -111,29 +121,40 @@ class CarVideoActivity : CarActivity() {
         view.holder.addCallback(surfaceCallback)
         content.addView(view)
         surfaceView = view
-
         root.addView(content)
+
+        val menuColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        val menu = HostedNavigation.menuBar(this, destination) { next ->
+            onMenuSelected(next)
+        }
+        menuContainer = menu
+        menuColumn.addView(menu)
+        rootColumn = menuColumn
+        root.addView(menuColumn)
+
         setContentView(root)
+        HostedNavigation.hideChrome(this)
 
         applyVideoFocus(request = true)
-
-        try {
-            startService(Intent(this, CarMediaService::class.java))
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to start CarMediaService", exception)
-        }
-
         loadChannels()
         applyState()
     }
 
     override fun onStart() {
         super.onStart()
+        HostedNavigation.hideChrome(this)
         bindIfPlaying()
     }
 
     override fun onResume() {
         super.onResume()
+        HostedNavigation.hideChrome(this)
         applyVideoFocus(request = true)
         bindIfPlaying()
     }
@@ -152,6 +173,10 @@ class CarVideoActivity : CarActivity() {
             view.holder.removeCallback(surfaceCallback)
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
+
+        CarVideoPlayerHolder.clearPlayer()
+        videoPlayer?.release()
+        videoPlayer = null
 
         surfaceView = null
         super.onDestroy()
@@ -300,12 +325,13 @@ class CarVideoActivity : CarActivity() {
         val selected = state.selected
         val view = surfaceView
 
-        if (plan.shouldSetMediaItem && selected != null) {
+        if (playing && selected != null) {
             CarVideoPlayerHolder.prepareChannel(selected)
         }
 
         if (plan.shouldBindSurface && view != null) {
             configureSurfaceZOrder(view)
+            ensureSurfaceHasSize(view)
             CarVideoPlayerHolder.setCarSurfaceView(view)
         } else if (view != null && !playing) {
             CarVideoPlayerHolder.clearCarSurfaceView(view)
@@ -384,6 +410,10 @@ class CarVideoActivity : CarActivity() {
             return
         }
 
+        selectChannel(channel)
+    }
+
+    private fun selectChannel(channel: IptvChannel) {
         state = state.select(channel.id)
         persistSelection()
         applyState()
@@ -416,7 +446,7 @@ class CarVideoActivity : CarActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(16), dp(8), dp(16), dp(12))
+            setPadding(dp(16), dp(72), dp(16), dp(12))
         }
 
         statusView = TextView(this).apply {
@@ -450,6 +480,7 @@ class CarVideoActivity : CarActivity() {
 
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
+            Log.d(TAG, "SurfaceHolder oluşturuluyor surface=${holder.surface}")
             Log.d(TAG, "CAR VIDEO SURFACE CREATED")
             state = state.surfaceChanged(true)
             applyState()
@@ -461,7 +492,12 @@ class CarVideoActivity : CarActivity() {
             width: Int,
             height: Int
         ) {
+            Log.d(TAG, "SurfaceView gerçek width=$width height=$height")
             Log.d(TAG, "CAR VIDEO SURFACE CHANGED width=$width height=$height")
+            if (width > 0 && height > 0) {
+                state = state.surfaceChanged(true)
+                applyState()
+            }
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -479,6 +515,36 @@ class CarVideoActivity : CarActivity() {
             Log.d(TAG, "SurfaceView setZOrderMediaOverlay=true")
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to set SurfaceView z-order", exception)
+        }
+    }
+
+    private fun ensureSurfaceHasSize(view: SurfaceView) {
+        view.post {
+            if (destroyed) {
+                return@post
+            }
+
+            val width = view.width
+            val height = view.height
+            Log.d(TAG, "SurfaceView gerçek width=$width height=$height")
+
+            if (width > 0 && height > 0) {
+                return@post
+            }
+
+            val parent = view.parent as? View
+            val parentWidth = parent?.width ?: 0
+            val parentHeight = parent?.height ?: 0
+            val metrics = resources.displayMetrics
+            val nextWidth = if (parentWidth > 0) parentWidth else metrics.widthPixels
+            val nextHeight = if (parentHeight > 0) parentHeight else metrics.heightPixels
+
+            Log.d(
+                TAG,
+                "SurfaceView 0x0, assigning ${nextWidth}x${nextHeight}"
+            )
+            view.layoutParams = FrameLayout.LayoutParams(nextWidth, nextHeight)
+            view.requestLayout()
         }
     }
 

@@ -21,20 +21,12 @@ import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.ListeningExecutorService
-import com.google.common.util.concurrent.MoreExecutors
-import java.util.concurrent.Executors
 
 @UnstableApi
 class CarMediaService : MediaLibraryService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaLibrarySession: MediaLibrarySession
-
-    private val executor: ListeningExecutorService =
-        MoreExecutors.listeningDecorator(
-            Executors.newSingleThreadExecutor()
-        )
 
     /*
      * ============================================================
@@ -91,8 +83,6 @@ class CarMediaService : MediaLibraryService() {
                 .setId("karadag-car-tv")
                 .build()
 
-        CarVideoPlayerHolder.setPlayer(player)
-
         Log.d(
             TAG,
             "======================================"
@@ -136,8 +126,6 @@ class CarMediaService : MediaLibraryService() {
             "Karadag Car Media Service destroyed"
         )
 
-        CarVideoPlayerHolder.clearPlayer()
-
         if (::mediaLibrarySession.isInitialized) {
             mediaLibrarySession.release()
         }
@@ -145,8 +133,6 @@ class CarMediaService : MediaLibraryService() {
         if (::player.isInitialized) {
             player.release()
         }
-
-        executor.shutdown()
 
         super.onDestroy()
     }
@@ -272,66 +258,27 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * Android Auto ana menüyü açtığında
-                 * IPTV API'yi kontrol ediyoruz.
-                 *
-                 * Böylece telefon uygulamasının cache'ine
-                 * bağımlı kalmıyoruz.
+                 * MediaLibraryService yalnızca radyo içindir.
+                 * Canlı TV / YouTube / Google MediaItem olarak
+                 * verilmez; aksi halde Android Auto Now Playing
+                 * veya boş "Öğe yok" klasörüne düşer.
                  */
+                val items =
+                    radios.map { radio ->
+                        createRadioMediaItem(radio)
+                    }
 
-                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
+                Log.d(
+                    TAG,
+                    "ROOT radio count = ${items.size}"
+                )
 
-                    val channels =
-                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
-
-                    Log.d(
-                        TAG,
-                        "ROOT IPTV count = ${channels.size}"
-                    )
-
-                    val items =
-                        listOf(
-
-                            createCategoryItem(
-                                id = LIVE_TV_ID,
-                                title = "📺 Canlı TV",
-                                subtitle =
-                                    if (
-                                        channels.isNotEmpty()
-                                    ) {
-                                        "${channels.size} kanal"
-                                    } else {
-                                        "Canlı TV"
-                                    }
-                            ),
-
-                            createCategoryItem(
-                                id = RADIO_ID,
-                                title = "📻 Canlı Radyo",
-                                subtitle =
-                                    "${radios.size} radyo"
-                            ),
-
-                            createCategoryItem(
-                                id = YOUTUBE_ID,
-                                title = "▶️ YouTube",
-                                subtitle = "YouTube"
-                            ),
-
-                            createCategoryItem(
-                                id = GOOGLE_ID,
-                                title = "🔎 Google Arama",
-                                subtitle = "Web"
-                            )
-                        )
-
+                return Futures.immediateFuture(
                     LibraryResult.ofItemList(
-                        ImmutableList.copyOf(
-                            items
-                        ),
+                        ImmutableList.copyOf(items),
                         params
                     )
-                }
+                )
             }
 
             /*
@@ -999,13 +946,12 @@ class CarMediaService : MediaLibraryService() {
 }
 
 /**
- * CarMediaService ExoPlayer'ını CarVideoActivity SurfaceView'sine
- * bağlar. Ses MediaLibrarySession üzerinden gider; görüntü aauto
- * CarActivity penceresindeki SurfaceHolder'a yazılır.
+ * CarVideoActivity ExoPlayer'ını hosted SurfaceView'a bağlar.
+ * Bu oynatıcı MediaLibrarySession'a bağlı değildir; Canlı TV
+ * Android Auto Now Playing ekranını açmaz.
  *
- * Tek ExoPlayer örneği CarMediaService'tedir. Telefon
- * PlayerActivity ayrı bir oynatıcı kullanır ve bu holder'a
- * bağlanmaz.
+ * CarMediaService ExoPlayer'ı yalnızca radyo içindir.
+ * Telefon PlayerActivity ayrı bir oynatıcı kullanır.
  */
 @UnstableApi
 object CarVideoPlayerHolder {
@@ -1067,9 +1013,22 @@ object CarVideoPlayerHolder {
                 playbackState: Int
             ) {
 
+                val stateName =
+                    when (playbackState) {
+                        Player.STATE_IDLE -> "STATE_IDLE"
+                        Player.STATE_BUFFERING -> "STATE_BUFFERING"
+                        Player.STATE_READY -> "STATE_READY"
+                        Player.STATE_ENDED -> "STATE_ENDED"
+                        else -> playbackState.toString()
+                    }
+
+                if (playbackState == Player.STATE_READY) {
+                    Log.d(TAG, "ExoPlayer STATE_READY")
+                }
+
                 Log.d(
                     TAG,
-                    "PROJECTION playbackState=$playbackState " +
+                    "ExoPlayer $stateName " +
                         "playWhenReady=${player?.playWhenReady}"
                 )
             }
@@ -1381,6 +1340,13 @@ object CarVideoPlayerHolder {
 
             Log.d(
                 TAG,
+                "ExoPlayer SurfaceView'a bağlanıyor " +
+                    "${surfaceView.width}x${surfaceView.height} " +
+                    "surface=$surface"
+            )
+
+            Log.d(
+                TAG,
                 "CAR VIDEO SURFACE BOUND " +
                     "${surfaceView.width}x${surfaceView.height} " +
                     "surface=$surface"
@@ -1406,6 +1372,11 @@ object CarVideoPlayerHolder {
 
                     Log.d(
                         TAG,
+                        "SurfaceHolder oluşturuluyor surface=${holder.surface}"
+                    )
+
+                    Log.d(
+                        TAG,
                         "CAR VIDEO SURFACE CREATED surface=${holder.surface}"
                     )
 
@@ -1427,6 +1398,11 @@ object CarVideoPlayerHolder {
                     width: Int,
                     height: Int
                 ) {
+
+                    Log.d(
+                        TAG,
+                        "SurfaceView gerçek width=$width height=$height"
+                    )
 
                     Log.d(
                         TAG,

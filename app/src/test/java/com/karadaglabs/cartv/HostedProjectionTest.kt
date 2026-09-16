@@ -53,6 +53,7 @@ class HostedProjectionDestinationTest {
         assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
         assertTrue(nav.contains("CAR HOST NAVIGATION FAILED"))
         assertTrue(nav.contains("startCarActivity"))
+        assertTrue(nav.contains("closeDrawer"))
         assertTrue(nav.contains("CarVideoPlayerHolder.setPlayWhenReady(false)"))
     }
 
@@ -84,12 +85,16 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
         assertTrue(video.contains("setCarSurfaceView"))
         assertTrue(video.contains("SurfaceHolder.Callback"))
+        assertTrue(video.contains("ExoPlayer.Builder"))
+        assertTrue(video.contains("CarVideoPlayerHolder.setPlayer"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
         assertTrue(holder.contains("onRenderedFirstFrame"))
+        assertTrue(holder.contains("ExoPlayer STATE_READY"))
         assertFalse(video.contains("PlayerView"))
         assertFalse(video.contains("IptvActivity"))
+        assertFalse(video.contains("CarMediaService::class.java"))
     }
 
     @Test
@@ -178,14 +183,21 @@ class HostedProjectionSourceTest {
     fun mediaSessionDoesNotPlayLiveTvYoutubeOrGoogle() {
         val media = source("java/com/karadaglabs/cartv/CarMediaService.kt")
 
-        assertTrue(media.contains("Canlı TV araç ekranında açılır"))
-        assertTrue(media.contains("YouTube araç ekranında açılır"))
-        assertTrue(media.contains("Google araç ekranında açılır"))
         assertTrue(media.contains("createRadioMediaItem"))
+        assertTrue(media.contains("MediaLibraryService yalnızca radyo içindir"))
         assertFalse(media.contains("YouTube telefonda açılır"))
         val addStart = media.indexOf("override fun onAddMediaItems")
         val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
+        assertFalse(addBlock.contains("YOUTUBE"))
+        assertFalse(addBlock.contains("GOOGLE"))
+
+        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
+        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
+        val rootBlock = media.substring(rootStart, radioStart)
+        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
+        assertFalse(rootBlock.contains("LIVE_TV_ID"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
     }
 
     @Test

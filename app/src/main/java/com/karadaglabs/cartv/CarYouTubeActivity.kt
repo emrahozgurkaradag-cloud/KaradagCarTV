@@ -95,6 +95,7 @@ class CarYouTubeActivity : CarActivity() {
 
     override fun onResume() {
         super.onResume()
+        HostedNavigation.hideChrome(this)
         applyVideoFocus(request = true)
         webView?.onResume()
     }

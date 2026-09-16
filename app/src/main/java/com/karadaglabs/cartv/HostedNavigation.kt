@@ -62,7 +62,9 @@ object HostedNavigation {
         try {
             val carUiController = activity.getCarUiController()
             carUiController.statusBarController.hideAppHeader()
+            carUiController.statusBarController.hideTitle()
             carUiController.menuController.hideMenuButton()
+            carUiController.drawerController.closeDrawer()
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to hide car chrome", exception)
         }
