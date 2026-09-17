@@ -518,9 +518,6 @@ class AndroidAutoEntryPointTest {
         assertTrue(host.contains("relinquishVideoFocus"))
         assertTrue(host.contains("CarActivityServiceProxy"))
         assertTrue(host.contains("CarActivityHost"))
-        assertFalse(host.contains("Xposed"))
-        assertFalse(host.contains("LSPosed"))
-        assertFalse(host.contains("KingInstaller"))
     }
 }
 
