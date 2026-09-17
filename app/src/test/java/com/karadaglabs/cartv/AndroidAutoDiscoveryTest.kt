@@ -374,9 +374,16 @@ class AndroidAutoEntryPointTest {
         val mirror = serviceBlock(manifest, ".CarMirrorService")
         val registration = activityBlock(manifest, ".RegistrationActivity")
 
-        assertTrue(video.contains("""android:exported="true""""))
-        assertTrue(video.contains("android.intent.action.MAIN"))
         assertTrue(
+            "CarVideoService must be exported for Gearhead bind",
+            video.contains("""android:exported="true"""")
+        )
+        assertTrue(
+            "CarVideoService must declare MAIN for CarActivityService discovery",
+            video.contains("android.intent.action.MAIN")
+        )
+        assertTrue(
+            "CarVideoService must declare CATEGORY_PROJECTION",
             video.contains(
                 "com.google.android.gms.car.category.CATEGORY_PROJECTION"
             )
@@ -475,18 +482,22 @@ class AndroidAutoEntryPointTest {
     @Test
     fun automotiveHostMustDiscoverProjectionNotMediaBrowse() {
         val desc = mainSourceFile("res/xml/automotive_app_desc.xml").readText()
-        val activeUses = desc.lineSequence()
-            .map { it.trim() }
-            .filter { it.startsWith("<uses") }
-            .toList()
 
-        assertTrue(activeUses.any { it.contains("""name="projection"""") })
-        assertTrue(activeUses.any { it.contains("""name="video"""") })
-        assertTrue(activeUses.any { it.contains("""name="service"""") })
-        assertFalse(activeUses.any { it.contains("""name="media"""") })
-        assertFalse(activeUses.any { it.contains("""name="template"""") })
+        assertFalse(
+            desc.lineSequence().any { it.trim() == """<uses name="media" />""" }
+        )
+        assertFalse(
+            desc.lineSequence().any { it.trim() == """<uses name="template" />""" }
+        )
+        assertTrue(desc.contains("""name="projection""""))
+        assertTrue(desc.contains("""name="service""""))
+        assertTrue(desc.contains("""<uses name="video" />"""))
         assertTrue(desc.contains("""<!-- <uses name="media" /> -->"""))
         assertTrue(desc.contains("""<!-- <uses name="template" /> -->"""))
+        val projectionIndex = desc.indexOf("""name="projection"""")
+        val mediaComment = desc.indexOf("""<!-- <uses name="media" /> -->""")
+        assertTrue(projectionIndex >= 0)
+        assertTrue(mediaComment > projectionIndex)
     }
 }
 
@@ -510,16 +521,16 @@ private fun componentBlock(
     val open = manifest.lastIndexOf("<$tag", nameIndex)
     assertTrue("$tag block for $className missing", open >= 0)
 
-    val selfClose = manifest.indexOf("/>", nameIndex)
-    val endTag = manifest.indexOf("</$tag>", nameIndex)
-    val end = when {
-        endTag >= 0 && (selfClose < 0 || endTag < selfClose) ->
-            endTag + "</$tag>".length
-        selfClose >= 0 -> selfClose + 2
-        else -> error("$tag $className is not closed")
+    val gt = manifest.indexOf('>', open)
+    assertTrue("$tag $className has no opening '>'", gt > open)
+    val isSelfClosing = manifest[gt - 1] == '/'
+    if (isSelfClosing) {
+        return manifest.substring(open, gt + 1)
     }
 
-    return manifest.substring(open, end)
+    val endTag = manifest.indexOf("</$tag>", nameIndex)
+    assertTrue("$tag $className is not closed", endTag > gt)
+    return manifest.substring(open, endTag + "</$tag>".length)
 }
 
 private fun mainSourceFile(relativeFromMain: String): File {
