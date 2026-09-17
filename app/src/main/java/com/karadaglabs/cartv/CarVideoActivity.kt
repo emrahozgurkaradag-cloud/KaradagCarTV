@@ -3,6 +3,7 @@ package com.karadaglabs.cartv
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.PixelFormat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -30,8 +31,9 @@ import java.net.URL
 
 /**
  * Hosted CarActivity window. IPTV channel UI is Android Views.
- * Video renders into a SurfaceView with setZOrderMediaOverlay.
- * Phone IPTV Compose screen is not used here.
+ * Video renders into a SurfaceView that stays inside the Gearhead
+ * CarActivity window. Media overlay z-order is not used: that
+ * creates a separate surface Android Auto does not project.
  */
 @UnstableApi
 class CarVideoActivity : CarActivity() {
@@ -69,6 +71,7 @@ class CarVideoActivity : CarActivity() {
 
         setIgnoreConfigChanges(0xFFFFFFFF.toInt())
         HostedNavigation.hideChrome(this)
+        applyVideoFocus(request = true)
 
         val player = ExoPlayer.Builder(this).build()
         player.setAudioAttributes(
@@ -106,7 +109,6 @@ class CarVideoActivity : CarActivity() {
 
         val list = buildListUi()
         listContainer = list
-        content.addView(list)
 
         val view = SurfaceView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
@@ -114,12 +116,13 @@ class CarVideoActivity : CarActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             keepScreenOn = true
-            visibility = View.GONE
+            visibility = View.VISIBLE
         }
 
-        configureSurfaceZOrder(view)
+        view.holder.setFormat(PixelFormat.RGBX_8888)
         view.holder.addCallback(surfaceCallback)
         content.addView(view)
+        content.addView(list)
         surfaceView = view
         root.addView(content)
 
@@ -319,9 +322,8 @@ class CarVideoActivity : CarActivity() {
             state.selected != null
 
         listContainer?.visibility = if (playing) View.GONE else View.VISIBLE
-        surfaceView?.visibility = if (playing) View.VISIBLE else View.GONE
+        surfaceView?.visibility = View.VISIBLE
 
-        val plan = state.bindPlan()
         val selected = state.selected
         val view = surfaceView
 
@@ -329,15 +331,22 @@ class CarVideoActivity : CarActivity() {
             CarVideoPlayerHolder.prepareChannel(selected)
         }
 
-        if (plan.shouldBindSurface && view != null) {
-            configureSurfaceZOrder(view)
+        if (playing && view != null && surfaceAlreadyUsable(view)) {
+            if (!state.surfaceReady) {
+                state = state.surfaceChanged(true)
+            }
+        }
+
+        val bindPlan = state.bindPlan()
+
+        if (bindPlan.shouldBindSurface && view != null) {
             ensureSurfaceHasSize(view)
             CarVideoPlayerHolder.setCarSurfaceView(view)
         } else if (view != null && !playing) {
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
 
-        CarVideoPlayerHolder.setPlayWhenReady(plan.shouldPlay)
+        CarVideoPlayerHolder.setPlayWhenReady(bindPlan.shouldPlay)
     }
 
     private fun applyRadioState() {
@@ -421,9 +430,9 @@ class CarVideoActivity : CarActivity() {
 
     private fun applyVideoFocus(request: Boolean) {
         val result = if (request) {
-            CarVideoFocus.request(this)
+            CarHost.activateVideoLayer(this)
         } else {
-            CarVideoFocus.relinquish(this)
+            CarHost.deactivateVideoLayer(this)
         }
 
         state = state.videoFocusResult(result.granted)
@@ -509,13 +518,12 @@ class CarVideoActivity : CarActivity() {
         }
     }
 
-    private fun configureSurfaceZOrder(view: SurfaceView) {
-        try {
-            view.setZOrderMediaOverlay(true)
-            Log.d(TAG, "SurfaceView setZOrderMediaOverlay=true")
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to set SurfaceView z-order", exception)
-        }
+    private fun surfaceAlreadyUsable(view: SurfaceView): Boolean {
+        val surface = view.holder.surface
+        return surface != null &&
+            surface.isValid &&
+            view.width > 0 &&
+            view.height > 0
     }
 
     private fun ensureSurfaceHasSize(view: SurfaceView) {

@@ -44,7 +44,11 @@ class CarVideoService : CarActivityService() {
             if (binder == null) {
                 Log.e(TAG, "CAR VIDEO SERVICE HOST BIND FAILED binder=null")
             } else {
-                Log.d(TAG, "CAR VIDEO SERVICE HOST BIND OK")
+                val focus = CarHost.activateVideoLayer(this)
+                Log.d(
+                    TAG,
+                    "CAR VIDEO SERVICE HOST BIND OK videoFocus=${focus.reason}"
+                )
             }
 
             binder

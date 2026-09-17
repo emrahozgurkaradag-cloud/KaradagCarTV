@@ -222,7 +222,8 @@ class AndroidAutoDiscoveryTest {
             video.contains("createScreenCaptureIntent")
         )
         assertTrue(video.contains("SurfaceView"))
-        assertTrue(video.contains("setZOrderMediaOverlay"))
+        assertTrue(video.contains("RGBX_8888"))
+        assertFalse(video.contains("setZOrderMediaOverlay"))
     }
 
     @Test
@@ -315,7 +316,9 @@ class AndroidAutoDiscoveryTest {
         ).readText()
 
         assertTrue(activity.contains("SurfaceView"))
-        assertTrue(activity.contains("setZOrderMediaOverlay"))
+        assertTrue(activity.contains("CarHost.activateVideoLayer"))
+        assertTrue(activity.contains("RGBX_8888"))
+        assertFalse(activity.contains("setZOrderMediaOverlay"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setPlayer"))
         assertTrue(activity.contains("ExoPlayer.Builder"))
@@ -445,12 +448,16 @@ class AndroidAutoEntryPointTest {
         assertTrue(service.contains("class CarVideoService : CarActivityService()"))
         assertTrue(service.contains("override fun getCarActivity()"))
         assertTrue(service.contains("return CarVideoActivity::class.java"))
+        assertTrue(service.contains("CarHost.activateVideoLayer"))
         assertFalse(service.contains("CarYouTubeActivity"))
         assertFalse(service.contains("CarGoogleActivity"))
         assertFalse(service.contains("CarMediaService"))
 
         assertTrue(activity.contains("class CarVideoActivity : CarActivity()"))
         assertTrue(activity.contains("CAR VIDEO ACTIVITY AÇILDI"))
+        assertTrue(activity.contains("CarHost.activateVideoLayer"))
+        assertTrue(activity.contains("RGBX_8888"))
+        assertFalse(activity.contains("setZOrderMediaOverlay"))
         assertTrue(destinations.contains("Canlı TV"))
         assertTrue(destinations.contains("Canlı Radyo"))
         assertTrue(destinations.contains("YouTube"))
@@ -498,6 +505,22 @@ class AndroidAutoEntryPointTest {
         val mediaComment = desc.indexOf("""<!-- <uses name="media" /> -->""")
         assertTrue(projectionIndex >= 0)
         assertTrue(mediaComment > projectionIndex)
+    }
+
+    @Test
+    fun carHostUsesAautoVideoFocusApi() {
+        val host = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarHost.kt"
+        ).readText()
+
+        assertTrue(host.contains("enableWindowTransparency"))
+        assertTrue(host.contains("requestVideoFocus"))
+        assertTrue(host.contains("relinquishVideoFocus"))
+        assertTrue(host.contains("CarActivityServiceProxy"))
+        assertTrue(host.contains("CarActivityHost"))
+        assertFalse(host.contains("Xposed"))
+        assertFalse(host.contains("LSPosed"))
+        assertFalse(host.contains("KingInstaller"))
     }
 }
 

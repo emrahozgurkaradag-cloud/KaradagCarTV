@@ -136,7 +136,7 @@ class ProjectionPlaybackTest {
     }
 
     @Test
-    fun returningToListClearsSurfaceReady() {
+    fun returningToListStopsPlaybackAndKeepsSurface() {
         val playing = ProjectionUiState(
             channels = listOf(channel(5)),
             lastSelectedId = 5
@@ -148,7 +148,7 @@ class ProjectionPlaybackTest {
         val plan = listed.bindPlan()
 
         assertEquals(ProjectionMode.LIST, listed.mode)
-        assertFalse(listed.surfaceReady)
+        assertTrue(listed.surfaceReady)
         assertFalse(plan.shouldPlay)
         assertFalse(plan.shouldBindSurface)
     }
@@ -325,7 +325,7 @@ class ProjectionSourceContractTest {
         assertTrue(youtubeCar.contains("CAR YOUTUBE WEBVIEW READY"))
         assertTrue(youtubeCar.contains("CAR YOUTUBE URL LOADED"))
         assertTrue(youtubeCar.contains("HostedWebView.destroy"))
-        assertTrue(youtubeCar.contains("CarVideoFocus.request"))
+        assertTrue(youtubeCar.contains("CarHost.activateVideoLayer"))
         assertTrue(youtubeCar.contains("CarProjectionWebView"))
         assertFalse(youtubeCar.contains("YouTubeActivity::class"))
         assertFalse(youtubeCar.contains("ACTION_VIEW"))
@@ -345,7 +345,7 @@ class ProjectionSourceContractTest {
         assertTrue(google.contains("CAR GOOGLE URL LOADED"))
         assertTrue(google.contains("HostedWebView.destroy"))
         assertTrue(google.contains("searchController"))
-        assertTrue(google.contains("CarVideoFocus.request"))
+        assertTrue(google.contains("CarHost.activateVideoLayer"))
         assertFalse(google.contains("ACTION_VIEW"))
         assertTrue(
             manifest.contains(
@@ -370,7 +370,9 @@ class ProjectionSourceContractTest {
 
         assertTrue(video.contains("GridView"))
         assertTrue(video.contains("SurfaceView"))
-        assertTrue(video.contains("setZOrderMediaOverlay"))
+        assertTrue(video.contains("CarHost.activateVideoLayer"))
+        assertTrue(video.contains("RGBX_8888"))
+        assertFalse(video.contains("setZOrderMediaOverlay"))
         assertFalse(video.contains("PlayerView"))
         assertFalse(video.contains("TextureView"))
         assertFalse(video.contains("setContent {"))

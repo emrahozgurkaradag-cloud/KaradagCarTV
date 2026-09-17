@@ -105,14 +105,11 @@ data class ProjectionUiState(
     }
 
     fun showList(): ProjectionUiState {
-        return copy(
-            mode = ProjectionMode.LIST,
-            surfaceReady = false
-        )
+        return copy(mode = ProjectionMode.LIST)
     }
 
     fun surfaceChanged(ready: Boolean): ProjectionUiState {
-        if (!hostAvailable || mode != ProjectionMode.PLAYING) {
+        if (!hostAvailable) {
             return copy(surfaceReady = false)
         }
 

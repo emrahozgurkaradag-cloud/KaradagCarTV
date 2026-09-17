@@ -177,9 +177,9 @@ class CarGoogleActivity : CarActivity() {
 
     private fun applyVideoFocus(request: Boolean) {
         val result = if (request) {
-            CarVideoFocus.request(this)
+            CarHost.activateVideoLayer(this)
         } else {
-            CarVideoFocus.relinquish(this)
+            CarHost.deactivateVideoLayer(this)
         }
 
         Log.d(
