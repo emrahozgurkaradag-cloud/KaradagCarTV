@@ -83,11 +83,21 @@ class AndroidAutoDiscoveryTest {
     fun automotiveDescriptorDeclaresAllHostCapabilities() {
         val xml = sourceFile("res/xml/automotive_app_desc.xml").readText()
 
-        assertTrue(xml.contains("""<uses name="media" />"""))
-        assertTrue(xml.contains("""<uses name="template" />"""))
+        assertFalse(
+            "media must not be an active automotive capability",
+            xml.lineSequence().any { it.trim() == """<uses name="media" />""" }
+        )
+        assertFalse(
+            "template must not be an active automotive capability",
+            xml.lineSequence().any { it.trim() == """<uses name="template" />""" }
+        )
         assertTrue(xml.contains("""name="projection""""))
         assertTrue(xml.contains("""<uses name="video" />"""))
         assertTrue(xml.contains("""name="service""""))
+        val projectionIndex = xml.indexOf("""name="projection"""")
+        val mediaComment = xml.indexOf("""<!-- <uses name="media" /> -->""")
+        assertTrue(projectionIndex >= 0)
+        assertTrue(mediaComment > projectionIndex)
     }
 
     @Test
@@ -110,19 +120,20 @@ class AndroidAutoDiscoveryTest {
         assertTrue(xml.contains("""android:name=".CarMediaService""""))
         assertTrue(
             xml.contains(
-                "android.media.browse.MediaBrowserService"
-            )
-        )
-        assertTrue(
-            xml.contains("androidx.car.app.CarAppService")
-        )
-        assertTrue(
-            xml.contains(
                 "com.google.android.gms.car.category.CATEGORY_PROJECTION"
             )
         )
         assertTrue(
+            xml.contains(
+                "com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM"
+            )
+        )
+        assertTrue(
             xml.contains("com.google.android.projection.gearhead")
+        )
+        assertFalse(
+            "Phone registration must not be an Android Auto CAR_LAUNCHER",
+            xml.contains("android.intent.category.CAR_LAUNCHER")
         )
     }
 
@@ -217,12 +228,18 @@ class AndroidAutoDiscoveryTest {
     @Test
     fun carAppServiceAndMinCarApiLevelRemainDiscoverable() {
         val manifest = sourceFile("AndroidManifest.xml").readText()
+        val mirror = serviceBlock(manifest, ".CarMirrorService")
 
         assertTrue(
             manifest.contains("""android:name=".CarMirrorService"""")
         )
-        assertTrue(
-            manifest.contains("androidx.car.app.category.NAVIGATION")
+        assertTrue(mirror.contains("""android:exported="false""""))
+        assertFalse(
+            "CarMirrorService must not be an Android Auto NAVIGATION launcher",
+            mirror.contains("androidx.car.app.CarAppService")
+        )
+        assertFalse(
+            mirror.contains("androidx.car.app.category.NAVIGATION")
         )
         assertTrue(
             manifest.contains("""android:name=".MediaProjectionPermissionActivity"""")
@@ -339,46 +356,212 @@ class AndroidAutoDiscoveryTest {
     }
 
     private fun sourceFile(relativeFromMain: String): File {
-        var dir = File(".").canonicalFile
-
-        repeat(8) {
-            val appPath = File(dir, "app/src/main/$relativeFromMain")
-            if (appPath.isFile) {
-                return appPath
-            }
-
-            val modulePath = File(dir, "src/main/$relativeFromMain")
-            if (modulePath.isFile) {
-                return modulePath
-            }
-
-            dir = dir.parentFile ?: return appPath
-        }
-
-        throw IllegalStateException(
-            "Source file not found: $relativeFromMain"
-        )
+        return mainSourceFile(relativeFromMain)
     }
 
     private fun sourceDir(relativeFromMain: String): File {
-        var dir = File(".").canonicalFile
+        return mainSourceDir(relativeFromMain)
+    }
+}
 
-        repeat(8) {
-            val appPath = File(dir, "app/src/main/$relativeFromMain")
-            if (appPath.isDirectory) {
-                return appPath
-            }
+class AndroidAutoEntryPointTest {
 
-            val modulePath = File(dir, "src/main/$relativeFromMain")
-            if (modulePath.isDirectory) {
-                return modulePath
-            }
+    @Test
+    fun carVideoServiceIsTheOnlyAndroidAutoLauncher() {
+        val manifest = mainSourceFile("AndroidManifest.xml").readText()
+        val video = serviceBlock(manifest, ".CarVideoService")
+        val media = serviceBlock(manifest, ".CarMediaService")
+        val mirror = serviceBlock(manifest, ".CarMirrorService")
+        val registration = activityBlock(manifest, ".RegistrationActivity")
 
-            dir = dir.parentFile ?: return appPath
-        }
+        assertTrue(video.contains("""android:exported="true""""))
+        assertTrue(video.contains("android.intent.action.MAIN"))
+        assertTrue(
+            video.contains(
+                "com.google.android.gms.car.category.CATEGORY_PROJECTION"
+            )
+        )
+        assertTrue(
+            video.contains(
+                "com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM"
+            )
+        )
+        assertFalse(
+            "CarVideoService must not require a host-blocking permission",
+            video.contains("android:permission")
+        )
 
-        throw IllegalStateException(
-            "Source dir not found: $relativeFromMain"
+        assertTrue(media.contains("""android:exported="false""""))
+        assertFalse(media.contains("MediaBrowserService"))
+        assertFalse(media.contains("MediaLibraryService"))
+        assertFalse(media.contains("MEDIA_PLAY_FROM_SEARCH"))
+        assertTrue(manifest.contains("""android:label="Karadag Radyo""""))
+
+        assertTrue(mirror.contains("""android:exported="false""""))
+        assertFalse(mirror.contains("androidx.car.app.CarAppService"))
+        assertFalse(mirror.contains("androidx.car.app.category.NAVIGATION"))
+
+        assertTrue(registration.contains("android.intent.category.LAUNCHER"))
+        assertFalse(registration.contains("android.intent.category.CAR_LAUNCHER"))
+        assertFalse(manifest.contains("android.intent.category.CAR_LAUNCHER"))
+
+        val projectionMatches = Regex(
+            "com\\.google\\.android\\.gms\\.car\\.category\\.CATEGORY_PROJECTION\""
+        ).findAll(manifest).count()
+        assertTrue(
+            "CATEGORY_PROJECTION must appear on CarVideoService (and queries)",
+            projectionMatches >= 2
+        )
+        assertFalse(
+            media.contains("CATEGORY_PROJECTION")
+        )
+        assertFalse(
+            mirror.contains("CATEGORY_PROJECTION")
         )
     }
+
+    @Test
+    fun carVideoServiceDiscoversAndLaunchesCarVideoActivity() {
+        val service = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarVideoService.kt"
+        ).readText()
+        val activity = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
+        val destinations = mainSourceFile(
+            "java/com/karadaglabs/cartv/ProjectionDestination.kt"
+        ).readText()
+        val chrome = mainSourceFile(
+            "java/com/karadaglabs/cartv/HostedNavigation.kt"
+        ).readText()
+
+        assertTrue(service.contains("class CarVideoService : CarActivityService()"))
+        assertTrue(service.contains("override fun getCarActivity()"))
+        assertTrue(service.contains("return CarVideoActivity::class.java"))
+        assertFalse(service.contains("CarYouTubeActivity"))
+        assertFalse(service.contains("CarGoogleActivity"))
+        assertFalse(service.contains("CarMediaService"))
+
+        assertTrue(activity.contains("class CarVideoActivity : CarActivity()"))
+        assertTrue(activity.contains("CAR VIDEO ACTIVITY AÇILDI"))
+        assertTrue(destinations.contains("Canlı TV"))
+        assertTrue(destinations.contains("Canlı Radyo"))
+        assertTrue(destinations.contains("YouTube"))
+        assertTrue(destinations.contains("Google"))
+        assertTrue(chrome.contains("ProjectionDestination.entries"))
+        assertTrue(chrome.contains("Karadag Car TV"))
+    }
+
+    @Test
+    fun carMediaServiceRootDoesNotContainTvYoutubeOrGoogle() {
+        val media = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarMediaService.kt"
+        ).readText()
+
+        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
+        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
+        assertTrue(rootStart >= 0)
+        assertTrue(radioStart > rootStart)
+        val rootBlock = media.substring(rootStart, radioStart)
+
+        assertFalse(rootBlock.contains("LIVE_TV_ID"))
+        assertFalse(rootBlock.contains("YOUTUBE_ID"))
+        assertFalse(rootBlock.contains("GOOGLE_ID"))
+        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertTrue(media.contains("MediaLibraryService yalnızca radyo içindir"))
+    }
+
+    @Test
+    fun automotiveHostMustDiscoverProjectionNotMediaBrowse() {
+        val desc = mainSourceFile("res/xml/automotive_app_desc.xml").readText()
+        val activeUses = desc.lineSequence()
+            .map { it.trim() }
+            .filter { it.startsWith("<uses") }
+            .toList()
+
+        assertTrue(activeUses.any { it.contains("""name="projection"""") })
+        assertTrue(activeUses.any { it.contains("""name="video"""") })
+        assertTrue(activeUses.any { it.contains("""name="service"""") })
+        assertFalse(activeUses.any { it.contains("""name="media"""") })
+        assertFalse(activeUses.any { it.contains("""name="template"""") })
+        assertTrue(desc.contains("""<!-- <uses name="media" /> -->"""))
+        assertTrue(desc.contains("""<!-- <uses name="template" /> -->"""))
+    }
+}
+
+private fun serviceBlock(manifest: String, className: String): String {
+    return componentBlock(manifest, "service", className)
+}
+
+private fun activityBlock(manifest: String, className: String): String {
+    return componentBlock(manifest, "activity", className)
+}
+
+private fun componentBlock(
+    manifest: String,
+    tag: String,
+    className: String
+): String {
+    val nameAttr = """android:name="$className""""
+    val nameIndex = manifest.indexOf(nameAttr)
+    assertTrue("$className missing from manifest", nameIndex >= 0)
+
+    val open = manifest.lastIndexOf("<$tag", nameIndex)
+    assertTrue("$tag block for $className missing", open >= 0)
+
+    val selfClose = manifest.indexOf("/>", nameIndex)
+    val endTag = manifest.indexOf("</$tag>", nameIndex)
+    val end = when {
+        endTag >= 0 && (selfClose < 0 || endTag < selfClose) ->
+            endTag + "</$tag>".length
+        selfClose >= 0 -> selfClose + 2
+        else -> error("$tag $className is not closed")
+    }
+
+    return manifest.substring(open, end)
+}
+
+private fun mainSourceFile(relativeFromMain: String): File {
+    var dir = File(".").canonicalFile
+
+    repeat(8) {
+        val appPath = File(dir, "app/src/main/$relativeFromMain")
+        if (appPath.isFile) {
+            return appPath
+        }
+
+        val modulePath = File(dir, "src/main/$relativeFromMain")
+        if (modulePath.isFile) {
+            return modulePath
+        }
+
+        dir = dir.parentFile ?: return appPath
+    }
+
+    throw IllegalStateException(
+        "Source file not found: $relativeFromMain"
+    )
+}
+
+private fun mainSourceDir(relativeFromMain: String): File {
+    var dir = File(".").canonicalFile
+
+    repeat(8) {
+        val appPath = File(dir, "app/src/main/$relativeFromMain")
+        if (appPath.isDirectory) {
+            return appPath
+        }
+
+        val modulePath = File(dir, "src/main/$relativeFromMain")
+        if (modulePath.isDirectory) {
+            return modulePath
+        }
+
+        dir = dir.parentFile ?: return appPath
+    }
+
+    throw IllegalStateException(
+        "Source dir not found: $relativeFromMain"
+    )
 }

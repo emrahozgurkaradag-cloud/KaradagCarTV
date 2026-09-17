@@ -1,21 +1,22 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        media: CarMediaService — yalnızca radyo (MediaSession).
-        Canlı TV MediaItem olarak gönderilmez; CarVideoService /
-        CarVideoActivity SurfaceView yolundan oynar.
-        template: CarMirrorService (izin yalnızca Mirror yüzeyinde).
-        service + projection: CarVideoService (aauto.aar OEM).
-        video: park halinde host video yeteneği bildirimi.
-        Kategori kısıtları bypass edilmez.
+        Projection is the only Android Auto launcher surface.
+        Gearhead opens CarVideoService → CarVideoActivity.
+        Media browse is not advertised: an exported MediaBrowserService
+        plus <uses name="media"/> makes the host open CarMediaService
+        (Power FM / Radyo Fenomen / Best FM) instead of the hosted menu.
+        Template is not advertised so CarMirrorService is not the tap target.
+        CarMediaService still exists in-process for radio playback.
+        video: park/OEM host video capability for SurfaceView.
     -->
-    <uses name="media" />
-    <uses name="template" />
-    <uses
-        name="service"
-        tools:ignore="InvalidUsesTagAttribute" />
     <uses
         name="projection"
         tools:ignore="InvalidUsesTagAttribute" />
     <uses name="video" />
+    <uses
+        name="service"
+        tools:ignore="InvalidUsesTagAttribute" />
+    <!-- <uses name="media" /> -->
+    <!-- <uses name="template" /> -->
 </automotiveApp>

@@ -102,9 +102,6 @@
                 <category
                     android:name="android.intent.category.LAUNCHER" />
 
-                <category
-                    android:name="android.intent.category.CAR_LAUNCHER" />
-
             </intent-filter>
 
         </activity>
@@ -149,53 +146,29 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.KaradagCarTV" />
 
-        <!-- ====================================================== -->
-        <!-- ANDROID AUTO MEDIA SERVICE                             -->
-        <!-- ====================================================== -->
-
+        <!--
+            In-process radio only. Not an Android Auto launcher.
+            Exporting MediaBrowserService + automotive "media" made
+            Gearhead open this service's station list instead of
+            CarVideoService → CarVideoActivity.
+        -->
         <service
             android:name=".CarMediaService"
-            android:exported="true"
-            android:foregroundServiceType="mediaPlayback">
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:label="Karadag Radyo" />
 
-            <intent-filter>
-
-                <action
-                    android:name="androidx.media3.session.MediaLibraryService" />
-
-                <action
-                    android:name="android.media.browse.MediaBrowserService" />
-
-                <action
-                    android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
-
-            </intent-filter>
-
-        </service>
-
-        <!-- ====================================================== -->
-        <!-- ANDROIDX CAR APP SERVICE                               -->
-        <!-- ====================================================== -->
-
+        <!--
+            Phone-initiated MediaProjection mirror. Not an Android Auto
+            launcher: a NAVIGATION CarAppService with the same app label
+            would compete with CarVideoService.
+        -->
         <service
             android:name=".CarMirrorService"
-            android:exported="true"
-            android:label="Karadag Car TV">
-
-            <intent-filter>
-
-                <action
-                    android:name="androidx.car.app.CarAppService" />
-
-                <category
-                    android:name="androidx.car.app.category.NAVIGATION" />
-
-            </intent-filter>
-
-        </service>
+            android:exported="false" />
 
         <!-- ====================================================== -->
-        <!-- FERMATA TİPİ CAR ACTIVITY SERVICE                     -->
+        <!-- ANDROID AUTO ENTRY: CarVideoService → CarVideoActivity -->
         <!-- ====================================================== -->
 
         <service
