@@ -474,6 +474,30 @@ class AndroidAutoEntryPointTest {
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertTrue(media.contains("MediaLibraryService yalnızca radyo içindir"))
+        assertTrue(media.contains("CarProjectionRouter.openVideoIfCarHost"))
+        assertTrue(media.contains("ON_GET_SESSION package="))
+        assertTrue(media.contains("ON_CONNECT package="))
+    }
+
+    @Test
+    fun gearheadMediaTapRoutesToCarVideoActivity() {
+        val router = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarProjectionRouter.kt"
+        ).readText()
+        val media = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarMediaService.kt"
+        ).readText()
+        val service = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarVideoService.kt"
+        ).readText()
+
+        assertTrue(router.contains("CarFirstPartyManager"))
+        assertTrue(router.contains("startCarActivity"))
+        assertTrue(router.contains("CarVideoActivity::class.java.name"))
+        assertTrue(router.contains("com.google.android.projection.gearhead"))
+        assertTrue(media.contains("CarProjectionRouter.openVideoIfCarHost"))
+        assertFalse(router.contains("createLiveTvMediaItem"))
+        assertTrue(service.contains("return CarVideoActivity::class.java"))
     }
 
     @Test

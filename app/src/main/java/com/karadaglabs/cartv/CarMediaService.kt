@@ -116,6 +116,15 @@ class CarMediaService : MediaLibraryService() {
         controllerInfo: MediaSession.ControllerInfo
     ): MediaLibrarySession {
 
+        Log.d(
+            TAG,
+            "ON_GET_SESSION package=${controllerInfo.packageName}"
+        )
+        CarProjectionRouter.openVideoIfCarHost(
+            this,
+            controllerInfo.packageName
+        )
+
         return mediaLibrarySession
     }
 
@@ -152,6 +161,21 @@ class CarMediaService : MediaLibraryService() {
          * --------------------------------------------------------
          */
 
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            Log.d(
+                TAG,
+                "ON_CONNECT package=${controller.packageName}"
+            )
+            CarProjectionRouter.openVideoIfCarHost(
+                this@CarMediaService,
+                controller.packageName
+            )
+            return super.onConnect(session, controller)
+        }
+
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
@@ -160,7 +184,11 @@ class CarMediaService : MediaLibraryService() {
 
             Log.d(
                 TAG,
-                "ON_GET_LIBRARY_ROOT"
+                "ON_GET_LIBRARY_ROOT package=${browser.packageName}"
+            )
+            CarProjectionRouter.openVideoIfCarHost(
+                this@CarMediaService,
+                browser.packageName
             )
 
             val extras =
