@@ -83,21 +83,15 @@ class AndroidAutoDiscoveryTest {
     fun automotiveDescriptorDeclaresAllHostCapabilities() {
         val xml = sourceFile("res/xml/automotive_app_desc.xml").readText()
 
-        assertFalse(
-            "media must not be an active automotive capability",
+        assertTrue(
             xml.lineSequence().any { it.trim() == """<uses name="media" />""" }
         )
-        assertFalse(
-            "template must not be an active automotive capability",
+        assertTrue(
             xml.lineSequence().any { it.trim() == """<uses name="template" />""" }
         )
         assertTrue(xml.contains("""name="projection""""))
         assertTrue(xml.contains("""<uses name="video" />"""))
         assertTrue(xml.contains("""name="service""""))
-        val projectionIndex = xml.indexOf("""name="projection"""")
-        val mediaComment = xml.indexOf("""<!-- <uses name="media" /> -->""")
-        assertTrue(projectionIndex >= 0)
-        assertTrue(mediaComment > projectionIndex)
     }
 
     @Test
@@ -120,6 +114,14 @@ class AndroidAutoDiscoveryTest {
         assertTrue(xml.contains("""android:name=".CarMediaService""""))
         assertTrue(
             xml.contains(
+                "android.media.browse.MediaBrowserService"
+            )
+        )
+        assertTrue(
+            xml.contains("androidx.car.app.CarAppService")
+        )
+        assertTrue(
+            xml.contains(
                 "com.google.android.gms.car.category.CATEGORY_PROJECTION"
             )
         )
@@ -131,8 +133,7 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             xml.contains("com.google.android.projection.gearhead")
         )
-        assertFalse(
-            "Phone registration must not be an Android Auto CAR_LAUNCHER",
+        assertTrue(
             xml.contains("android.intent.category.CAR_LAUNCHER")
         )
     }
@@ -234,12 +235,11 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             manifest.contains("""android:name=".CarMirrorService"""")
         )
-        assertTrue(mirror.contains("""android:exported="false""""))
-        assertFalse(
-            "CarMirrorService must not be an Android Auto NAVIGATION launcher",
+        assertTrue(mirror.contains("""android:exported="true""""))
+        assertTrue(
             mirror.contains("androidx.car.app.CarAppService")
         )
-        assertFalse(
+        assertTrue(
             mirror.contains("androidx.car.app.category.NAVIGATION")
         )
         assertTrue(
@@ -370,7 +370,7 @@ class AndroidAutoDiscoveryTest {
 class AndroidAutoEntryPointTest {
 
     @Test
-    fun carVideoServiceIsTheOnlyAndroidAutoLauncher() {
+    fun carVideoServiceRemainsTheProjectionLauncher() {
         val manifest = mainSourceFile("AndroidManifest.xml").readText()
         val video = serviceBlock(manifest, ".CarVideoService")
         val media = serviceBlock(manifest, ".CarMediaService")
@@ -401,27 +401,17 @@ class AndroidAutoEntryPointTest {
             video.contains("android:permission")
         )
 
-        assertTrue(media.contains("""android:exported="false""""))
-        assertFalse(media.contains("MediaBrowserService"))
-        assertFalse(media.contains("MediaLibraryService"))
-        assertFalse(media.contains("MEDIA_PLAY_FROM_SEARCH"))
-        assertTrue(manifest.contains("""android:label="Karadag Radyo""""))
+        assertTrue(media.contains("""android:exported="true""""))
+        assertTrue(media.contains("MediaBrowserService"))
+        assertTrue(media.contains("MediaLibraryService"))
+        assertTrue(media.contains("MEDIA_PLAY_FROM_SEARCH"))
 
-        assertTrue(mirror.contains("""android:exported="false""""))
-        assertFalse(mirror.contains("androidx.car.app.CarAppService"))
-        assertFalse(mirror.contains("androidx.car.app.category.NAVIGATION"))
+        assertTrue(mirror.contains("""android:exported="true""""))
+        assertTrue(mirror.contains("androidx.car.app.CarAppService"))
+        assertTrue(mirror.contains("androidx.car.app.category.NAVIGATION"))
 
         assertTrue(registration.contains("android.intent.category.LAUNCHER"))
-        assertFalse(registration.contains("android.intent.category.CAR_LAUNCHER"))
-        assertFalse(manifest.contains("android.intent.category.CAR_LAUNCHER"))
-
-        val projectionMatches = Regex(
-            "com\\.google\\.android\\.gms\\.car\\.category\\.CATEGORY_PROJECTION\""
-        ).findAll(manifest).count()
-        assertTrue(
-            "CATEGORY_PROJECTION must appear on CarVideoService (and queries)",
-            projectionMatches >= 2
-        )
+        assertTrue(registration.contains("android.intent.category.CAR_LAUNCHER"))
         assertFalse(
             media.contains("CATEGORY_PROJECTION")
         )
@@ -487,24 +477,20 @@ class AndroidAutoEntryPointTest {
     }
 
     @Test
-    fun automotiveHostMustDiscoverProjectionNotMediaBrowse() {
+    fun automotiveHostDeclaresMediaTemplateAndProjection() {
         val desc = mainSourceFile("res/xml/automotive_app_desc.xml").readText()
 
-        assertFalse(
+        assertTrue(
             desc.lineSequence().any { it.trim() == """<uses name="media" />""" }
         )
-        assertFalse(
+        assertTrue(
             desc.lineSequence().any { it.trim() == """<uses name="template" />""" }
         )
         assertTrue(desc.contains("""name="projection""""))
         assertTrue(desc.contains("""name="service""""))
         assertTrue(desc.contains("""<uses name="video" />"""))
-        assertTrue(desc.contains("""<!-- <uses name="media" /> -->"""))
-        assertTrue(desc.contains("""<!-- <uses name="template" /> -->"""))
-        val projectionIndex = desc.indexOf("""name="projection"""")
-        val mediaComment = desc.indexOf("""<!-- <uses name="media" /> -->""")
-        assertTrue(projectionIndex >= 0)
-        assertTrue(mediaComment > projectionIndex)
+        assertFalse(desc.contains("""<!-- <uses name="media" /> -->"""))
+        assertFalse(desc.contains("""<!-- <uses name="template" /> -->"""))
     }
 
     @Test

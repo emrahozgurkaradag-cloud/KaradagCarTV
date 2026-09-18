@@ -1,22 +1,22 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        Projection is the only Android Auto launcher surface.
-        Gearhead opens CarVideoService → CarVideoActivity.
-        Media browse is not advertised: an exported MediaBrowserService
-        plus <uses name="media"/> makes the host open CarMediaService
-        (Power FM / Radyo Fenomen / Best FM) instead of the hosted menu.
-        Template is not advertised so CarMirrorService is not the tap target.
-        CarMediaService still exists in-process for radio playback.
-        video: park/OEM host video capability for SurfaceView.
+        1.0.7 discovery restored. Real-car 1.0.9 hid the app after
+        media/template were removed. This car lists Karadag Car TV
+        as a media app; projection-only is invisible.
+        media: CarMediaService (radio MediaSession).
+        template: CarMirrorService.
+        service + projection: CarVideoService (aauto.aar).
+        video: park/OEM host video capability.
+        TV is not a MediaItem.
     -->
+    <uses name="media" />
+    <uses name="template" />
+    <uses
+        name="service"
+        tools:ignore="InvalidUsesTagAttribute" />
     <uses
         name="projection"
         tools:ignore="InvalidUsesTagAttribute" />
     <uses name="video" />
-    <uses
-        name="service"
-        tools:ignore="InvalidUsesTagAttribute" />
-    <!-- <uses name="media" /> -->
-    <!-- <uses name="template" /> -->
 </automotiveApp>
