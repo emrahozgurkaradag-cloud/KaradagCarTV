@@ -1,8 +1,10 @@
 ﻿package com.karadaglabs.cartv
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import android.view.SurfaceHolder
@@ -10,9 +12,11 @@ import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -110,6 +114,18 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "======================================"
         )
+    }
+
+    override fun onBind(intent: Intent?): IBinder? {
+        Log.d(
+            TAG,
+            "ON_BIND action=${intent?.action}"
+        )
+        CarProjectionRouter.openVideoIfCarHost(
+            this,
+            intent?.action
+        )
+        return super.onBind(intent)
     }
 
     override fun onGetSession(
@@ -286,24 +302,32 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * MediaLibraryService yalnızca radyo içindir.
-                 * Canlı TV / YouTube / Google MediaItem olarak
-                 * verilmez; aksi halde Android Auto Now Playing
-                 * veya boş "Öğe yok" klasörüne düşer.
+                 * MediaLibraryService is discovery-only. Gearhead's
+                 * icon tap binds this service; CarProjectionRouter
+                 * then starts CarVideoActivity. Root must not return
+                 * playable radio / TV / YouTube / Google MediaItems
+                 * or the tap stays on Radio MediaBrowser / Now Playing.
                  */
-                val items =
-                    radios.map { radio ->
-                        createRadioMediaItem(radio)
-                    }
+                CarProjectionRouter.openVideoIfCarHost(
+                    this@CarMediaService,
+                    browser.packageName
+                )
 
                 Log.d(
                     TAG,
-                    "ROOT radio count = ${items.size}"
+                    "ROOT hosted home item; TV is not a MediaItem"
                 )
 
                 return Futures.immediateFuture(
                     LibraryResult.ofItemList(
-                        ImmutableList.copyOf(items),
+                        ImmutableList.of(
+                            createInfoItem(
+                                id = HOME_ID,
+                                title = "Karadag Car TV",
+                                subtitle =
+                                    "Ana menü araç ekranında açılır"
+                            )
+                        ),
                         params
                     )
                 )
@@ -462,6 +486,23 @@ class CarMediaService : MediaLibraryService() {
                             ROOT_ID,
                             "Karadag Car TV",
                             "Karadag Car TV"
+                        ),
+
+                        null
+                    )
+                )
+            }
+
+            if (mediaId == HOME_ID) {
+
+                return Futures.immediateFuture(
+
+                    LibraryResult.ofItem(
+
+                        createInfoItem(
+                            HOME_ID,
+                            "Karadag Car TV",
+                            "Ana menü araç ekranında açılır"
                         ),
 
                         null
@@ -946,6 +987,9 @@ class CarMediaService : MediaLibraryService() {
         private const val ROOT_ID =
             "karadag-car-tv-root"
 
+        private const val HOME_ID =
+            "karadag-car-home"
+
         private const val LIVE_TV_ID =
             "karadag-live-tv"
 
@@ -1023,6 +1067,25 @@ object CarVideoPlayerHolder {
                     "CAR VIDEO FIRST FRAME " +
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "surface=${surfaceView?.holder?.surface}"
+                )
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                val cause = error.cause
+                val http = cause as? HttpDataSource.InvalidResponseCodeException
+                val url = pendingChannel?.streamUrl ?: pendingAudio?.streamUrl
+                val kind = streamKind(url)
+
+                Log.e(
+                    TAG,
+                    "ExoPlayer error " +
+                        "code=${error.errorCode} " +
+                        "name=${error.errorCodeName} " +
+                        "http=${http?.responseCode ?: "-"} " +
+                        "kind=$kind " +
+                        "url=$url " +
+                        "message=${error.message}",
+                    error
                 )
             }
 
@@ -1298,8 +1361,24 @@ object CarVideoPlayerHolder {
 
             Log.d(
                 TAG,
-                "Prepared projection channel ${channel.mediaId}"
+                "Prepared projection channel ${channel.mediaId} " +
+                    "kind=${streamKind(channel.streamUrl)} " +
+                    "url=${channel.streamUrl}"
             )
+        }
+    }
+
+    private fun streamKind(url: String?): String {
+        val value = url.orEmpty().lowercase()
+        return when {
+            value.isBlank() -> "none"
+            value.contains(".m3u8") -> "hls"
+            value.contains(".mpd") -> "dash"
+            value.contains(".mp4") -> "mp4"
+            value.contains(".ts") -> "ts"
+            value.startsWith("http://") -> "http"
+            value.startsWith("https://") -> "https"
+            else -> "unknown"
         }
     }
 

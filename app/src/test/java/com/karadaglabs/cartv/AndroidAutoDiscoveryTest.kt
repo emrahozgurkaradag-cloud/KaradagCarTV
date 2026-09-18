@@ -181,7 +181,12 @@ class AndroidAutoDiscoveryTest {
             rootBlock.contains("GOOGLE_ID")
         )
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
-        assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertFalse(
+            "Root must not open the radio MediaBrowser",
+            rootBlock.contains("createRadioMediaItem")
+        )
+        assertTrue(rootBlock.contains("CarProjectionRouter.openVideoIfCarHost"))
+        assertTrue(rootBlock.contains("HOME_ID"))
         assertFalse(media.contains("YouTube telefonda açılır"))
     }
 
@@ -330,6 +335,10 @@ class AndroidAutoDiscoveryTest {
         assertTrue(chrome.contains("ProjectionDestination.entries"))
         assertTrue(activity.contains("prepareChannel"))
         assertTrue(activity.contains("selectChannel"))
+        assertTrue(activity.contains("buildHomeUi"))
+        assertTrue(activity.contains("ProjectionDestination.HOME"))
+        assertTrue(activity.contains("IptvRepository.loadCached"))
+        assertFalse(activity.contains("Power FM"))
         assertTrue(activity.contains("CAR VIDEO ACTIVITY AÇILDI"))
         assertTrue(activity.contains("CAR VIDEO SURFACE CREATED"))
         assertTrue(activity.contains("CarYouTubeActivity").not() || activity.contains("HostedNavigation"))
@@ -343,6 +352,8 @@ class AndroidAutoDiscoveryTest {
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
         assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
         assertTrue(holder.contains("ExoPlayer STATE_READY"))
+        assertTrue(holder.contains("onPlayerError"))
+        assertTrue(holder.contains("PlaybackException"))
         assertFalse(holder.contains("CarVideoPlayerHolder.setPlayer(player)"))
     }
 
@@ -472,11 +483,13 @@ class AndroidAutoEntryPointTest {
         assertFalse(rootBlock.contains("YOUTUBE_ID"))
         assertFalse(rootBlock.contains("GOOGLE_ID"))
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
-        assertTrue(rootBlock.contains("createRadioMediaItem"))
-        assertTrue(media.contains("MediaLibraryService yalnızca radyo içindir"))
+        assertFalse(rootBlock.contains("createRadioMediaItem"))
+        assertTrue(rootBlock.contains("HOME_ID"))
+        assertTrue(media.contains("MediaLibraryService is discovery-only"))
         assertTrue(media.contains("CarProjectionRouter.openVideoIfCarHost"))
         assertTrue(media.contains("ON_GET_SESSION package="))
         assertTrue(media.contains("ON_CONNECT package="))
+        assertTrue(media.contains("ON_BIND action="))
     }
 
     @Test
@@ -493,9 +506,14 @@ class AndroidAutoEntryPointTest {
 
         assertTrue(router.contains("CarFirstPartyManager"))
         assertTrue(router.contains("startCarActivity"))
+        assertTrue(router.contains("CarFirstPartyManager.SERVICE_NAME"))
         assertTrue(router.contains("CarVideoActivity::class.java.name"))
+        assertTrue(router.contains("CarVideoService::class.java.name"))
+        assertTrue(router.contains("CATEGORY_PROJECTION"))
+        assertTrue(router.contains("android.intent.extra.PACKAGE_NAME"))
         assertTrue(router.contains("com.google.android.projection.gearhead"))
         assertTrue(media.contains("CarProjectionRouter.openVideoIfCarHost"))
+        assertTrue(media.contains("override fun onBind"))
         assertFalse(router.contains("createLiveTvMediaItem"))
         assertTrue(service.contains("return CarVideoActivity::class.java"))
     }

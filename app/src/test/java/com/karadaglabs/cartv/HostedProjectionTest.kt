@@ -14,14 +14,16 @@ class HostedProjectionDestinationTest {
         assertEquals("YOUTUBE", ProjectionDestination.YOUTUBE.name)
         assertEquals("GOOGLE", ProjectionDestination.GOOGLE.name)
         assertEquals("RADIO", ProjectionDestination.RADIO.name)
+        assertEquals("HOME", ProjectionDestination.HOME.name)
         assertEquals("Canlı TV", ProjectionDestination.LIVE_TV.label)
+        assertEquals("Ana Menü", ProjectionDestination.HOME.label)
         assertEquals("YouTube", ProjectionDestination.YOUTUBE.label)
         assertEquals("Google", ProjectionDestination.GOOGLE.label)
         assertEquals("Canlı Radyo", ProjectionDestination.RADIO.label)
     }
 
     @Test
-    fun extraParsesKnownDestinationsAndDefaultsToLiveTv() {
+    fun extraParsesKnownDestinationsAndDefaultsToHome() {
         assertEquals(
             ProjectionDestination.YOUTUBE,
             ProjectionDestination.fromExtra("YOUTUBE")
@@ -36,10 +38,14 @@ class HostedProjectionDestinationTest {
         )
         assertEquals(
             ProjectionDestination.LIVE_TV,
+            ProjectionDestination.fromExtra("LIVE_TV")
+        )
+        assertEquals(
+            ProjectionDestination.HOME,
             ProjectionDestination.fromExtra(null)
         )
         assertEquals(
-            ProjectionDestination.LIVE_TV,
+            ProjectionDestination.HOME,
             ProjectionDestination.fromExtra("unknown")
         )
     }
@@ -154,8 +160,8 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("KEYCODE_BACK"))
         assertTrue(youtube.contains("navigateBack()"))
         assertTrue(google.contains("navigateBack()"))
-        assertTrue(youtube.contains("ProjectionDestination.LIVE_TV"))
-        assertTrue(google.contains("ProjectionDestination.LIVE_TV"))
+        assertTrue(youtube.contains("ProjectionDestination.HOME"))
+        assertTrue(google.contains("ProjectionDestination.HOME"))
     }
 
     @Test
@@ -184,7 +190,7 @@ class HostedProjectionSourceTest {
         val media = source("java/com/karadaglabs/cartv/CarMediaService.kt")
 
         assertTrue(media.contains("createRadioMediaItem"))
-        assertTrue(media.contains("MediaLibraryService yalnızca radyo içindir"))
+        assertTrue(media.contains("MediaLibraryService is discovery-only"))
         assertFalse(media.contains("YouTube telefonda açılır"))
         val addStart = media.indexOf("override fun onAddMediaItems")
         val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
@@ -197,7 +203,9 @@ class HostedProjectionSourceTest {
         val rootBlock = media.substring(rootStart, radioStart)
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertFalse(rootBlock.contains("LIVE_TV_ID"))
-        assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertFalse(rootBlock.contains("createRadioMediaItem"))
+        assertTrue(rootBlock.contains("HOME_ID"))
+        assertTrue(rootBlock.contains("CarProjectionRouter.openVideoIfCarHost"))
     }
 
     @Test

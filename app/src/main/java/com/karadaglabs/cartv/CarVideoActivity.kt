@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -17,6 +18,7 @@ import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
 import android.widget.BaseAdapter
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.GridView
 import android.widget.ImageView
@@ -30,10 +32,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Hosted CarActivity window. IPTV channel UI is Android Views.
- * Video renders into a SurfaceView that stays inside the Gearhead
- * CarActivity window. Media overlay z-order is not used: that
- * creates a separate surface Android Auto does not project.
+ * Hosted CarActivity window. The Android Auto media tap is routed here
+ * so the car screen shows this activity, not Gearhead's radio browser.
+ *
+ * HOME keeps Canlı TV / Canlı Radyo / YouTube / Google in this window
+ * (YouTube and Google then start their own hosted CarActivities).
+ * Canlı TV stays in this activity, loads every IptvRepository channel,
+ * and plays on this activity's ExoPlayer into an in-window SurfaceView.
  */
 @UnstableApi
 class CarVideoActivity : CarActivity() {
@@ -47,13 +52,13 @@ class CarVideoActivity : CarActivity() {
 
     private var surfaceView: SurfaceView? = null
     private var listContainer: View? = null
-    private var menuContainer: View? = null
-    private var rootColumn: LinearLayout? = null
+    private var homeContainer: View? = null
     private var statusView: TextView? = null
     private var gridView: GridView? = null
     private var adapter: ChannelAdapter? = null
+    private var listTitleView: TextView? = null
 
-    private var destination = ProjectionDestination.LIVE_TV
+    private var destination = ProjectionDestination.HOME
     private var selectedRadioId: String? = null
     private var state = ProjectionUiState()
     private var destroyed = false
@@ -99,17 +104,6 @@ class CarVideoActivity : CarActivity() {
             keepScreenOn = true
         }
 
-        val content = FrameLayout(this).apply {
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.BLACK)
-        }
-
-        val list = buildListUi()
-        listContainer = list
-
         val view = SurfaceView(this).apply {
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -118,28 +112,18 @@ class CarVideoActivity : CarActivity() {
             keepScreenOn = true
             visibility = View.VISIBLE
         }
-
         view.holder.setFormat(PixelFormat.RGBX_8888)
         view.holder.addCallback(surfaceCallback)
-        content.addView(view)
-        content.addView(list)
         surfaceView = view
-        root.addView(content)
+        root.addView(view)
 
-        val menuColumn = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-        }
-        val menu = HostedNavigation.menuBar(this, destination) { next ->
-            onMenuSelected(next)
-        }
-        menuContainer = menu
-        menuColumn.addView(menu)
-        rootColumn = menuColumn
-        root.addView(menuColumn)
+        val home = buildHomeUi()
+        homeContainer = home
+        root.addView(home)
+
+        val list = buildListUi()
+        listContainer = list
+        root.addView(list)
 
         setContentView(root)
         HostedNavigation.hideChrome(this)
@@ -186,11 +170,7 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onBackPressed() {
-        if (
-            destination == ProjectionDestination.LIVE_TV &&
-            state.mode == ProjectionMode.PLAYING
-        ) {
-            showChannelList()
+        if (consumeBack()) {
             return
         }
 
@@ -198,8 +178,15 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, keyEvent: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && consumeBack()) {
+            return true
+        }
+
+        return super.onKeyUp(keyCode, keyEvent)
+    }
+
+    private fun consumeBack(): Boolean {
         if (
-            keyCode == KeyEvent.KEYCODE_BACK &&
             destination == ProjectionDestination.LIVE_TV &&
             state.mode == ProjectionMode.PLAYING
         ) {
@@ -207,17 +194,25 @@ class CarVideoActivity : CarActivity() {
             return true
         }
 
-        return super.onKeyUp(keyCode, keyEvent)
+        if (
+            destination == ProjectionDestination.LIVE_TV ||
+            destination == ProjectionDestination.RADIO
+        ) {
+            showHome()
+            return true
+        }
+
+        return false
+    }
+
+    private fun showHome() {
+        destination = ProjectionDestination.HOME
+        state = state.showList()
+        CarVideoPlayerHolder.setPlayWhenReady(false)
+        applyState()
     }
 
     private fun onMenuSelected(next: ProjectionDestination) {
-        if (next == destination) {
-            if (next == ProjectionDestination.LIVE_TV) {
-                showChannelList()
-            }
-            return
-        }
-
         if (
             next == ProjectionDestination.YOUTUBE ||
             next == ProjectionDestination.GOOGLE
@@ -226,25 +221,20 @@ class CarVideoActivity : CarActivity() {
             return
         }
 
+        if (next == destination && next == ProjectionDestination.LIVE_TV) {
+            showChannelList()
+            return
+        }
+
         destination = next
         if (next == ProjectionDestination.RADIO) {
             state = state.showList()
             CarVideoPlayerHolder.setPlayWhenReady(false)
+        } else if (next == ProjectionDestination.LIVE_TV) {
+            state = state.showList()
+            CarVideoPlayerHolder.setPlayWhenReady(false)
         }
-        refreshMenu()
         applyState()
-    }
-
-    private fun refreshMenu() {
-        val root = rootColumn ?: return
-        val previous = menuContainer ?: return
-        val index = root.indexOfChild(previous)
-        val menu = HostedNavigation.menuBar(this, destination) { next ->
-            onMenuSelected(next)
-        }
-        root.removeView(previous)
-        root.addView(menu, index)
-        menuContainer = menu
     }
 
     private fun loadChannels() {
@@ -309,20 +299,51 @@ class CarVideoActivity : CarActivity() {
             return
         }
 
+        HostedNavigation.hideChrome(this)
+
+        val playing = destination == ProjectionDestination.LIVE_TV &&
+            state.mode == ProjectionMode.PLAYING &&
+            state.hostAvailable &&
+            state.selected != null
+
+        homeContainer?.visibility =
+            if (destination == ProjectionDestination.HOME && !playing) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        listContainer?.visibility =
+            if (
+                !playing &&
+                (
+                    destination == ProjectionDestination.LIVE_TV ||
+                        destination == ProjectionDestination.RADIO
+                    )
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        surfaceView?.visibility = View.VISIBLE
+
         if (destination == ProjectionDestination.RADIO) {
             applyRadioState()
             return
         }
 
+        if (destination == ProjectionDestination.HOME) {
+            surfaceView?.let { view ->
+                CarVideoPlayerHolder.clearCarSurfaceView(view)
+            }
+            CarVideoPlayerHolder.setPlayWhenReady(false)
+            return
+        }
+
+        listTitleView?.text = "Canlı TV"
         statusView?.text = state.statusText
         adapter?.update(state.channels, state.selectedId)
-
-        val playing = state.mode == ProjectionMode.PLAYING &&
-            state.hostAvailable &&
-            state.selected != null
-
-        listContainer?.visibility = if (playing) View.GONE else View.VISIBLE
-        surfaceView?.visibility = View.VISIBLE
 
         val selected = state.selected
         val view = surfaceView
@@ -351,10 +372,8 @@ class CarVideoActivity : CarActivity() {
 
     private fun applyRadioState() {
         surfaceView?.let { view ->
-            view.visibility = View.GONE
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
-        listContainer?.visibility = View.VISIBLE
 
         val radios = RadioStations.all
         val selected = radios.firstOrNull { it.id == selectedRadioId }
@@ -366,8 +385,11 @@ class CarVideoActivity : CarActivity() {
                 streamUrl = selected.url
             )
             CarVideoPlayerHolder.setPlayWhenReady(true)
+        } else {
+            CarVideoPlayerHolder.setPlayWhenReady(false)
         }
 
+        listTitleView?.text = "Canlı Radyo"
         statusView?.text = if (selected == null) {
             "${radios.size} radyo"
         } else {
@@ -443,9 +465,8 @@ class CarVideoActivity : CarActivity() {
         )
     }
 
-    private fun buildListUi(): LinearLayout {
+    private fun buildHomeUi(): LinearLayout {
         val density = resources.displayMetrics.density
-
         fun dp(value: Int): Int = (value * density).toInt()
 
         val container = LinearLayout(this).apply {
@@ -455,7 +476,73 @@ class CarVideoActivity : CarActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
             setBackgroundColor(Color.BLACK)
-            setPadding(dp(16), dp(72), dp(16), dp(12))
+            setPadding(dp(24), dp(20), dp(24), dp(20))
+            gravity = Gravity.CENTER
+        }
+
+        val title = TextView(this).apply {
+            text = "Karadag Car TV"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(16))
+        }
+        container.addView(title)
+
+        ProjectionDestination.menuDestinations.forEach { dest ->
+            val button = Button(this).apply {
+                text = dest.label
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                isAllCaps = false
+                setOnClickListener { onMenuSelected(dest) }
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    0,
+                    1f
+                ).apply {
+                    topMargin = dp(8)
+                    bottomMargin = dp(8)
+                }
+                minHeight = dp(56)
+            }
+            container.addView(button)
+        }
+
+        return container
+    }
+
+    private fun buildListUi(): LinearLayout {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).toInt()
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            visibility = View.GONE
+        }
+
+        val homeButton = Button(this).apply {
+            text = "Ana Menü"
+            isAllCaps = false
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setOnClickListener { showHome() }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        listTitleView = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(8), 0, dp(4))
         }
 
         statusView = TextView(this).apply {
@@ -481,6 +568,8 @@ class CarVideoActivity : CarActivity() {
             )
         }
 
+        container.addView(homeButton)
+        container.addView(listTitleView)
         container.addView(statusView)
         container.addView(gridView)
 

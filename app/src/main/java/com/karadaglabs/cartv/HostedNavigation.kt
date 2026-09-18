@@ -46,6 +46,7 @@ object HostedNavigation {
 
     fun className(destination: ProjectionDestination): String {
         return when (destination) {
+            ProjectionDestination.HOME,
             ProjectionDestination.LIVE_TV,
             ProjectionDestination.RADIO ->
                 CarVideoActivity::class.java.name
@@ -105,7 +106,9 @@ object HostedNavigation {
             )
         }
 
-        ProjectionDestination.entries.forEach { destination ->
+        ProjectionDestination.entries
+            .filter { it != ProjectionDestination.HOME }
+            .forEach { destination ->
             val selected = destination == current
             val button = Button(activity).apply {
                 text = destination.label

@@ -138,7 +138,7 @@ class CarYouTubeActivity : CarActivity() {
             return
         }
 
-        HostedNavigation.open(this, ProjectionDestination.LIVE_TV)
+        HostedNavigation.open(this, ProjectionDestination.HOME)
     }
 
     private fun applyVideoFocus(request: Boolean) {
