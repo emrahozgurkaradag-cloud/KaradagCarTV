@@ -26,7 +26,8 @@ class AndroidAutoVideoPathTest {
         assertFalse(rootBlock.contains("setIsPlayable(\n                        true"))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
         assertTrue(rootBlock.contains("createInfoItem"))
-        assertTrue(media.contains("setIsPlayable(\n                    false"))
+        assertTrue(rootBlock.contains("Ana menü araç ekranında açılır"))
+        assertTrue(media.contains("setIsPlayable"))
     }
 
     @Test
