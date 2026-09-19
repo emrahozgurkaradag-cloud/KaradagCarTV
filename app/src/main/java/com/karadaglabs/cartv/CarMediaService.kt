@@ -121,9 +121,9 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "ON_BIND action=${intent?.action}"
         )
-        CarProjectionRouter.openVideoIfCarHost(
+        CarProjectionRouter.openFromBind(
             this,
-            intent?.action
+            intent?.`package` ?: intent?.action
         )
         return super.onBind(intent)
     }
@@ -136,7 +136,7 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "ON_GET_SESSION package=${controllerInfo.packageName}"
         )
-        CarProjectionRouter.openVideoIfCarHost(
+        CarProjectionRouter.openFromSession(
             this,
             controllerInfo.packageName
         )
@@ -185,7 +185,7 @@ class CarMediaService : MediaLibraryService() {
                 TAG,
                 "ON_CONNECT package=${controller.packageName}"
             )
-            CarProjectionRouter.openVideoIfCarHost(
+            CarProjectionRouter.openFromConnect(
                 this@CarMediaService,
                 controller.packageName
             )
@@ -202,7 +202,7 @@ class CarMediaService : MediaLibraryService() {
                 TAG,
                 "ON_GET_LIBRARY_ROOT package=${browser.packageName}"
             )
-            CarProjectionRouter.openVideoIfCarHost(
+            CarProjectionRouter.openFromRoot(
                 this@CarMediaService,
                 browser.packageName
             )
@@ -302,30 +302,50 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * MediaLibraryService is discovery-only. Gearhead's
-                 * icon tap binds this service; CarProjectionRouter
-                 * then starts CarVideoActivity. Root must not return
-                 * playable radio / TV / YouTube / Google MediaItems
-                 * or the tap stays on Radio MediaBrowser / Now Playing.
+                 * MediaLibraryService is discovery-only. Real-car
+                 * 1.0.12 hid a non-browsable info item as "Öğe yok".
+                 * Gearhead keeps BROWSABLE + not-playable folders.
+                 * TV / radio / YouTube / Google are not playable
+                 * MediaItems. Selecting this folder retriggers
+                 * CarVideoActivity routing in onGetChildren(HOME_ID).
                  */
-                CarProjectionRouter.openVideoIfCarHost(
+                CarProjectionRouter.openFromChildren(
                     this@CarMediaService,
                     browser.packageName
                 )
 
                 Log.d(
                     TAG,
-                    "ROOT hosted home item; TV is not a MediaItem"
+                    "ROOT browsable home item; TV is not a MediaItem"
                 )
 
                 return Futures.immediateFuture(
                     LibraryResult.ofItemList(
                         ImmutableList.of(
-                            createInfoItem(
-                                id = HOME_ID,
-                                title = "Karadag Car TV",
-                                subtitle =
-                                    "Ana menü araç ekranında açılır"
+                            createCategoryItem(
+                                HOME_ID,
+                                "Karadag Car TV",
+                                "Ana menü"
+                            )
+                        ),
+                        params
+                    )
+                )
+            }
+
+            if (parentId == HOME_ID || parentId == HOME_MENU_ID) {
+                CarProjectionRouter.openFromChildren(
+                    this@CarMediaService,
+                    browser.packageName
+                )
+
+                return Futures.immediateFuture(
+                    LibraryResult.ofItemList(
+                        ImmutableList.of(
+                            createCategoryItem(
+                                HOME_MENU_ID,
+                                "Ana Menü",
+                                "Karadag Car TV"
                             )
                         ),
                         params
@@ -499,10 +519,10 @@ class CarMediaService : MediaLibraryService() {
 
                     LibraryResult.ofItem(
 
-                        createInfoItem(
+                        createCategoryItem(
                             HOME_ID,
                             "Karadag Car TV",
-                            "Ana menü araç ekranında açılır"
+                            "Ana menü"
                         ),
 
                         null
@@ -731,6 +751,22 @@ class CarMediaService : MediaLibraryService() {
                         TAG,
                         "Resolving mediaId=${requested.mediaId}"
                     )
+
+                    if (
+                        requested.mediaId == ROOT_ID ||
+                        requested.mediaId == HOME_ID ||
+                        requested.mediaId == HOME_MENU_ID ||
+                        requested.mediaId.startsWith("live-tv-") ||
+                        requested.mediaId == LIVE_TV_ID ||
+                        requested.mediaId == YOUTUBE_ID ||
+                        requested.mediaId == GOOGLE_ID
+                    ) {
+                        CarProjectionRouter.openFromChildren(
+                            this@CarMediaService,
+                            controller.packageName
+                        )
+                        return@mapNotNull null
+                    }
 
                     /*
                      * RADYO
@@ -989,6 +1025,9 @@ class CarMediaService : MediaLibraryService() {
 
         private const val HOME_ID =
             "karadag-car-home"
+
+        private const val HOME_MENU_ID =
+            "karadag-car-home-menu"
 
         private const val LIVE_TV_ID =
             "karadag-live-tv"

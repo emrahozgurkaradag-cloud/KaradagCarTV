@@ -25,7 +25,7 @@ class AndroidAutoVideoPathTest {
         assertFalse(rootBlock.contains("GOOGLE_ID"))
         assertFalse(rootBlock.contains("setIsPlayable(\n                        true"))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
-        assertTrue(rootBlock.contains("createInfoItem"))
+        assertTrue(rootBlock.contains("createCategoryItem"))
         assertTrue(rootBlock.contains("Ana menü araç ekranında açılır"))
         assertTrue(media.contains("setIsPlayable"))
     }
@@ -55,7 +55,8 @@ class AndroidAutoVideoPathTest {
         assertTrue(router.contains("android.intent.extra.PACKAGE_NAME"))
         assertTrue(router.contains("CLASS_TO_SERVICE_NAME"))
         assertTrue(media.contains("override fun onBind"))
-        assertTrue(media.contains("CarProjectionRouter.openVideoIfCarHost"))
+        assertTrue(media.contains("CarProjectionRouter.openFromBind"))
+        assertTrue(media.contains("CarProjectionRouter.openFromChildren"))
         assertTrue(media.contains("ON_GET_SESSION"))
         assertTrue(media.contains("ON_CONNECT"))
         assertTrue(media.contains("ON_GET_LIBRARY_ROOT"))

@@ -195,8 +195,7 @@ class HostedProjectionSourceTest {
         val addStart = media.indexOf("override fun onAddMediaItems")
         val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
-        assertFalse(addBlock.contains("YOUTUBE"))
-        assertFalse(addBlock.contains("GOOGLE"))
+        assertTrue(addBlock.contains("return@mapNotNull null"))
 
         val rootStart = media.indexOf("if (parentId == ROOT_ID)")
         val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
@@ -205,7 +204,8 @@ class HostedProjectionSourceTest {
         assertFalse(rootBlock.contains("LIVE_TV_ID"))
         assertFalse(rootBlock.contains("createRadioMediaItem"))
         assertTrue(rootBlock.contains("HOME_ID"))
-        assertTrue(rootBlock.contains("CarProjectionRouter.openVideoIfCarHost"))
+        assertTrue(rootBlock.contains("CarProjectionRouter.openFromChildren"))
+        assertTrue(rootBlock.contains("createCategoryItem"))
     }
 
     @Test

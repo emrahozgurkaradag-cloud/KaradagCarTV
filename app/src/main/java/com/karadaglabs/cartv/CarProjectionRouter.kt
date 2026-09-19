@@ -10,42 +10,32 @@ import android.util.Log
 import com.google.android.apps.auto.sdk.service.CarFirstPartyManager
 
 /**
- * Gearhead's app-icon tap binds the exported MediaBrowserService
- * (CarMediaService). aauto.aar only instantiates CarVideoActivity after
- * CarActivityService.onBind for MAIN + CATEGORY_PROJECTION.
+ * Real-car 1.0.12: Gearhead bound CarMediaService and rendered
+ * "Karadag Car TV / Öğe yok". CarVideoActivity.onCreate never ran.
  *
- * Proven from aauto.aar bytecode (classes.jar):
+ * Proven routing bugs in 1.0.12:
  *
- * 1. android.support.car.Car.getCarManager(Class) looks up
- *    CLASS_TO_SERVICE_NAME. That map has sensor/info/app_focus/
- *    package/audio only. CarFirstPartyManager.class is NOT in it, so
- *    getCarManager(CarFirstPartyManager.class) returns null and does
- *    not throw.
+ * 1. Root returned a non-browsable, non-playable info item.
+ *    This car's Gearhead hides those → "Öğe yok".
  *
- * 2. CarServiceLoaderGms unknown-name path calls
- *    com.google.android.apps.auto.sdk.service.a.a(CarApi, name).
- *    That method equals("car_1p") and wraps
- *    CarApi.getCarManager("car_1p") as
- *    com.google.android.apps.auto.sdk.service.a.c.
+ * 2. launching=true on the first onBind/createCar attempt blocked
+ *    later onGetChildren taps. If onConnected never arrived, every
+ *    later callback was a no-op.
  *
- * 3. a.c.startCarActivity(Intent) is a straight forward to
- *    com.google.android.gms.car.CarFirstPartyManager.startCarActivity.
- *    The aar does not require the caller to already be a CarActivity.
- *    MediaLibraryService may call it after Car.createCar().connect().
+ * 3. startCarActivity(CarVideoService) was treated as success when
+ *    it returned without throwing. aauto.aar / Fermata start
+ *    CarActivity class names, not the CarActivityService. A Service
+ *    component can be accepted and then never hosted.
  *
- * 4. CarActivity.startCarActivity is a different API: it writes
- *    android.intent.extra.PACKAGE_NAME and uses CarUiController.
- *    That path only exists after CarVideoService is already hosted.
+ * 4. Car.getCarManager(Class) is still a null no-throw. car_1p
+ *    SERVICE_NAME remains the lookup.
  *
- * Legal host routing: Media tap → this router → car_1p
- * startCarActivity(MAIN + CATEGORY_PROJECTION + CarVideoService)
- * → Gearhead binds CarVideoService → getCarActivity() →
- * CarVideoActivity. CarVideoActivity class name is the fallback
- * Fermata-style Intent if the service component is rejected.
+ * Legal host path stays aauto CarFirstPartyManager.startCarActivity.
+ * CarVideoActivity is not an Android <activity>; Gearhead hosts it
+ * after binding CarVideoService.getCarActivity().
  */
 object CarProjectionRouter {
 
-    private const val TAG = "KaradagCarRouter"
     const val GEARHEAD_PACKAGE = "com.google.android.projection.gearhead"
     const val PROJECTION_CATEGORY =
         "com.google.android.gms.car.category.CATEGORY_PROJECTION"
@@ -53,10 +43,30 @@ object CarProjectionRouter {
         "com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM"
     const val PACKAGE_NAME_EXTRA = "android.intent.extra.PACKAGE_NAME"
 
+    const val TAG_BIND = "CAR_ROUTER_BIND"
+    const val TAG_SESSION = "CAR_ROUTER_SESSION"
+    const val TAG_CONNECT = "CAR_ROUTER_CONNECT"
+    const val TAG_ROOT = "CAR_ROUTER_ROOT"
+    const val TAG_CHILDREN = "CAR_ROUTER_CHILDREN"
+    const val TAG_CREATE_CAR = "CAR_ROUTER_CREATE_CAR"
+    const val TAG_CONNECTED = "CAR_ROUTER_CONNECTED"
+    const val TAG_CAR_1P = "CAR_ROUTER_CAR_1P"
+    const val TAG_START_SERVICE = "CAR_ROUTER_START_SERVICE"
+    const val TAG_START_ACTIVITY = "CAR_ROUTER_START_ACTIVITY"
+    const val TAG_START_RETURNED = "CAR_ROUTER_START_RETURNED"
+    const val TAG_NOT_HOSTED = "START_CAR_ACTIVITY_NOT_HOSTED"
+    const val TAG_VIDEO_CREATE = "CAR_VIDEO_ON_CREATE"
+
     private val mainHandler = Handler(Looper.getMainLooper())
 
     @Volatile
     private var launching = false
+
+    @Volatile
+    private var hosted = false
+
+    @Volatile
+    private var lastPackage: String? = null
 
     fun isCarHost(packageName: String?): Boolean {
         val value = packageName.orEmpty()
@@ -74,11 +84,45 @@ object CarProjectionRouter {
             value.contains("gms.car")
     }
 
+    fun markHosted(packageName: String?) {
+        hosted = true
+        launching = false
+        routeLog(
+            TAG_VIDEO_CREATE,
+            packageName = packageName,
+            success = true
+        )
+    }
+
+    fun openFromBind(context: Context, packageName: String?) {
+        routeLog(TAG_BIND, packageName = packageName, success = true)
+        openVideo(context, packageName)
+    }
+
+    fun openFromSession(context: Context, packageName: String?) {
+        routeLog(TAG_SESSION, packageName = packageName, success = true)
+        openVideo(context, packageName)
+    }
+
+    fun openFromConnect(context: Context, packageName: String?) {
+        routeLog(TAG_CONNECT, packageName = packageName, success = true)
+        openVideo(context, packageName)
+    }
+
+    fun openFromRoot(context: Context, packageName: String?) {
+        routeLog(TAG_ROOT, packageName = packageName, success = true)
+        openVideo(context, packageName)
+    }
+
+    fun openFromChildren(context: Context, packageName: String?) {
+        routeLog(TAG_CHILDREN, packageName = packageName, success = true)
+        openVideo(context, packageName)
+    }
+
     fun openVideoIfCarHost(
         context: Context,
         packageName: String?
     ) {
-        Log.d(TAG, "CAR PROJECTION ROUTER TAP package=$packageName")
         openVideo(context, packageName)
     }
 
@@ -86,48 +130,81 @@ object CarProjectionRouter {
         context: Context,
         packageName: String?
     ) {
+        lastPackage = packageName
         mainHandler.post {
+            if (hosted) {
+                routeLog(
+                    TAG_CREATE_CAR,
+                    packageName = packageName,
+                    success = true,
+                    detail = "already_hosted"
+                )
+                return@post
+            }
+
             if (launching) {
-                Log.d(TAG, "CAR PROJECTION ROUTER SKIP already launching")
+                routeLog(
+                    TAG_CREATE_CAR,
+                    packageName = packageName,
+                    success = false,
+                    detail = "already_launching"
+                )
                 return@post
             }
 
             launching = true
             val appContext = context.applicationContext
 
-            Log.d(
-                TAG,
-                "CAR PROJECTION ROUTER START " +
-                    "package=$packageName " +
-                    "service=${CarVideoService::class.java.name} " +
-                    "activity=${CarVideoActivity::class.java.name}"
-            )
-
             try {
                 val car = Car.createCar(
                     appContext,
                     object : CarConnectionCallback() {
                         override fun onConnected(connected: Car) {
-                            startCarVideo(appContext, connected, attempt = 0)
+                            routeLog(
+                                TAG_CONNECTED,
+                                packageName = packageName,
+                                success = true
+                            )
+                            startCarVideo(appContext, connected, packageName)
                         }
 
                         override fun onDisconnected(connected: Car) {
                             launching = false
-                            Log.d(TAG, "CAR PROJECTION ROUTER DISCONNECTED")
+                            routeLog(
+                                TAG_CONNECTED,
+                                packageName = packageName,
+                                success = false,
+                                detail = "disconnected"
+                            )
                         }
                     }
                 )
 
                 if (car == null) {
                     launching = false
-                    Log.e(TAG, "CAR PROJECTION ROUTER FAILED createCar=null")
+                    routeLog(
+                        TAG_CREATE_CAR,
+                        packageName = packageName,
+                        success = false,
+                        detail = "createCar=null"
+                    )
                     return@post
                 }
 
+                routeLog(
+                    TAG_CREATE_CAR,
+                    packageName = packageName,
+                    success = true
+                )
                 car.connect()
             } catch (throwable: Throwable) {
                 launching = false
-                Log.e(TAG, "CAR PROJECTION ROUTER CONNECT FAILED", throwable)
+                routeLog(
+                    TAG_CREATE_CAR,
+                    packageName = packageName,
+                    success = false,
+                    error = throwable
+                )
             }
         }
     }
@@ -135,64 +212,119 @@ object CarProjectionRouter {
     private fun startCarVideo(
         context: Context,
         connected: Car,
-        attempt: Int
+        packageName: String?
     ) {
-        try {
-            val manager = firstPartyManager(connected)
-            if (manager == null) {
-                if (attempt < 3) {
-                    Log.e(
-                        TAG,
-                        "CAR PROJECTION ROUTER manager=null retry=${attempt + 1}"
-                    )
-                    mainHandler.postDelayed(
-                        { startCarVideo(context, connected, attempt + 1) },
-                        400L * (attempt + 1)
-                    )
-                    return
-                }
-
-                launching = false
-                Log.e(TAG, "CAR PROJECTION ROUTER FAILED manager=null")
-                return
-            }
-
-            val serviceIntent = projectionServiceIntent(context)
-            try {
-                manager.startCarActivity(serviceIntent)
-                Log.d(
-                    TAG,
-                    "CAR PROJECTION ROUTER STARTED CarVideoService"
-                )
-                return
-            } catch (serviceError: Throwable) {
-                Log.e(
-                    TAG,
-                    "CAR PROJECTION ROUTER SERVICE INTENT FAILED",
-                    serviceError
-                )
-            }
-
-            val activityIntent = projectionActivityIntent(context)
-            manager.startCarActivity(activityIntent)
-            Log.d(TAG, "CAR PROJECTION ROUTER STARTED CarVideoActivity")
-        } catch (throwable: Throwable) {
-            if (attempt < 3) {
-                Log.e(
-                    TAG,
-                    "CAR PROJECTION ROUTER START FAILED retry=${attempt + 1}",
-                    throwable
-                )
-                mainHandler.postDelayed(
-                    { startCarVideo(context, connected, attempt + 1) },
-                    400L * (attempt + 1)
-                )
-                return
-            }
-
+        val manager = firstPartyManager(connected, packageName)
+        if (manager == null) {
             launching = false
-            Log.e(TAG, "CAR PROJECTION ROUTER START FAILED", throwable)
+            return
         }
+
+        val attempts = listOf(
+            StartAttempt(
+                tag = TAG_START_ACTIVITY,
+                name = "car_activity_plain",
+                intent = fermataActivityIntent(context)
+            ),
+            StartAttempt(
+                tag = TAG_START_ACTIVITY,
+                name = "car_activity_main",
+                intent = projectionActivityIntent(context)
+            ),
+            StartAttempt(
+                tag = TAG_START_SERVICE,
+                name = "car_service_projection",
+                intent = projectionServiceIntent(context)
+            )
+        )
+        startAttempt(manager, attempts, 0, packageName)
+    }
+
+    private fun startAttempt(
+        manager: CarFirstPartyManager,
+        attempts: List<StartAttempt>,
+        index: Int,
+        packageName: String?
+    ) {
+        if (hosted) {
+            launching = false
+            return
+        }
+
+        if (index >= attempts.size) {
+            launching = false
+            routeLog(
+                TAG_NOT_HOSTED,
+                packageName = packageName,
+                success = false,
+                detail = "all_intents_returned_without_onCreate"
+            )
+            return
+        }
+
+        val attempt = attempts[index]
+        try {
+            manager.startCarActivity(attempt.intent)
+            routeLog(
+                attempt.tag,
+                packageName = packageName,
+                success = true,
+                detail = "component=${attempt.intent.component} name=${attempt.name}"
+            )
+            routeLog(
+                TAG_START_RETURNED,
+                packageName = packageName,
+                success = true,
+                detail = attempt.name
+            )
+            mainHandler.postDelayed(
+                {
+                    if (hosted) {
+                        launching = false
+                        return@postDelayed
+                    }
+
+                    routeLog(
+                        TAG_NOT_HOSTED,
+                        packageName = packageName,
+                        success = false,
+                        detail = "startCarActivity returned without CAR_VIDEO_ON_CREATE name=${attempt.name}"
+                    )
+                    startAttempt(manager, attempts, index + 1, packageName)
+                },
+                1500L
+            )
+        } catch (throwable: Throwable) {
+            routeLog(
+                attempt.tag,
+                packageName = packageName,
+                success = false,
+                detail = attempt.name,
+                error = throwable
+            )
+            routeLog(
+                TAG_START_RETURNED,
+                packageName = packageName,
+                success = false,
+                detail = attempt.name,
+                error = throwable
+            )
+            startAttempt(manager, attempts, index + 1, packageName)
+        }
+    }
+
+    fun fermataActivityIntent(context: Context): Intent {
+        val intent = Intent()
+        intent.setClassName(
+            context.packageName,
+            CarVideoActivity::class.java.name
+        )
+        intent.putExtra(PACKAGE_NAME_EXTRA, context.packageName)
+        intent.putExtra(
+            ProjectionDestination.EXTRA,
+            ProjectionDestination.HOME.name
+        )
+        return intent
     }
 
     fun projectionServiceIntent(context: Context): Intent {
@@ -226,23 +358,96 @@ object CarProjectionRouter {
         return intent
     }
 
-    private fun firstPartyManager(connected: Car): CarFirstPartyManager? {
+    private fun firstPartyManager(
+        connected: Car,
+        packageName: String?
+    ): CarFirstPartyManager? {
         try {
             val byName = connected.getCarManager(
                 CarFirstPartyManager.SERVICE_NAME
             )
             if (byName is CarFirstPartyManager) {
+                routeLog(
+                    TAG_CAR_1P,
+                    packageName = packageName,
+                    success = true,
+                    detail = "lookup=car_1p class=${byName.javaClass.name}"
+                )
                 return byName
             }
+
+            routeLog(
+                TAG_CAR_1P,
+                packageName = packageName,
+                success = false,
+                detail = "lookup=car_1p value=${byName?.javaClass?.name ?: "null"}"
+            )
         } catch (throwable: Throwable) {
-            Log.e(TAG, "CAR PROJECTION ROUTER car_1p lookup failed", throwable)
+            routeLog(
+                TAG_CAR_1P,
+                packageName = packageName,
+                success = false,
+                detail = "lookup=car_1p",
+                error = throwable
+            )
         }
 
         return try {
-            connected.getCarManager(CarFirstPartyManager::class.java)
+            val byClass = connected.getCarManager(
+                CarFirstPartyManager::class.java
+            )
+            routeLog(
+                TAG_CAR_1P,
+                packageName = packageName,
+                success = byClass != null,
+                detail = "lookup=class value=${byClass?.javaClass?.name ?: "null"}"
+            )
+            byClass
         } catch (throwable: Throwable) {
-            Log.e(TAG, "CAR PROJECTION ROUTER class lookup failed", throwable)
+            routeLog(
+                TAG_CAR_1P,
+                packageName = packageName,
+                success = false,
+                detail = "lookup=class",
+                error = throwable
+            )
             null
         }
     }
+
+    fun routeLog(
+        tag: String,
+        packageName: String? = lastPackage,
+        success: Boolean,
+        detail: String = "",
+        error: Throwable? = null
+    ) {
+        val message = buildString {
+            append("timestamp=").append(System.currentTimeMillis())
+            append(" packageName=").append(packageName ?: "-")
+            append(" thread=").append(Thread.currentThread().name)
+            append(" success=").append(success)
+            if (detail.isNotBlank()) {
+                append(" detail=").append(detail)
+            }
+            if (error != null) {
+                append(" exception=").append(error.javaClass.name)
+                append(" message=").append(error.message ?: "")
+            }
+        }
+
+        if (success) {
+            Log.d(tag, message)
+        } else if (error != null) {
+            Log.e(tag, message, error)
+        } else {
+            Log.e(tag, message)
+        }
+    }
+
+    private data class StartAttempt(
+        val tag: String,
+        val name: String,
+        val intent: Intent
+    )
 }

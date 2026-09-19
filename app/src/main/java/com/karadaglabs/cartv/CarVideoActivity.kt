@@ -68,6 +68,7 @@ class CarVideoActivity : CarActivity() {
         super.onCreate(savedInstanceState)
 
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
+        CarProjectionRouter.markHosted(packageName)
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
