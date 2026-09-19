@@ -25,7 +25,7 @@ class AndroidAutoVideoPathTest {
         assertFalse(rootBlock.contains("GOOGLE_ID"))
         assertFalse(rootBlock.contains("setIsPlayable(\n                        true"))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
-        assertTrue(rootBlock.contains("createCategoryItem"))
+        assertTrue(rootBlock.contains("createHostLauncherItem"))
         assertTrue(rootBlock.contains("Ana menü"))
         assertTrue(media.contains("setIsPlayable"))
     }

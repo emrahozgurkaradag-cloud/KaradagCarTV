@@ -54,7 +54,7 @@ object CarProjectionRouter {
     const val TAG_START_SERVICE = "CAR_ROUTER_START_SERVICE"
     const val TAG_START_ACTIVITY = "CAR_ROUTER_START_ACTIVITY"
     const val TAG_START_RETURNED = "CAR_ROUTER_START_RETURNED"
-    const val TAG_NOT_HOSTED = "START_CAR_ACTIVITY_NOT_HOSTED"
+    const val TAG_NOT_HOSTED = "CAR_ROUTER_START_NOT_HOSTED"
     const val TAG_VIDEO_CREATE = "CAR_VIDEO_ON_CREATE"
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -114,8 +114,17 @@ object CarProjectionRouter {
         openVideo(context, packageName)
     }
 
-    fun openFromChildren(context: Context, packageName: String?) {
-        routeLog(TAG_CHILDREN, packageName = packageName, success = true)
+    fun openFromChildren(
+        context: Context,
+        packageName: String?,
+        parentId: String = ""
+    ) {
+        routeLog(
+            TAG_CHILDREN,
+            packageName = packageName,
+            success = true,
+            detail = "parentId=$parentId"
+        )
         openVideo(context, packageName)
     }
 
@@ -154,12 +163,14 @@ object CarProjectionRouter {
 
             launching = true
             val appContext = context.applicationContext
+            var connectedSeen = false
 
             try {
                 val car = Car.createCar(
                     appContext,
                     object : CarConnectionCallback() {
                         override fun onConnected(connected: Car) {
+                            connectedSeen = true
                             routeLog(
                                 TAG_CONNECTED,
                                 packageName = packageName,
@@ -197,6 +208,20 @@ object CarProjectionRouter {
                     success = true
                 )
                 car.connect()
+                mainHandler.postDelayed(
+                    {
+                        if (!connectedSeen && !hosted) {
+                            launching = false
+                            routeLog(
+                                TAG_CONNECTED,
+                                packageName = packageName,
+                                success = false,
+                                detail = "timeout_not_connected"
+                            )
+                        }
+                    },
+                    2500L
+                )
             } catch (throwable: Throwable) {
                 launching = false
                 routeLog(
@@ -221,6 +246,11 @@ object CarProjectionRouter {
         }
 
         val attempts = listOf(
+            StartAttempt(
+                tag = TAG_START_ACTIVITY,
+                name = "implicit_projection",
+                intent = implicitProjectionIntent(context)
+            ),
             StartAttempt(
                 tag = TAG_START_ACTIVITY,
                 name = "car_activity_plain",
@@ -288,7 +318,7 @@ object CarProjectionRouter {
                         TAG_NOT_HOSTED,
                         packageName = packageName,
                         success = false,
-                        detail = "startCarActivity returned without CAR_VIDEO_ON_CREATE name=${attempt.name}"
+                        detail = "START_CAR_ACTIVITY_NOT_HOSTED startCarActivity returned without CAR_VIDEO_ON_CREATE name=${attempt.name}"
                     )
                     startAttempt(manager, attempts, index + 1, packageName)
                 },
@@ -311,6 +341,18 @@ object CarProjectionRouter {
             )
             startAttempt(manager, attempts, index + 1, packageName)
         }
+    }
+
+    fun implicitProjectionIntent(context: Context): Intent {
+        val intent = Intent(Intent.ACTION_MAIN)
+        intent.addCategory(PROJECTION_CATEGORY)
+        intent.setPackage(context.packageName)
+        intent.putExtra(PACKAGE_NAME_EXTRA, context.packageName)
+        intent.putExtra(
+            ProjectionDestination.EXTRA,
+            ProjectionDestination.HOME.name
+        )
+        return intent
     }
 
     fun fermataActivityIntent(context: Context): Intent {
@@ -437,7 +479,7 @@ object CarProjectionRouter {
         }
 
         if (success) {
-            Log.d(tag, message)
+            Log.i(tag, message)
         } else if (error != null) {
             Log.e(tag, message, error)
         } else {

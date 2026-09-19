@@ -205,7 +205,7 @@ class HostedProjectionSourceTest {
         assertFalse(rootBlock.contains("createRadioMediaItem"))
         assertTrue(rootBlock.contains("HOME_ID"))
         assertTrue(rootBlock.contains("CarProjectionRouter.openFromChildren"))
-        assertTrue(rootBlock.contains("createCategoryItem"))
+        assertTrue(rootBlock.contains("createHostLauncherItem"))
     }
 
     @Test

@@ -187,7 +187,7 @@ class AndroidAutoDiscoveryTest {
         )
         assertTrue(rootBlock.contains("CarProjectionRouter.openFromChildren"))
         assertTrue(rootBlock.contains("HOME_ID"))
-        assertTrue(rootBlock.contains("createCategoryItem"))
+        assertTrue(rootBlock.contains("createHostLauncherItem"))
         assertFalse(media.contains("YouTube telefonda açılır"))
     }
 
