@@ -198,28 +198,14 @@ class CarMediaService : MediaLibraryService() {
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
 
-            val recent = params?.isRecent == true ||
-                params?.extras?.getBoolean(
-                    "android.service.media.extra.RECENT"
-                ) == true
-            val offline = params?.isOffline == true
-            val suggested = params?.isSuggested == true
-
             Log.i(
                 TAG,
-                "ON_GET_LIBRARY_ROOT package=${browser.packageName} " +
-                    "recent=$recent offline=$offline suggested=$suggested"
+                "ON_GET_LIBRARY_ROOT package=${browser.packageName}"
             )
             CarProjectionRouter.openFromRoot(
                 this@CarMediaService,
                 browser.packageName
             )
-
-            if (recent || offline || suggested) {
-                return Futures.immediateFuture(
-                    LibraryResult.ofError(SessionError.ERROR_NOT_SUPPORTED)
-                )
-            }
 
             val extras =
                 Bundle().apply {
@@ -317,12 +303,10 @@ class CarMediaService : MediaLibraryService() {
 
                 /*
                  * MediaLibraryService is discovery-only. 1.0.7
-                 * playable radios were visible. 1.0.12 info and
-                 * 1.0.13 browsable-only items were "Öğe yok".
-                 * This car lists playable MediaItems. The launcher
-                 * is playable+browsable with no stream URI so a tap
-                 * can reach onGetChildren(HOME) / onAddMediaItems
-                 * without MediaSession TV or radio playback.
+                 * root radios keep the app visible on this car.
+                 * TV / YouTube / Google are not MediaItems.
+                 * Bind/root/children still ask aauto to host
+                 * CarVideoActivity; radio is not the TV path.
                  */
                 CarProjectionRouter.openFromChildren(
                     this@CarMediaService,
@@ -330,36 +314,14 @@ class CarMediaService : MediaLibraryService() {
                     parentId
                 )
 
-                return Futures.immediateFuture(
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createHostLauncherItem(
-                                HOME_ID,
-                                "Karadag Car TV",
-                                "Ana menü"
-                            )
-                        ),
-                        params
-                    )
-                )
-            }
-
-            if (parentId == HOME_ID || parentId == HOME_MENU_ID) {
-                CarProjectionRouter.openFromChildren(
-                    this@CarMediaService,
-                    browser.packageName,
-                    parentId
-                )
+                val items =
+                    radios.map { radio ->
+                        createRadioMediaItem(radio)
+                    }
 
                 return Futures.immediateFuture(
                     LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createHostLauncherItem(
-                                HOME_MENU_ID,
-                                "Ana Menü",
-                                "Karadag Car TV"
-                            )
-                        ),
+                        ImmutableList.copyOf(items),
                         params
                     )
                 )
@@ -518,23 +480,6 @@ class CarMediaService : MediaLibraryService() {
                             ROOT_ID,
                             "Karadag Car TV",
                             "Karadag Car TV"
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == HOME_ID || mediaId == HOME_MENU_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createCategoryItem(
-                            mediaId,
-                            "Karadag Car TV",
-                            "Ana menü"
                         ),
 
                         null
@@ -765,9 +710,6 @@ class CarMediaService : MediaLibraryService() {
                     )
 
                     if (
-                        requested.mediaId == ROOT_ID ||
-                        requested.mediaId == HOME_ID ||
-                        requested.mediaId == HOME_MENU_ID ||
                         requested.mediaId.startsWith("live-tv-") ||
                         requested.mediaId == LIVE_TV_ID ||
                         requested.mediaId == YOUTUBE_ID ||
@@ -807,47 +749,6 @@ class CarMediaService : MediaLibraryService() {
                 resolved
             )
         }
-
-        override fun onSetMediaItems(
-            mediaSession: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            mediaItems: List<MediaItem>,
-            startIndex: Int,
-            startPositionMs: Long
-        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
-            val blocked = mediaItems.any { requested ->
-                requested.mediaId == ROOT_ID ||
-                    requested.mediaId == HOME_ID ||
-                    requested.mediaId == HOME_MENU_ID ||
-                    requested.mediaId.startsWith("live-tv-") ||
-                    requested.mediaId == LIVE_TV_ID ||
-                    requested.mediaId == YOUTUBE_ID ||
-                    requested.mediaId == GOOGLE_ID
-            }
-
-            if (blocked) {
-                CarProjectionRouter.openFromChildren(
-                    this@CarMediaService,
-                    controller.packageName,
-                    mediaItems.firstOrNull()?.mediaId.orEmpty()
-                )
-                return Futures.immediateFuture(
-                    MediaSession.MediaItemsWithStartPosition(
-                        emptyList(),
-                        0,
-                        0
-                    )
-                )
-            }
-
-            return super.onSetMediaItems(
-                mediaSession,
-                controller,
-                mediaItems,
-                startIndex,
-                startPositionMs
-            )
-        }
     }
 
     /*
@@ -855,24 +756,6 @@ class CarMediaService : MediaLibraryService() {
      * CATEGORY MEDIA ITEM
      * ============================================================
      */
-
-    private fun createHostLauncherItem(
-        id: String,
-        title: String,
-        subtitle: String
-    ): MediaItem {
-        return MediaItem.Builder()
-            .setMediaId(id)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setArtist(subtitle)
-                    .setIsBrowsable(true)
-                    .setIsPlayable(true)
-                    .build()
-            )
-            .build()
-    }
 
     private fun createCategoryItem(
         id: String,
@@ -1094,12 +977,6 @@ class CarMediaService : MediaLibraryService() {
 
         private const val ROOT_ID =
             "karadag-car-tv-root"
-
-        private const val HOME_ID =
-            "karadag-car-home"
-
-        private const val HOME_MENU_ID =
-            "karadag-car-home-menu"
 
         private const val LIVE_TV_ID =
             "karadag-live-tv"

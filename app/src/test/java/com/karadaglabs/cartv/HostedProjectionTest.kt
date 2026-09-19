@@ -202,10 +202,10 @@ class HostedProjectionSourceTest {
         val rootBlock = media.substring(rootStart, radioStart)
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertFalse(rootBlock.contains("LIVE_TV_ID"))
-        assertFalse(rootBlock.contains("createRadioMediaItem"))
-        assertTrue(rootBlock.contains("HOME_ID"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertTrue(rootBlock.contains("CarProjectionRouter.openFromChildren"))
-        assertTrue(rootBlock.contains("createHostLauncherItem"))
+        assertFalse(rootBlock.contains("createHostLauncherItem"))
+        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
     }
 
     @Test

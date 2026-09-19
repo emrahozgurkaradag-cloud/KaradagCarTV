@@ -181,13 +181,10 @@ class AndroidAutoDiscoveryTest {
             rootBlock.contains("GOOGLE_ID")
         )
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
-        assertFalse(
-            "Root must not open the radio MediaBrowser",
-            rootBlock.contains("createRadioMediaItem")
-        )
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertTrue(rootBlock.contains("CarProjectionRouter.openFromChildren"))
-        assertTrue(rootBlock.contains("HOME_ID"))
-        assertTrue(rootBlock.contains("createHostLauncherItem"))
+        assertFalse(rootBlock.contains("createHostLauncherItem"))
+        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertFalse(media.contains("YouTube telefonda açılır"))
     }
 
@@ -484,8 +481,7 @@ class AndroidAutoEntryPointTest {
         assertFalse(rootBlock.contains("YOUTUBE_ID"))
         assertFalse(rootBlock.contains("GOOGLE_ID"))
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
-        assertFalse(rootBlock.contains("createRadioMediaItem"))
-        assertTrue(rootBlock.contains("HOME_ID"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertTrue(media.contains("MediaLibraryService is discovery-only"))
         assertTrue(media.contains("CarProjectionRouter.openFromBind"))
         assertTrue(media.contains("CarProjectionRouter.openFromSession"))

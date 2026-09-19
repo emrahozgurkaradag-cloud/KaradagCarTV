@@ -20,13 +20,11 @@ class AndroidAutoVideoPathTest {
         )
 
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
-        assertFalse(rootBlock.contains("createRadioMediaItem"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertFalse(rootBlock.contains("YOUTUBE_ID"))
         assertFalse(rootBlock.contains("GOOGLE_ID"))
-        assertFalse(rootBlock.contains("setIsPlayable(\n                        true"))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
-        assertTrue(rootBlock.contains("createHostLauncherItem"))
-        assertTrue(rootBlock.contains("Ana menü"))
+        assertFalse(rootBlock.contains("createHostLauncherItem"))
         assertTrue(media.contains("setIsPlayable"))
     }
 
