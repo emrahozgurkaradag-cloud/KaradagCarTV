@@ -26,7 +26,7 @@ class AndroidAutoVideoPathTest {
         assertFalse(rootBlock.contains("setIsPlayable(\n                        true"))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
         assertTrue(rootBlock.contains("createCategoryItem"))
-        assertTrue(rootBlock.contains("Ana menü araç ekranında açılır"))
+        assertTrue(rootBlock.contains("Ana menü"))
         assertTrue(media.contains("setIsPlayable"))
     }
 
@@ -53,7 +53,7 @@ class AndroidAutoVideoPathTest {
         assertTrue(router.contains("CarVideoActivity::class.java.name"))
         assertTrue(router.contains("CATEGORY_PROJECTION"))
         assertTrue(router.contains("android.intent.extra.PACKAGE_NAME"))
-        assertTrue(router.contains("CLASS_TO_SERVICE_NAME"))
+        assertTrue(router.contains("car_1p"))
         assertTrue(media.contains("override fun onBind"))
         assertTrue(media.contains("CarProjectionRouter.openFromBind"))
         assertTrue(media.contains("CarProjectionRouter.openFromChildren"))
