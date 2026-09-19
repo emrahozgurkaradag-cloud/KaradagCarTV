@@ -316,8 +316,9 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * 1.0.7 playable radios were visible. 1.0.12 info
-                 * and 1.0.13 browsable-only items were "Öğe yok".
+                 * MediaLibraryService is discovery-only. 1.0.7
+                 * playable radios were visible. 1.0.12 info and
+                 * 1.0.13 browsable-only items were "Öğe yok".
                  * This car lists playable MediaItems. The launcher
                  * is playable+browsable with no stream URI so a tap
                  * can reach onGetChildren(HOME) / onAddMediaItems
