@@ -13,6 +13,21 @@ class CarVideoService : CarActivityService() {
     }
 
     override fun getCarActivity(): Class<out CarActivity> {
+        /*
+         * 1.0.15 real-car test: only radio appears, CarVideoActivity
+         * never opens. This exact tag proves whether the aauto SDK
+         * ever asks CarVideoService which Activity to host. If this
+         * log never appears on the real device, the SDK is not
+         * calling getCarActivity() at all and the problem is upstream
+         * of this class (host never resolves/binds a hostable car
+         * activity for this package on this specific car unit).
+         */
+        CarProjectionRouter.routeLog(
+            CarProjectionRouter.TAG_VIDEO_SERVICE_GET_ACTIVITY,
+            success = true,
+            detail = "getCarActivity() called -> CarVideoActivity"
+        )
+
         return CarVideoActivity::class.java
     }
 

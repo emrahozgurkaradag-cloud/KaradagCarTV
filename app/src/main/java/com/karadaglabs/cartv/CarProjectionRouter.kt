@@ -56,6 +56,8 @@ object CarProjectionRouter {
     const val TAG_START_RETURNED = "CAR_ROUTER_START_RETURNED"
     const val TAG_NOT_HOSTED = "CAR_ROUTER_START_NOT_HOSTED"
     const val TAG_VIDEO_CREATE = "CAR_VIDEO_ON_CREATE"
+    const val TAG_VIDEO_SERVICE_GET_ACTIVITY = "CAR_VIDEO_SERVICE_GET_ACTIVITY"
+    const val TAG_START = "CAR_ROUTER_START"
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -140,6 +142,12 @@ object CarProjectionRouter {
         packageName: String?
     ) {
         lastPackage = packageName
+        routeLog(
+            TAG_START,
+            packageName = packageName,
+            success = true,
+            detail = "openVideo() invoked hosted=$hosted launching=$launching"
+        )
         mainHandler.post {
             if (hosted) {
                 routeLog(

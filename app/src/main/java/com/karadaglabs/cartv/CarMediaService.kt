@@ -121,6 +121,11 @@ class CarMediaService : MediaLibraryService() {
             TAG,
             "ON_BIND action=${intent?.action}"
         )
+        Log.i(
+            "CAR_MEDIA_BIND",
+            "timestamp=${System.currentTimeMillis()} action=${intent?.action} " +
+                "package=${intent?.`package`}"
+        )
         CarProjectionRouter.openFromBind(
             this,
             intent?.`package` ?: intent?.action
@@ -135,6 +140,10 @@ class CarMediaService : MediaLibraryService() {
         Log.d(
             TAG,
             "ON_GET_SESSION package=${controllerInfo.packageName}"
+        )
+        Log.i(
+            "CAR_MEDIA_SESSION",
+            "timestamp=${System.currentTimeMillis()} package=${controllerInfo.packageName}"
         )
         CarProjectionRouter.openFromSession(
             this,
@@ -201,6 +210,10 @@ class CarMediaService : MediaLibraryService() {
             Log.i(
                 TAG,
                 "ON_GET_LIBRARY_ROOT package=${browser.packageName}"
+            )
+            Log.i(
+                "CAR_MEDIA_ROOT",
+                "timestamp=${System.currentTimeMillis()} package=${browser.packageName}"
             )
             CarProjectionRouter.openFromRoot(
                 this@CarMediaService,
@@ -291,6 +304,11 @@ class CarMediaService : MediaLibraryService() {
             Log.i(
                 TAG,
                 "ON_GET_CHILDREN parentId=$parentId package=${browser.packageName}"
+            )
+            Log.i(
+                "CAR_MEDIA_CHILDREN",
+                "timestamp=${System.currentTimeMillis()} parentId=$parentId " +
+                    "package=${browser.packageName}"
             )
 
             /*
