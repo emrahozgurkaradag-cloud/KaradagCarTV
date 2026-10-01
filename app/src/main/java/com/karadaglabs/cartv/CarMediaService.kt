@@ -126,10 +126,6 @@ class CarMediaService : MediaLibraryService() {
             "timestamp=${System.currentTimeMillis()} action=${intent?.action} " +
                 "package=${intent?.`package`}"
         )
-        CarProjectionRouter.openFromBind(
-            this,
-            intent?.`package` ?: intent?.action
-        )
         return super.onBind(intent)
     }
 
@@ -144,10 +140,6 @@ class CarMediaService : MediaLibraryService() {
         Log.i(
             "CAR_MEDIA_SESSION",
             "timestamp=${System.currentTimeMillis()} package=${controllerInfo.packageName}"
-        )
-        CarProjectionRouter.openFromSession(
-            this,
-            controllerInfo.packageName
         )
 
         return mediaLibrarySession
@@ -194,10 +186,6 @@ class CarMediaService : MediaLibraryService() {
                 TAG,
                 "ON_CONNECT package=${controller.packageName}"
             )
-            CarProjectionRouter.openFromConnect(
-                this@CarMediaService,
-                controller.packageName
-            )
             return super.onConnect(session, controller)
         }
 
@@ -214,10 +202,6 @@ class CarMediaService : MediaLibraryService() {
             Log.i(
                 "CAR_MEDIA_ROOT",
                 "timestamp=${System.currentTimeMillis()} package=${browser.packageName}"
-            )
-            CarProjectionRouter.openFromRoot(
-                this@CarMediaService,
-                browser.packageName
             )
 
             val extras =
@@ -320,17 +304,14 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * MediaLibraryService is discovery-only. 1.0.7
-                 * root radios keep the app visible on this car.
-                 * TV / YouTube / Google are not MediaItems.
-                 * Bind/root/children still ask aauto to host
-                 * CarVideoActivity; radio is not the TV path.
+                 * MediaLibraryService is discovery-only. Root radios
+                 * keep the app visible on this car (automotive
+                 * "media" capability). TV / YouTube / Google are not
+                 * MediaItems and this media tap does not try to force
+                 * CarVideoActivity open: CarVideoService's own
+                 * CATEGORY_PROJECTION registration is the only path
+                 * Android Auto uses to host CarVideoActivity.
                  */
-                CarProjectionRouter.openFromChildren(
-                    this@CarMediaService,
-                    browser.packageName,
-                    parentId
-                )
 
                 val items =
                     radios.map { radio ->
@@ -733,11 +714,12 @@ class CarMediaService : MediaLibraryService() {
                         requested.mediaId == YOUTUBE_ID ||
                         requested.mediaId == GOOGLE_ID
                     ) {
-                        CarProjectionRouter.openFromChildren(
-                            this@CarMediaService,
-                            controller.packageName,
-                            requested.mediaId
-                        )
+                        /*
+                         * These are not playable MediaSession items.
+                         * CarMediaService is not a launcher/router for
+                         * CarVideoActivity; reject playback instead of
+                         * reaching into the projection host from here.
+                         */
                         return@mapNotNull null
                     }
 

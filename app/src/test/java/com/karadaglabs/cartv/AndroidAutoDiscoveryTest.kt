@@ -182,7 +182,10 @@ class AndroidAutoDiscoveryTest {
         )
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))
-        assertTrue(rootBlock.contains("CarProjectionRouter.openFromChildren"))
+        assertFalse(
+            "CarMediaService must not act as a launcher/router for CarVideoActivity",
+            rootBlock.contains("CarProjectionRouter.openFromChildren")
+        )
         assertFalse(rootBlock.contains("createHostLauncherItem"))
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertFalse(media.contains("YouTube telefonda açılır"))
@@ -483,17 +486,21 @@ class AndroidAutoEntryPointTest {
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertTrue(media.contains("MediaLibraryService is discovery-only"))
-        assertTrue(media.contains("CarProjectionRouter.openFromBind"))
-        assertTrue(media.contains("CarProjectionRouter.openFromSession"))
-        assertTrue(media.contains("CarProjectionRouter.openFromConnect"))
-        assertTrue(media.contains("CarProjectionRouter.openFromRoot"))
+        assertFalse(
+            "CarMediaService must not be a launcher/router for CarVideoActivity",
+            media.contains("CarProjectionRouter.openFromBind")
+        )
+        assertFalse(media.contains("CarProjectionRouter.openFromSession"))
+        assertFalse(media.contains("CarProjectionRouter.openFromConnect"))
+        assertFalse(media.contains("CarProjectionRouter.openFromRoot"))
+        assertFalse(media.contains("CarProjectionRouter.openFromChildren"))
         assertTrue(media.contains("ON_GET_SESSION package="))
         assertTrue(media.contains("ON_CONNECT package="))
         assertTrue(media.contains("ON_BIND action="))
     }
 
     @Test
-    fun gearheadMediaTapRoutesToCarVideoActivity() {
+    fun gearheadDiscoversCarVideoServiceWithoutMediaForcing() {
         val router = mainSourceFile(
             "java/com/karadaglabs/cartv/CarProjectionRouter.kt"
         ).readText()
@@ -503,19 +510,36 @@ class AndroidAutoEntryPointTest {
         val service = mainSourceFile(
             "java/com/karadaglabs/cartv/CarVideoService.kt"
         ).readText()
+        val activity = mainSourceFile(
+            "java/com/karadaglabs/cartv/CarVideoActivity.kt"
+        ).readText()
 
-        assertTrue(router.contains("CarFirstPartyManager"))
-        assertTrue(router.contains("startCarActivity"))
-        assertTrue(router.contains("CarFirstPartyManager.SERVICE_NAME"))
-        assertTrue(router.contains("CarVideoActivity::class.java.name"))
-        assertTrue(router.contains("CarVideoService::class.java.name"))
-        assertTrue(router.contains("CATEGORY_PROJECTION"))
-        assertTrue(router.contains("android.intent.extra.PACKAGE_NAME"))
-        assertTrue(router.contains("com.google.android.projection.gearhead"))
-        assertTrue(media.contains("CarProjectionRouter.openFromBind"))
-        assertTrue(media.contains("override fun onBind"))
-        assertFalse(router.contains("createLiveTvMediaItem"))
+        /*
+         * Fermata reference: CarService : CarActivityService ->
+         * getCarActivity() -> MainCarActivity : CarActivity ->
+         * setContentView(...). CarVideoService/CarVideoActivity must
+         * follow it exactly, discovered by the host's own
+         * CATEGORY_PROJECTION binding - not by this app manually
+         * driving Car.createCar()/startCarActivity() from a media tap.
+         */
+        assertFalse(
+            "CarProjectionRouter must not drive startCarActivity() itself",
+            router.contains("startCarActivity")
+        )
+        assertFalse(router.contains("CarFirstPartyManager"))
+        assertFalse(router.contains("Car.createCar"))
+        assertFalse(
+            "CarMediaService must not reach into the projection host",
+            media.contains("CarProjectionRouter.openFrom")
+        )
+        assertTrue(service.contains("class CarVideoService : CarActivityService()"))
+        assertTrue(service.contains("override fun getCarActivity()"))
         assertTrue(service.contains("return CarVideoActivity::class.java"))
+        assertTrue(service.contains("TAG_VIDEO_SERVICE_GET_ACTIVITY"))
+        assertTrue(activity.contains("class CarVideoActivity : CarActivity()"))
+        assertTrue(activity.contains("setContentView(root)"))
+        assertTrue(activity.contains("setIgnoreConfigChanges(0xFFFFFFFF"))
+        assertTrue(activity.contains("CarProjectionRouter.markHosted"))
     }
 
     @Test

@@ -203,7 +203,10 @@ class HostedProjectionSourceTest {
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
         assertFalse(rootBlock.contains("LIVE_TV_ID"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))
-        assertTrue(rootBlock.contains("CarProjectionRouter.openFromChildren"))
+        assertFalse(
+            "CarMediaService must not act as a launcher/router for CarVideoActivity",
+            rootBlock.contains("CarProjectionRouter.openFromChildren")
+        )
         assertFalse(rootBlock.contains("createHostLauncherItem"))
         assertFalse(rootBlock.contains("createLiveTvMediaItem"))
     }
