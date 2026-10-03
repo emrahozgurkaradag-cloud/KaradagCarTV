@@ -127,8 +127,10 @@ class AndroidAutoDiscoveryTest {
                 "android.media.browse.MediaBrowserService"
             )
         )
-        assertTrue(
-            xml.contains("androidx.car.app.CarAppService")
+        assertFalse(
+            "CarMirrorService must not export CarAppService to Gearhead",
+            serviceBlock(xml, ".CarMirrorService")
+                .contains("androidx.car.app.CarAppService")
         )
         assertTrue(
             xml.contains(
@@ -251,11 +253,12 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             manifest.contains("""android:name=".CarMirrorService"""")
         )
-        assertTrue(mirror.contains("""android:exported="true""""))
-        assertTrue(
+        assertTrue(mirror.contains("""android:exported="false""""))
+        assertFalse(
+            "CarMirrorService must not advertise NAVIGATION to Gearhead",
             mirror.contains("androidx.car.app.CarAppService")
         )
-        assertTrue(
+        assertFalse(
             mirror.contains("androidx.car.app.category.NAVIGATION")
         )
         assertTrue(
@@ -426,14 +429,15 @@ class AndroidAutoEntryPointTest {
         assertTrue(media.contains("""android:exported="true""""))
         assertTrue(media.contains("""android:enabled="true""""))
         assertTrue(media.contains("""android:label="@string/media_service_name""""))
+        assertTrue(media.contains("""android:icon="@drawable/ic_media_service""""))
         assertTrue(video.contains("""android:label="@string/app_name""""))
         assertTrue(media.contains("MediaBrowserService"))
         assertTrue(media.contains("MediaLibraryService"))
         assertTrue(media.contains("MEDIA_PLAY_FROM_SEARCH"))
 
-        assertTrue(mirror.contains("""android:exported="true""""))
-        assertTrue(mirror.contains("androidx.car.app.CarAppService"))
-        assertTrue(mirror.contains("androidx.car.app.category.NAVIGATION"))
+        assertTrue(mirror.contains("""android:exported="false""""))
+        assertFalse(mirror.contains("androidx.car.app.CarAppService"))
+        assertFalse(mirror.contains("androidx.car.app.category.NAVIGATION"))
 
         assertTrue(registration.contains("android.intent.category.LAUNCHER"))
         assertTrue(registration.contains("android.intent.category.CAR_LAUNCHER"))
@@ -591,8 +595,10 @@ class AndroidAutoEntryPointTest {
         assertTrue(video.contains("""android:label="@string/app_name""""))
         assertTrue(video.contains("""android:enabled="true""""))
         assertTrue(media.contains("""android:label="@string/media_service_name""""))
+        assertTrue(media.contains("""android:icon="@drawable/ic_media_service""""))
         assertTrue(media.contains("""android:enabled="true""""))
         assertTrue(mirror.contains("""android:label="@string/mirror_service_name""""))
+        assertTrue(mirror.contains("""android:exported="false""""))
         assertFalse(media.contains("""android:label="@string/app_name""""))
         assertFalse(mirror.contains("""android:label="@string/app_name""""))
         assertTrue(

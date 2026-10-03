@@ -7,13 +7,13 @@
           no video tag
 
         media: CarMediaService (radio MediaSession). Distinct
-        service label "Karadag Radyo" so this unit's media catalog
-        does not consume the projection identity.
+        label "Karadag Radyo" and icon so the media catalog does
+        not consume the projection identity.
         service + projection: CarVideoService (aauto.aar
-        CarActivityService). Distinct label "Karadag Car TV".
-        template is left commented: Fermata Auto does the same so
-        the host does not classify the package as navigation and
-        drop CATEGORY_PROJECTION.
+        CarActivityService). Label "Karadag Car TV", app icon.
+        template is left commented and CarMirrorService is not
+        exported: an exported NAVIGATION CarAppService in the
+        same package as media makes this host skip projection.
         video is omitted: it is not part of Fermata's discovery
         model and is not used to declare an unofficial video app
         category.

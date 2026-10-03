@@ -168,6 +168,7 @@
             android:enabled="true"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback"
+            android:icon="@drawable/ic_media_service"
             android:label="@string/media_service_name">
 
             <intent-filter>
@@ -189,22 +190,17 @@
         <!-- ANDROIDX CAR APP SERVICE                               -->
         <!-- ====================================================== -->
 
+        <!--
+            Not advertised to Gearhead. Fermata Auto comments out
+            template and keeps media+projection as the visible pair.
+            An exported NAVIGATION CarAppService in the same package
+            as MediaBrowserService makes this host classify the APK
+            as a media app and skip CATEGORY_PROJECTION.
+        -->
         <service
             android:name=".CarMirrorService"
-            android:exported="true"
-            android:label="@string/mirror_service_name">
-
-            <intent-filter>
-
-                <action
-                    android:name="androidx.car.app.CarAppService" />
-
-                <category
-                    android:name="androidx.car.app.category.NAVIGATION" />
-
-            </intent-filter>
-
-        </service>
+            android:exported="false"
+            android:label="@string/mirror_service_name" />
 
         <!-- ====================================================== -->
         <!-- FERMATA TİPİ CAR ACTIVITY SERVICE                     -->
