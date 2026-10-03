@@ -24,10 +24,14 @@ import android.util.Log
  * "service" + "projection" automotive_app_desc.xml capabilities, binds
  * it, and only then calls getCarActivity() through the aauto.aar
  * CarActivityServiceProxy/CarActivityHost IPC protocol to host
- * CarVideoActivity. That handshake is driven entirely by the host; this
- * app does not manually open a Car connection or push the hosted
- * activity onto the host itself, and CarMediaService (radio discovery)
- * is not a launcher/router for it.
+ * CarVideoActivity. Fermata keeps that projection entry on its own
+ * launcher identity (app_name / Fermata Auto) and the media browser on
+ * a different label (Fermata Media Service). Karadag does the same:
+ * CarVideoService = app_name, CarMediaService = media_service_name.
+ * That handshake is driven entirely by the host; this app does not
+ * manually open a Car connection or push the hosted activity onto the
+ * host itself, and CarMediaService (radio discovery) is not a
+ * launcher/router for it.
  *
  * This object only keeps the two exact log tags needed to prove, on a
  * real car, that the host actually completes that handshake:

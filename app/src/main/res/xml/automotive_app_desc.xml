@@ -1,22 +1,30 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
     <!--
-        1.0.7 discovery restored. Real-car 1.0.9 hid the app after
-        media/template were removed. This car lists Karadag Car TV
-        as a media app; projection-only is invisible.
-        media: CarMediaService (radio MediaSession).
-        template: CarMirrorService.
-        service + projection: CarVideoService (aauto.aar).
-        video: park/OEM host video capability.
+        Fermata Auto (fermata/src/auto/res/xml/automotive_app_desc.xml):
+          media + service + projection
+          template commented out
+          no video tag
+
+        media: CarMediaService (radio MediaSession). Distinct
+        service label "Karadag Radyo" so this unit's media catalog
+        does not consume the projection identity.
+        service + projection: CarVideoService (aauto.aar
+        CarActivityService). Distinct label "Karadag Car TV".
+        template is left commented: Fermata Auto does the same so
+        the host does not classify the package as navigation and
+        drop CATEGORY_PROJECTION.
+        video is omitted: it is not part of Fermata's discovery
+        model and is not used to declare an unofficial video app
+        category.
         TV is not a MediaItem.
     -->
     <uses name="media" />
-    <uses name="template" />
+    <!-- <uses name="template" /> -->
     <uses
         name="service"
         tools:ignore="InvalidUsesTagAttribute" />
     <uses
         name="projection"
         tools:ignore="InvalidUsesTagAttribute" />
-    <uses name="video" />
 </automotiveApp>

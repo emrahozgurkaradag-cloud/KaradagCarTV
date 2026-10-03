@@ -81,6 +81,16 @@
             android:name="com.google.android.gms.car.notification.SmallIcon"
             android:resource="@mipmap/ic_launcher" />
 
+        <!--
+            Fermata main manifest declares this so Gearhead themes
+            the hosted CarActivity window from the aauto SDK. The
+            AAR itself ships an empty <application /> and does not
+            merge any discovery metadata.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.car.application.theme"
+            android:resource="@style/Theme.KaradagCarTV" />
+
         <!-- ====================================================== -->
         <!-- TELEFON UYGULAMASI                                    -->
         <!-- ====================================================== -->
@@ -155,8 +165,10 @@
 
         <service
             android:name=".CarMediaService"
+            android:enabled="true"
             android:exported="true"
-            android:foregroundServiceType="mediaPlayback">
+            android:foregroundServiceType="mediaPlayback"
+            android:label="@string/media_service_name">
 
             <intent-filter>
 
@@ -180,7 +192,7 @@
         <service
             android:name=".CarMirrorService"
             android:exported="true"
-            android:label="Karadag Car TV">
+            android:label="@string/mirror_service_name">
 
             <intent-filter>
 
@@ -200,8 +212,9 @@
 
         <service
             android:name=".CarVideoService"
+            android:enabled="true"
             android:exported="true"
-            android:label="Karadag Car TV">
+            android:label="@string/app_name">
 
             <intent-filter>
 

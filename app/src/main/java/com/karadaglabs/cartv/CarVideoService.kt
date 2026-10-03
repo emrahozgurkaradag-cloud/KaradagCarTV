@@ -54,16 +54,19 @@ class CarVideoService : CarActivityService() {
         )
 
         return try {
+            /*
+             * Fermata CarService does not override onBind. aauto
+             * gms.car.d.onBind only forwards to the Gearhead
+             * DynamicApiFactory proxy. Video focus belongs on the
+             * hosted CarVideoActivity after getCarActivity(), not
+             * on the still-empty service bind.
+             */
             val binder = super.onBind(intent)
 
             if (binder == null) {
                 Log.e(TAG, "CAR VIDEO SERVICE HOST BIND FAILED binder=null")
             } else {
-                val focus = CarHost.activateVideoLayer(this)
-                Log.d(
-                    TAG,
-                    "CAR VIDEO SERVICE HOST BIND OK videoFocus=${focus.reason}"
-                )
+                Log.d(TAG, "CAR VIDEO SERVICE HOST BIND OK")
             }
 
             binder

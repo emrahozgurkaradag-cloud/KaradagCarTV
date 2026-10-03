@@ -87,10 +87,15 @@ class AndroidAutoDiscoveryTest {
             xml.lineSequence().any { it.trim() == """<uses name="media" />""" }
         )
         assertTrue(
-            xml.lineSequence().any { it.trim() == """<uses name="template" />""" }
+            xml.contains("""<!-- <uses name="template" /> -->""")
         )
         assertTrue(xml.contains("""name="projection""""))
-        assertTrue(xml.contains("""<uses name="video" />"""))
+        assertFalse(
+            xml.lineSequence().any { it.trim() == """<uses name="video" />""" }
+        )
+        assertFalse(
+            xml.lineSequence().any { it.trim() == """<uses name="template" />""" }
+        )
         assertTrue(xml.contains("""name="service""""))
     }
 
@@ -101,6 +106,11 @@ class AndroidAutoDiscoveryTest {
         assertTrue(
             xml.contains(
                 """android:name="com.google.android.gms.car.application""""
+            )
+        )
+        assertTrue(
+            xml.contains(
+                """android:name="com.google.android.gms.car.application.theme""""
             )
         )
         assertTrue(
@@ -414,6 +424,9 @@ class AndroidAutoEntryPointTest {
         )
 
         assertTrue(media.contains("""android:exported="true""""))
+        assertTrue(media.contains("""android:enabled="true""""))
+        assertTrue(media.contains("""android:label="@string/media_service_name""""))
+        assertTrue(video.contains("""android:label="@string/app_name""""))
         assertTrue(media.contains("MediaBrowserService"))
         assertTrue(media.contains("MediaLibraryService"))
         assertTrue(media.contains("MEDIA_PLAY_FROM_SEARCH"))
@@ -450,7 +463,7 @@ class AndroidAutoEntryPointTest {
         assertTrue(service.contains("class CarVideoService : CarActivityService()"))
         assertTrue(service.contains("override fun getCarActivity()"))
         assertTrue(service.contains("return CarVideoActivity::class.java"))
-        assertTrue(service.contains("CarHost.activateVideoLayer"))
+        assertFalse(service.contains("CarHost.activateVideoLayer"))
         assertFalse(service.contains("CarYouTubeActivity"))
         assertFalse(service.contains("CarGoogleActivity"))
         assertFalse(service.contains("CarMediaService"))
@@ -550,13 +563,43 @@ class AndroidAutoEntryPointTest {
             desc.lineSequence().any { it.trim() == """<uses name="media" />""" }
         )
         assertTrue(
-            desc.lineSequence().any { it.trim() == """<uses name="template" />""" }
+            desc.contains("""<!-- <uses name="template" /> -->""")
         )
         assertTrue(desc.contains("""name="projection""""))
         assertTrue(desc.contains("""name="service""""))
-        assertTrue(desc.contains("""<uses name="video" />"""))
+        assertFalse(
+            desc.lineSequence().any { it.trim() == """<uses name="video" />""" }
+        )
+        assertFalse(
+            desc.lineSequence().any { it.trim() == """<uses name="template" />""" }
+        )
         assertFalse(desc.contains("""<!-- <uses name="media" /> -->"""))
-        assertFalse(desc.contains("""<!-- <uses name="template" /> -->"""))
+    }
+
+    @Test
+    fun carServicesUseDistinctFermataStyleLauncherIdentities() {
+        val manifest = mainSourceFile("AndroidManifest.xml").readText()
+        val strings = mainSourceFile("res/values/strings.xml").readText()
+        val video = serviceBlock(manifest, ".CarVideoService")
+        val media = serviceBlock(manifest, ".CarMediaService")
+        val mirror = serviceBlock(manifest, ".CarMirrorService")
+
+        assertTrue(strings.contains("""<string name="app_name">Karadag Car TV</string>"""))
+        assertTrue(strings.contains("""<string name="media_service_name">Karadag Radyo</string>"""))
+        assertTrue(strings.contains("""<string name="mirror_service_name">Karadag Mirror</string>"""))
+
+        assertTrue(video.contains("""android:label="@string/app_name""""))
+        assertTrue(video.contains("""android:enabled="true""""))
+        assertTrue(media.contains("""android:label="@string/media_service_name""""))
+        assertTrue(media.contains("""android:enabled="true""""))
+        assertTrue(mirror.contains("""android:label="@string/mirror_service_name""""))
+        assertFalse(media.contains("""android:label="@string/app_name""""))
+        assertFalse(mirror.contains("""android:label="@string/app_name""""))
+        assertTrue(
+            manifest.contains(
+                """android:name="com.google.android.gms.car.application.theme""""
+            )
+        )
     }
 
     @Test
