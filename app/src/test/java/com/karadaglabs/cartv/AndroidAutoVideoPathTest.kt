@@ -92,6 +92,7 @@ class AndroidAutoVideoPathTest {
         assertTrue(activity.contains("DISCOVERY_TEST_ONLY = true"))
         assertTrue(activity.contains("KARADAG CAR TV\\nPROJECTION OK"))
         assertTrue(activity.contains("showDiscoveryTestScreen()"))
+        assertTrue(activity.contains("ViewGroup.LayoutParams.MATCH_PARENT"))
         assertTrue(activity.contains("buildHomeUi"))
         assertTrue(activity.contains("IptvRepository.loadCached"))
         assertTrue(activity.contains("ExoPlayer.Builder(this).build()"))

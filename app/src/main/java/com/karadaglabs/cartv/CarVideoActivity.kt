@@ -76,6 +76,7 @@ class CarVideoActivity : CarActivity() {
 
         if (DISCOVERY_TEST_ONLY) {
             showDiscoveryTestScreen()
+            HostedNavigation.hideChrome(this)
             return
         }
 
@@ -142,32 +143,54 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun showDiscoveryTestScreen() {
+        val root = FrameLayout(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            setBackgroundColor(Color.BLACK)
+            keepScreenOn = true
+        }
         val text = TextView(this).apply {
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
             this.text = DISCOVERY_TEST_TEXT
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.BLACK)
             gravity = Gravity.CENTER
             typeface = Typeface.DEFAULT_BOLD
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 36f)
         }
-        setContentView(text)
+        root.addView(text)
+        setContentView(root)
+        Log.d(TAG, "CAR VIDEO ACTIVITY PROJECTION OK")
     }
 
     override fun onStart() {
         super.onStart()
         HostedNavigation.hideChrome(this)
+        if (DISCOVERY_TEST_ONLY) {
+            return
+        }
         bindIfPlaying()
     }
 
     override fun onResume() {
         super.onResume()
         HostedNavigation.hideChrome(this)
+        if (DISCOVERY_TEST_ONLY) {
+            return
+        }
         applyVideoFocus(request = true)
         bindIfPlaying()
     }
 
     override fun onPause() {
-        applyVideoFocus(request = false)
+        if (!DISCOVERY_TEST_ONLY) {
+            applyVideoFocus(request = false)
+        }
         super.onPause()
     }
 
