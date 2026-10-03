@@ -6,17 +6,18 @@
           template commented out
           no video tag
 
-        media: CarMediaService (radio MediaSession). Distinct
-        label "Karadag Radyo" and icon so the media catalog does
-        not consume the projection identity.
-        service + projection: CarVideoService (aauto.aar
-        CarActivityService). Label "Karadag Car TV", app icon.
-        template is left commented and CarMirrorService is not
-        exported: an exported NAVIGATION CarAppService in the
-        same package as media makes this host skip projection.
-        video is omitted: it is not part of Fermata's discovery
-        model and is not used to declare an unofficial video app
-        category.
+        Matches Fermata Auto exactly: media + service + projection.
+        template stays commented. video is omitted.
+
+        CarVideoService intent-filter already matches Fermata
+        CarService (MAIN + CATEGORY_PROJECTION + OEM). Gearhead
+        still lists only the media service on a stock real-car
+        session because sideloaded CATEGORY_PROJECTION apps are
+        filtered unless Android Auto Developer settings
+        "Unknown sources" is on (and on current Gearhead that
+        may still be insufficient without a Play-trusted
+        installer). 1.0.9 proved projection-only vanishes here.
+
         TV is not a MediaItem.
     -->
     <uses name="media" />
