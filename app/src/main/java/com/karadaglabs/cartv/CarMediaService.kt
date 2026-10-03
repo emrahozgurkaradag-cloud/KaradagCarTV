@@ -1,8 +1,10 @@
 ﻿package com.karadaglabs.cartv
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import android.view.SurfaceHolder
@@ -10,9 +12,11 @@ import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -21,20 +25,12 @@ import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.ListeningExecutorService
-import com.google.common.util.concurrent.MoreExecutors
-import java.util.concurrent.Executors
 
 @UnstableApi
 class CarMediaService : MediaLibraryService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaLibrarySession: MediaLibrarySession
-
-    private val executor: ListeningExecutorService =
-        MoreExecutors.listeningDecorator(
-            Executors.newSingleThreadExecutor()
-        )
 
     /*
      * ============================================================
@@ -91,8 +87,6 @@ class CarMediaService : MediaLibraryService() {
                 .setId("karadag-car-tv")
                 .build()
 
-        CarVideoPlayerHolder.setPlayer(player)
-
         Log.d(
             TAG,
             "======================================"
@@ -122,9 +116,31 @@ class CarMediaService : MediaLibraryService() {
         )
     }
 
+    override fun onBind(intent: Intent?): IBinder? {
+        Log.d(
+            TAG,
+            "ON_BIND action=${intent?.action}"
+        )
+        Log.i(
+            "CAR_MEDIA_BIND",
+            "timestamp=${System.currentTimeMillis()} action=${intent?.action} " +
+                "package=${intent?.`package`}"
+        )
+        return super.onBind(intent)
+    }
+
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
     ): MediaLibrarySession {
+
+        Log.d(
+            TAG,
+            "ON_GET_SESSION package=${controllerInfo.packageName}"
+        )
+        Log.i(
+            "CAR_MEDIA_SESSION",
+            "timestamp=${System.currentTimeMillis()} package=${controllerInfo.packageName}"
+        )
 
         return mediaLibrarySession
     }
@@ -136,8 +152,6 @@ class CarMediaService : MediaLibraryService() {
             "Karadag Car Media Service destroyed"
         )
 
-        CarVideoPlayerHolder.clearPlayer()
-
         if (::mediaLibrarySession.isInitialized) {
             mediaLibrarySession.release()
         }
@@ -145,8 +159,6 @@ class CarMediaService : MediaLibraryService() {
         if (::player.isInitialized) {
             player.release()
         }
-
-        executor.shutdown()
 
         super.onDestroy()
     }
@@ -166,15 +178,30 @@ class CarMediaService : MediaLibraryService() {
          * --------------------------------------------------------
          */
 
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            Log.d(
+                TAG,
+                "ON_CONNECT package=${controller.packageName}"
+            )
+            return super.onConnect(session, controller)
+        }
+
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
 
-            Log.d(
+            Log.i(
                 TAG,
-                "ON_GET_LIBRARY_ROOT"
+                "ON_GET_LIBRARY_ROOT package=${browser.packageName}"
+            )
+            Log.i(
+                "CAR_MEDIA_ROOT",
+                "timestamp=${System.currentTimeMillis()} package=${browser.packageName}"
             )
 
             val extras =
@@ -258,9 +285,14 @@ class CarMediaService : MediaLibraryService() {
                 LibraryResult<ImmutableList<MediaItem>>
                 > {
 
-            Log.d(
+            Log.i(
                 TAG,
-                "ON_GET_CHILDREN parentId=$parentId"
+                "ON_GET_CHILDREN parentId=$parentId package=${browser.packageName}"
+            )
+            Log.i(
+                "CAR_MEDIA_CHILDREN",
+                "timestamp=${System.currentTimeMillis()} parentId=$parentId " +
+                    "package=${browser.packageName}"
             )
 
             /*
@@ -272,66 +304,26 @@ class CarMediaService : MediaLibraryService() {
             if (parentId == ROOT_ID) {
 
                 /*
-                 * Android Auto ana menüyü açtığında
-                 * IPTV API'yi kontrol ediyoruz.
-                 *
-                 * Böylece telefon uygulamasının cache'ine
-                 * bağımlı kalmıyoruz.
+                 * MediaLibraryService is discovery-only. Root radios
+                 * keep the app visible on this car (automotive
+                 * "media" capability). TV / YouTube / Google are not
+                 * MediaItems and this media tap does not try to force
+                 * CarVideoActivity open: CarVideoService's own
+                 * CATEGORY_PROJECTION registration is the only path
+                 * Android Auto uses to host CarVideoActivity.
                  */
 
-                return executor.submit<LibraryResult<ImmutableList<MediaItem>>> {
+                val items =
+                    radios.map { radio ->
+                        createRadioMediaItem(radio)
+                    }
 
-                    val channels =
-                        IptvRepository.loadFromApiWithCacheFallback(this@CarMediaService)
-
-                    Log.d(
-                        TAG,
-                        "ROOT IPTV count = ${channels.size}"
-                    )
-
-                    val items =
-                        listOf(
-
-                            createCategoryItem(
-                                id = LIVE_TV_ID,
-                                title = "📺 Canlı TV",
-                                subtitle =
-                                    if (
-                                        channels.isNotEmpty()
-                                    ) {
-                                        "${channels.size} kanal"
-                                    } else {
-                                        "Canlı TV"
-                                    }
-                            ),
-
-                            createCategoryItem(
-                                id = RADIO_ID,
-                                title = "📻 Canlı Radyo",
-                                subtitle =
-                                    "${radios.size} radyo"
-                            ),
-
-                            createCategoryItem(
-                                id = YOUTUBE_ID,
-                                title = "▶️ YouTube",
-                                subtitle = "YouTube"
-                            ),
-
-                            createCategoryItem(
-                                id = GOOGLE_ID,
-                                title = "🔎 Google Arama",
-                                subtitle = "Web"
-                            )
-                        )
-
+                return Futures.immediateFuture(
                     LibraryResult.ofItemList(
-                        ImmutableList.copyOf(
-                            items
-                        ),
+                        ImmutableList.copyOf(items),
                         params
                     )
-                }
+                )
             }
 
             /*
@@ -716,6 +708,21 @@ class CarMediaService : MediaLibraryService() {
                         "Resolving mediaId=${requested.mediaId}"
                     )
 
+                    if (
+                        requested.mediaId.startsWith("live-tv-") ||
+                        requested.mediaId == LIVE_TV_ID ||
+                        requested.mediaId == YOUTUBE_ID ||
+                        requested.mediaId == GOOGLE_ID
+                    ) {
+                        /*
+                         * These are not playable MediaSession items.
+                         * CarMediaService is not a launcher/router for
+                         * CarVideoActivity; reject playback instead of
+                         * reaching into the projection host from here.
+                         */
+                        return@mapNotNull null
+                    }
+
                     /*
                      * RADYO
                      */
@@ -999,13 +1006,12 @@ class CarMediaService : MediaLibraryService() {
 }
 
 /**
- * CarMediaService ExoPlayer'ını CarVideoActivity SurfaceView'sine
- * bağlar. Ses MediaLibrarySession üzerinden gider; görüntü aauto
- * CarActivity penceresindeki SurfaceHolder'a yazılır.
+ * CarVideoActivity ExoPlayer'ını hosted SurfaceView'a bağlar.
+ * Bu oynatıcı MediaLibrarySession'a bağlı değildir; Canlı TV
+ * Android Auto Now Playing ekranını açmaz.
  *
- * Tek ExoPlayer örneği CarMediaService'tedir. Telefon
- * PlayerActivity ayrı bir oynatıcı kullanır ve bu holder'a
- * bağlanmaz.
+ * CarMediaService ExoPlayer'ı yalnızca radyo içindir.
+ * Telefon PlayerActivity ayrı bir oynatıcı kullanır.
  */
 @UnstableApi
 object CarVideoPlayerHolder {
@@ -1050,6 +1056,26 @@ object CarVideoPlayerHolder {
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "surface=${surfaceView?.holder?.surface}"
                 )
+                Log.i(TAG, "LIVE_TV_FIRST_FRAME")
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                val cause = error.cause
+                val http = cause as? HttpDataSource.InvalidResponseCodeException
+                val url = pendingChannel?.streamUrl ?: pendingAudio?.streamUrl
+                val kind = streamKind(url)
+
+                Log.e(
+                    TAG,
+                    "ExoPlayer error " +
+                        "code=${error.errorCode} " +
+                        "name=${error.errorCodeName} " +
+                        "http=${http?.responseCode ?: "-"} " +
+                        "kind=$kind " +
+                        "url=$url " +
+                        "message=${error.message}",
+                    error
+                )
             }
 
             override fun onVideoSizeChanged(
@@ -1067,9 +1093,22 @@ object CarVideoPlayerHolder {
                 playbackState: Int
             ) {
 
+                val stateName =
+                    when (playbackState) {
+                        Player.STATE_IDLE -> "STATE_IDLE"
+                        Player.STATE_BUFFERING -> "STATE_BUFFERING"
+                        Player.STATE_READY -> "STATE_READY"
+                        Player.STATE_ENDED -> "STATE_ENDED"
+                        else -> playbackState.toString()
+                    }
+
+                if (playbackState == Player.STATE_READY) {
+                    Log.d(TAG, "ExoPlayer STATE_READY")
+                }
+
                 Log.d(
                     TAG,
-                    "PROJECTION playbackState=$playbackState " +
+                    "ExoPlayer $stateName " +
                         "playWhenReady=${player?.playWhenReady}"
                 )
             }
@@ -1311,8 +1350,24 @@ object CarVideoPlayerHolder {
 
             Log.d(
                 TAG,
-                "Prepared projection channel ${channel.mediaId}"
+                "Prepared projection channel ${channel.mediaId} " +
+                    "kind=${streamKind(channel.streamUrl)} " +
+                    "url=${channel.streamUrl}"
             )
+        }
+    }
+
+    private fun streamKind(url: String?): String {
+        val value = url.orEmpty().lowercase()
+        return when {
+            value.isBlank() -> "none"
+            value.contains(".m3u8") -> "hls"
+            value.contains(".mpd") -> "dash"
+            value.contains(".mp4") -> "mp4"
+            value.contains(".ts") -> "ts"
+            value.startsWith("http://") -> "http"
+            value.startsWith("https://") -> "https"
+            else -> "unknown"
         }
     }
 
@@ -1381,6 +1436,13 @@ object CarVideoPlayerHolder {
 
             Log.d(
                 TAG,
+                "ExoPlayer SurfaceView'a bağlanıyor " +
+                    "${surfaceView.width}x${surfaceView.height} " +
+                    "surface=$surface"
+            )
+
+            Log.d(
+                TAG,
                 "CAR VIDEO SURFACE BOUND " +
                     "${surfaceView.width}x${surfaceView.height} " +
                     "surface=$surface"
@@ -1406,6 +1468,11 @@ object CarVideoPlayerHolder {
 
                     Log.d(
                         TAG,
+                        "SurfaceHolder oluşturuluyor surface=${holder.surface}"
+                    )
+
+                    Log.d(
+                        TAG,
                         "CAR VIDEO SURFACE CREATED surface=${holder.surface}"
                     )
 
@@ -1427,6 +1494,11 @@ object CarVideoPlayerHolder {
                     width: Int,
                     height: Int
                 ) {
+
+                    Log.d(
+                        TAG,
+                        "SurfaceView gerçek width=$width height=$height"
+                    )
 
                     Log.d(
                         TAG,

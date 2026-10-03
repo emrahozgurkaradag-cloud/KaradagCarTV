@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Karadag Car TV</string>
+    <string name="media_service_name">Karadag Radyo</string>
+    <string name="mirror_service_name">Karadag Mirror</string>
 </resources>

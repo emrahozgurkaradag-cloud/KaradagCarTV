@@ -137,7 +137,7 @@ class CarGoogleActivity : CarActivity() {
             return
         }
 
-        HostedNavigation.open(this, ProjectionDestination.LIVE_TV)
+        HostedNavigation.open(this, ProjectionDestination.HOME)
     }
 
     private fun attachCarSearchBox() {
@@ -177,9 +177,9 @@ class CarGoogleActivity : CarActivity() {
 
     private fun applyVideoFocus(request: Boolean) {
         val result = if (request) {
-            CarVideoFocus.request(this)
+            CarHost.activateVideoLayer(this)
         } else {
-            CarVideoFocus.relinquish(this)
+            CarHost.deactivateVideoLayer(this)
         }
 
         Log.d(

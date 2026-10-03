@@ -28,9 +28,20 @@
         android:name="android.permission.WAKE_LOCK" />
 
     <!--
-        Android 11+ package visibility: uygulama Android Auto host
-        paketini görebilir. Host'un bu uygulamayı keşfetmesi exported
-        servisler + automotive_app_desc üzerinden olur.
+        Fermata Auto flavor declares this because that APK is the
+        Auto build. This is a phone APK that also projects. Gearhead
+        discovers us via CATEGORY_PROJECTION, not this feature.
+        required=false keeps the APK installable on phones.
+    -->
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false" />
+
+    <!--
+        Android 11+ package visibility: aauto.aar gms.car.g loads
+        DynamicApiFactory from the Gearhead package. Without this
+        query CarActivityService.onCreate fails with
+        "Error loading car activity host".
     -->
     <queries>
         <package android:name="com.google.android.projection.gearhead" />
@@ -52,7 +63,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
-        android:label="Karadag Car TV"
+        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.KaradagCarTV"
@@ -81,6 +92,16 @@
             android:name="com.google.android.gms.car.notification.SmallIcon"
             android:resource="@mipmap/ic_launcher" />
 
+        <!--
+            Fermata main manifest declares this so Gearhead themes
+            the hosted CarActivity window from the aauto SDK. The
+            AAR itself ships an empty <application /> and does not
+            merge any discovery metadata.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.car.application.theme"
+            android:resource="@style/Theme.KaradagCarTV" />
+
         <!-- ====================================================== -->
         <!-- TELEFON UYGULAMASI                                    -->
         <!-- ====================================================== -->
@@ -90,7 +111,7 @@
             android:exported="true"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize"
-            android:label="Karadag Car TV"
+            android:label="@string/app_name"
             android:theme="@style/Theme.KaradagCarTV"
             android:windowSoftInputMode="adjustResize">
 
@@ -102,9 +123,6 @@
                 <category
                     android:name="android.intent.category.LAUNCHER" />
 
-                <category
-                    android:name="android.intent.category.CAR_LAUNCHER" />
-
             </intent-filter>
 
         </activity>
@@ -114,7 +132,7 @@
             android:exported="false"
             android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize"
-            android:label="Karadag Car TV"
+            android:label="@string/app_name"
             android:theme="@style/Theme.KaradagCarTV"
             android:windowSoftInputMode="adjustResize" />
 
@@ -149,26 +167,34 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.KaradagCarTV" />
 
+        <activity
+            android:name=".DiscoveryDiagnosticActivity"
+            android:exported="false"
+            android:label="AA Discovery"
+            android:theme="@style/Theme.KaradagCarTV" />
+
         <!-- ====================================================== -->
         <!-- ANDROID AUTO MEDIA SERVICE                             -->
         <!-- ====================================================== -->
 
         <service
             android:name=".CarMediaService"
+            android:enabled="true"
             android:exported="true"
-            android:foregroundServiceType="mediaPlayback">
+            android:foregroundServiceType="mediaPlayback"
+            android:icon="@drawable/ic_media_service"
+            android:label="@string/media_service_name">
 
             <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+            </intent-filter>
 
-                <action
-                    android:name="androidx.media3.session.MediaLibraryService" />
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
 
-                <action
-                    android:name="android.media.browse.MediaBrowserService" />
-
-                <action
-                    android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
-
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
 
         </service>
@@ -177,22 +203,17 @@
         <!-- ANDROIDX CAR APP SERVICE                               -->
         <!-- ====================================================== -->
 
+        <!--
+            Not advertised to Gearhead. Fermata Auto comments out
+            template and keeps media+projection as the visible pair.
+            An exported NAVIGATION CarAppService in the same package
+            as MediaBrowserService makes this host classify the APK
+            as a media app and skip CATEGORY_PROJECTION.
+        -->
         <service
             android:name=".CarMirrorService"
-            android:exported="true"
-            android:label="Karadag Car TV">
-
-            <intent-filter>
-
-                <action
-                    android:name="androidx.car.app.CarAppService" />
-
-                <category
-                    android:name="androidx.car.app.category.NAVIGATION" />
-
-            </intent-filter>
-
-        </service>
+            android:exported="false"
+            android:label="@string/mirror_service_name" />
 
         <!-- ====================================================== -->
         <!-- FERMATA TİPİ CAR ACTIVITY SERVICE                     -->
@@ -200,8 +221,9 @@
 
         <service
             android:name=".CarVideoService"
+            android:enabled="true"
             android:exported="true"
-            android:label="Karadag Car TV">
+            android:label="@string/app_name">
 
             <intent-filter>
 

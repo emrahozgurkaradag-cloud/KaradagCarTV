@@ -631,6 +631,19 @@ class MainActivity : ComponentActivity() {
                     MaterialTheme.typography.headlineLarge
             )
 
+            Button(
+                onClick = {
+                    context.startActivity(
+                        Intent(
+                            context,
+                            DiscoveryDiagnosticActivity::class.java
+                        )
+                    )
+                }
+            ) {
+                Text("AA Discovery")
+            }
+
             Spacer(
                 Modifier.height(4.dp)
             )

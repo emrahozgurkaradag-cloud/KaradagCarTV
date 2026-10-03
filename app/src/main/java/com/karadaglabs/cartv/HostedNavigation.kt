@@ -46,7 +46,9 @@ object HostedNavigation {
 
     fun className(destination: ProjectionDestination): String {
         return when (destination) {
+            ProjectionDestination.HOME,
             ProjectionDestination.LIVE_TV,
+            ProjectionDestination.TV_PLAYER,
             ProjectionDestination.RADIO ->
                 CarVideoActivity::class.java.name
 
@@ -62,7 +64,9 @@ object HostedNavigation {
         try {
             val carUiController = activity.getCarUiController()
             carUiController.statusBarController.hideAppHeader()
+            carUiController.statusBarController.hideTitle()
             carUiController.menuController.hideMenuButton()
+            carUiController.drawerController.closeDrawer()
         } catch (exception: Exception) {
             Log.e(TAG, "Unable to hide car chrome", exception)
         }
@@ -103,7 +107,9 @@ object HostedNavigation {
             )
         }
 
-        ProjectionDestination.entries.forEach { destination ->
+        ProjectionDestination.entries
+            .filter { it != ProjectionDestination.HOME }
+            .forEach { destination ->
             val selected = destination == current
             val button = Button(activity).apply {
                 text = destination.label

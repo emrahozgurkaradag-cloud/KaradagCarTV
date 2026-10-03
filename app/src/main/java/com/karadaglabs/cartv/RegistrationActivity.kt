@@ -341,6 +341,19 @@ class RegistrationActivity : ComponentActivity() {
                             .headlineLarge
                 )
 
+                Button(
+                    onClick = {
+                        startActivity(
+                            Intent(
+                                this@RegistrationActivity,
+                                DiscoveryDiagnosticActivity::class.java
+                            )
+                        )
+                    }
+                ) {
+                    Text("AA Discovery")
+                }
+
                 Spacer(
                     Modifier.height(12.dp)
                 )

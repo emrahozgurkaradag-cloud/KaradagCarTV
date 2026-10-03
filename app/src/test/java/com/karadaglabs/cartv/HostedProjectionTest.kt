@@ -14,14 +14,17 @@ class HostedProjectionDestinationTest {
         assertEquals("YOUTUBE", ProjectionDestination.YOUTUBE.name)
         assertEquals("GOOGLE", ProjectionDestination.GOOGLE.name)
         assertEquals("RADIO", ProjectionDestination.RADIO.name)
+        assertEquals("HOME", ProjectionDestination.HOME.name)
+        assertEquals("TV_PLAYER", ProjectionDestination.TV_PLAYER.name)
         assertEquals("Canlı TV", ProjectionDestination.LIVE_TV.label)
+        assertEquals("Ana Menü", ProjectionDestination.HOME.label)
         assertEquals("YouTube", ProjectionDestination.YOUTUBE.label)
         assertEquals("Google", ProjectionDestination.GOOGLE.label)
         assertEquals("Canlı Radyo", ProjectionDestination.RADIO.label)
     }
 
     @Test
-    fun extraParsesKnownDestinationsAndDefaultsToLiveTv() {
+    fun extraParsesKnownDestinationsAndDefaultsToHome() {
         assertEquals(
             ProjectionDestination.YOUTUBE,
             ProjectionDestination.fromExtra("YOUTUBE")
@@ -36,10 +39,14 @@ class HostedProjectionDestinationTest {
         )
         assertEquals(
             ProjectionDestination.LIVE_TV,
+            ProjectionDestination.fromExtra("LIVE_TV")
+        )
+        assertEquals(
+            ProjectionDestination.HOME,
             ProjectionDestination.fromExtra(null)
         )
         assertEquals(
-            ProjectionDestination.LIVE_TV,
+            ProjectionDestination.HOME,
             ProjectionDestination.fromExtra("unknown")
         )
     }
@@ -53,6 +60,7 @@ class HostedProjectionDestinationTest {
         assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
         assertTrue(nav.contains("CAR HOST NAVIGATION FAILED"))
         assertTrue(nav.contains("startCarActivity"))
+        assertTrue(nav.contains("closeDrawer"))
         assertTrue(nav.contains("CarVideoPlayerHolder.setPlayWhenReady(false)"))
     }
 
@@ -84,12 +92,17 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("CAR VIDEO SURFACE CHANGED width="))
         assertTrue(video.contains("setCarSurfaceView"))
         assertTrue(video.contains("SurfaceHolder.Callback"))
+        assertTrue(video.contains("ExoPlayer.Builder"))
+        assertTrue(video.contains("CarVideoPlayerHolder.setPlayer"))
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("CAR VIDEO SURFACE BOUND"))
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
+        assertTrue(holder.contains("LIVE_TV_FIRST_FRAME"))
         assertTrue(holder.contains("onRenderedFirstFrame"))
+        assertTrue(holder.contains("ExoPlayer STATE_READY"))
         assertFalse(video.contains("PlayerView"))
         assertFalse(video.contains("IptvActivity"))
+        assertFalse(video.contains("CarMediaService::class.java"))
     }
 
     @Test
@@ -104,7 +117,7 @@ class HostedProjectionSourceTest {
         assertTrue(youtube.contains("CAR YOUTUBE URL LOADED"))
         assertTrue(youtube.contains("CarProjectionWebView"))
         assertTrue(youtube.contains("HostedWebView.configure"))
-        assertTrue(youtube.contains("CarVideoFocus.request"))
+        assertTrue(youtube.contains("CarHost.activateVideoLayer"))
         assertTrue(youtube.contains("canGoBack()"))
         assertTrue(hosted.contains("javaScriptEnabled = true"))
         assertTrue(hosted.contains("mediaPlaybackRequiresUserGesture = false"))
@@ -129,7 +142,7 @@ class HostedProjectionSourceTest {
         assertTrue(google.contains("https://www.google.com/"))
         assertTrue(google.contains("searchController"))
         assertTrue(google.contains("SearchCallback"))
-        assertTrue(google.contains("CarVideoFocus.request"))
+        assertTrue(google.contains("CarHost.activateVideoLayer"))
         assertTrue(google.contains("canGoBack()"))
         assertTrue(hosted.contains("javaScriptEnabled = true"))
         assertTrue(hosted.contains("view.destroy()"))
@@ -149,8 +162,8 @@ class HostedProjectionSourceTest {
         assertTrue(video.contains("KEYCODE_BACK"))
         assertTrue(youtube.contains("navigateBack()"))
         assertTrue(google.contains("navigateBack()"))
-        assertTrue(youtube.contains("ProjectionDestination.LIVE_TV"))
-        assertTrue(google.contains("ProjectionDestination.LIVE_TV"))
+        assertTrue(youtube.contains("ProjectionDestination.HOME"))
+        assertTrue(google.contains("ProjectionDestination.HOME"))
     }
 
     @Test
@@ -178,25 +191,40 @@ class HostedProjectionSourceTest {
     fun mediaSessionDoesNotPlayLiveTvYoutubeOrGoogle() {
         val media = source("java/com/karadaglabs/cartv/CarMediaService.kt")
 
-        assertTrue(media.contains("Canlı TV araç ekranında açılır"))
-        assertTrue(media.contains("YouTube araç ekranında açılır"))
-        assertTrue(media.contains("Google araç ekranında açılır"))
         assertTrue(media.contains("createRadioMediaItem"))
+        assertTrue(media.contains("MediaLibraryService is discovery-only"))
         assertFalse(media.contains("YouTube telefonda açılır"))
         val addStart = media.indexOf("override fun onAddMediaItems")
         val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
+        assertTrue(addBlock.contains("return@mapNotNull null"))
+
+        val rootStart = media.indexOf("if (parentId == ROOT_ID)")
+        val radioStart = media.indexOf("if (parentId == RADIO_ID)", rootStart)
+        val rootBlock = media.substring(rootStart, radioStart)
+        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
+        assertFalse(rootBlock.contains("LIVE_TV_ID"))
+        assertTrue(rootBlock.contains("createRadioMediaItem"))
+        assertFalse(
+            "CarMediaService must not act as a launcher/router for CarVideoActivity",
+            rootBlock.contains("CarProjectionRouter.openFromChildren")
+        )
+        assertFalse(rootBlock.contains("createHostLauncherItem"))
+        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
     }
 
     @Test
     fun radioCatalogIsSharedWithHostedMenu() {
         assertTrue(RadioStations.all.isNotEmpty())
         assertTrue(RadioStations.all.any { it.id == "power-fm" })
-        val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
-        assertTrue(video.contains("RadioStations.all"))
-        assertTrue(video.contains("prepareAudio"))
-        assertTrue(video.contains("RadioStations.saveLastSelectedId"))
-        assertTrue(video.contains("RadioStations.lastSelectedId"))
+        val media = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+        val destinations = source(
+            "java/com/karadaglabs/cartv/ProjectionDestination.kt"
+        )
+        assertTrue(media.contains("RadioStations.all"))
+        assertTrue(media.contains("createRadioMediaItem"))
+        assertTrue(destinations.contains("Canlı Radyo"))
+        assertTrue(destinations.contains("listOf(LIVE_TV, YOUTUBE, GOOGLE)"))
     }
 
     private fun source(relativeFromMain: String): String {

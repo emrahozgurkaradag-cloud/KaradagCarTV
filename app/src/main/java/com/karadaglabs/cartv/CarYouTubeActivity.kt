@@ -95,6 +95,7 @@ class CarYouTubeActivity : CarActivity() {
 
     override fun onResume() {
         super.onResume()
+        HostedNavigation.hideChrome(this)
         applyVideoFocus(request = true)
         webView?.onResume()
     }
@@ -137,14 +138,14 @@ class CarYouTubeActivity : CarActivity() {
             return
         }
 
-        HostedNavigation.open(this, ProjectionDestination.LIVE_TV)
+        HostedNavigation.open(this, ProjectionDestination.HOME)
     }
 
     private fun applyVideoFocus(request: Boolean) {
         val result = if (request) {
-            CarVideoFocus.request(this)
+            CarHost.activateVideoLayer(this)
         } else {
-            CarVideoFocus.relinquish(this)
+            CarHost.deactivateVideoLayer(this)
         }
 
         Log.d(
