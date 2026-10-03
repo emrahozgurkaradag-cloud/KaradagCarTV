@@ -41,52 +41,134 @@ object AndroidAutoDiscoveryDiagnostic {
     fun collect(context: Context): String {
         val pm = context.packageManager
         val pkg = context.packageName
-        val out = StringBuilder()
+        val videoName = CarVideoService::class.java.name
+        val mediaName = CarMediaService::class.java.name
+        val video = serviceSnapshot(pm, pkg, videoName)
+        val media = serviceSnapshot(pm, pkg, mediaName)
+        val projectionHits = queryServices(
+            pm,
+            Intent(Intent.ACTION_MAIN).addCategory(CATEGORY_PROJECTION)
+        )
+        val oemHits = queryServices(
+            pm,
+            Intent(Intent.ACTION_MAIN).addCategory(CATEGORY_PROJECTION_OEM)
+        )
+        val mediaHits = queryServices(pm, Intent(MEDIA_BROWSER))
+        val desc = automotiveDesc(context, pm, pkg)
+        val installer = installerPackageName(pm, pkg)
+        val app = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
+        val debuggable =
+            app.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        val summary =
+            "CAR_VIDEO_SERVICE_FOUND=${video.found} " +
+                "EXPORTED=${video.exported} " +
+                "PERMISSION=${video.permission} " +
+                "MAIN=${projectionHits.contains(videoName) || oemHits.contains(videoName)} " +
+                "PROJECTION=${projectionHits.contains(videoName)} " +
+                "PROJECTION_OEM=${oemHits.contains(videoName)} " +
+                "MEDIA_SERVICE_FOUND=${media.found} " +
+                "AUTOMOTIVE_DESC=${desc.readable} " +
+                "INSTALLER=$installer " +
+                "DEBUGGABLE=$debuggable"
 
+        val out = StringBuilder()
         out.appendLine("KARADAG AA DISCOVERY DIAGNOSTIC")
+        out.appendLine(summary)
         out.appendLine("package=$pkg")
         out.appendLine("sdk=${Build.VERSION.SDK_INT}")
+        out.appendLine("installerPackageName=$installer")
         out.appendLine(installerLine(pm, pkg))
-        appendApplication(out, context, pm, pkg)
-        appendService(
-            out,
-            pm,
-            pkg,
-            CarVideoService::class.java.name,
-            "CarVideoService"
-        )
-        appendService(
-            out,
-            pm,
-            pkg,
-            CarMediaService::class.java.name,
-            "CarMediaService"
-        )
+        out.appendLine("applicationInfo.flags=${app.flags}")
+        out.appendLine("applicationInfo.flagsHex=0x${Integer.toHexString(app.flags)}")
+        out.appendLine("application.debuggable=$debuggable")
+        appendApplication(out, context, pm, pkg, app)
+        appendServiceSnapshot(out, "CarVideoService", video)
+        appendServiceSnapshot(out, "CarMediaService", media)
         appendQuery(
             out,
-            pm,
-            Intent(Intent.ACTION_MAIN).addCategory(CATEGORY_PROJECTION),
+            projectionHits,
             "QUERY MAIN+CATEGORY_PROJECTION"
         )
         appendQuery(
             out,
-            pm,
-            Intent(Intent.ACTION_MAIN).addCategory(CATEGORY_PROJECTION_OEM),
+            oemHits,
             "QUERY MAIN+CATEGORY_PROJECTION_OEM"
         )
         appendQuery(
             out,
-            pm,
-            Intent(MEDIA_BROWSER),
+            mediaHits,
             "QUERY MediaBrowserService"
         )
-        appendAutomotiveDesc(out, context, pm, pkg)
+        out.appendLine("--- automotive_app_desc ---")
+        out.appendLine("automotive_app_desc.readable=${desc.readable}")
+        if (desc.uses.isNotEmpty()) {
+            out.appendLine(
+                "automotive_app_desc.uses=${desc.uses.joinToString(",")}"
+            )
+        }
+        if (desc.error != null) {
+            out.appendLine("automotive_app_desc.error=${desc.error}")
+        }
+        out.appendLine(summary)
         out.appendLine(
             "NOTE: PackageManager seeing CarVideoService does not " +
                 "mean Gearhead will list it. Media and projection " +
                 "use different host allowlists."
         )
         return out.toString()
+    }
+
+    private data class ServiceSnapshot(
+        val found: Boolean,
+        val name: String = "",
+        val exported: String = "false",
+        val enabled: String = "false",
+        val permission: String = "NONE",
+        val label: String = "",
+        val error: String? = null
+    )
+
+    private data class QueryHit(
+        val name: String,
+        val exported: Boolean,
+        val permission: String,
+        val main: Boolean,
+        val projection: Boolean,
+        val oem: Boolean,
+        val media: Boolean
+    )
+
+    private data class QueryResult(
+        val hits: List<QueryHit>
+    ) {
+        fun contains(className: String): Boolean {
+            return hits.any { it.name == className }
+        }
+    }
+
+    private data class AutomotiveDesc(
+        val readable: Boolean,
+        val uses: List<String> = emptyList(),
+        val error: String? = null
+    )
+
+    private fun installerPackageName(
+        pm: PackageManager,
+        pkg: String
+    ): String {
+        return try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                val info = pm.getInstallSourceInfo(pkg)
+                info.installingPackageName
+                    ?: info.initiatingPackageName
+                    ?: "null"
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getInstallerPackageName(pkg) ?: "null"
+            }
+        } catch (error: Exception) {
+            "ERROR:${error.message}"
+        }
     }
 
     private fun installerLine(
@@ -112,15 +194,11 @@ object AndroidAutoDiscoveryDiagnostic {
         out: StringBuilder,
         context: Context,
         pm: PackageManager,
-        pkg: String
+        pkg: String,
+        app: ApplicationInfo
     ) {
-        val flags = PackageManager.GET_META_DATA
-        val app = pm.getApplicationInfo(pkg, flags)
         val meta = app.metaData
-        val debuggable =
-            app.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         out.appendLine("application.label=${app.loadLabel(pm)}")
-        out.appendLine("application.debuggable=$debuggable")
         out.appendLine(
             "application.meta.gms.car.application=" +
                 (meta?.containsKey(GMS_CAR_APPLICATION) == true)
@@ -137,25 +215,23 @@ object AndroidAutoDiscoveryDiagnostic {
                     "com.google.android.gms.car.notification.SmallIcon"
                 ) == true)
         )
-        val automotive = pm.hasSystemFeature(
-            PackageManager.FEATURE_AUTOMOTIVE
+        out.appendLine(
+            "device.hasAutomotiveFeature=" +
+                pm.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)
         )
-        out.appendLine("device.hasAutomotiveFeature=$automotive")
         out.appendLine(
             "app.labelResolved=${context.getString(R.string.app_name)}"
         )
+        out.appendLine("applicationInfo.packageName=${app.packageName}")
     }
 
-    private fun appendService(
-        out: StringBuilder,
+    private fun serviceSnapshot(
         pm: PackageManager,
         pkg: String,
-        className: String,
-        title: String
-    ) {
-        out.appendLine("--- $title ---")
+        className: String
+    ): ServiceSnapshot {
         val component = ComponentName(pkg, className)
-        try {
+        return try {
             val info: ServiceInfo = if (Build.VERSION.SDK_INT >= 33) {
                 pm.getServiceInfo(
                     component,
@@ -167,27 +243,44 @@ object AndroidAutoDiscoveryDiagnostic {
                 @Suppress("DEPRECATION")
                 pm.getServiceInfo(component, PackageManager.GET_META_DATA)
             }
-            out.appendLine("$title.found=true")
-            out.appendLine("$title.name=${info.name}")
-            out.appendLine("$title.exported=${info.exported}")
-            out.appendLine("$title.enabled=${info.enabled}")
-            out.appendLine(
-                "$title.permission=${info.permission ?: "NONE"}"
+            ServiceSnapshot(
+                found = true,
+                name = info.name,
+                exported = info.exported.toString(),
+                enabled = info.enabled.toString(),
+                permission = info.permission ?: "NONE",
+                label = info.loadLabel(pm).toString()
             )
-            out.appendLine("$title.label=${info.loadLabel(pm)}")
         } catch (error: Exception) {
-            out.appendLine("$title.found=false")
-            out.appendLine("$title.error=${error.message}")
+            ServiceSnapshot(
+                found = false,
+                error = error.message
+            )
         }
     }
 
-    private fun appendQuery(
+    private fun appendServiceSnapshot(
         out: StringBuilder,
-        pm: PackageManager,
-        intent: Intent,
-        title: String
+        title: String,
+        snapshot: ServiceSnapshot
     ) {
         out.appendLine("--- $title ---")
+        out.appendLine("$title.found=${snapshot.found}")
+        if (snapshot.found) {
+            out.appendLine("$title.name=${snapshot.name}")
+            out.appendLine("$title.exported=${snapshot.exported}")
+            out.appendLine("$title.enabled=${snapshot.enabled}")
+            out.appendLine("$title.permission=${snapshot.permission}")
+            out.appendLine("$title.label=${snapshot.label}")
+        } else {
+            out.appendLine("$title.error=${snapshot.error}")
+        }
+    }
+
+    private fun queryServices(
+        pm: PackageManager,
+        intent: Intent
+    ): QueryResult {
         val matches = if (Build.VERSION.SDK_INT >= 33) {
             pm.queryIntentServices(
                 intent,
@@ -199,9 +292,8 @@ object AndroidAutoDiscoveryDiagnostic {
             @Suppress("DEPRECATION")
             pm.queryIntentServices(intent, PackageManager.MATCH_ALL)
         }
-        out.appendLine("$title.count=${matches.size}")
-        matches.forEach { resolve ->
-            val service = resolve.serviceInfo ?: return@forEach
+        val hits = matches.mapNotNull { resolve ->
+            val service = resolve.serviceInfo ?: return@mapNotNull null
             val filters = resolve.filter
             val actions = mutableListOf<String>()
             val categories = mutableListOf<String>()
@@ -213,30 +305,52 @@ object AndroidAutoDiscoveryDiagnostic {
                     categories += filters.getCategory(i)
                 }
             }
+            QueryHit(
+                name = service.name,
+                exported = service.exported,
+                permission = service.permission ?: "NONE",
+                main = actions.contains(Intent.ACTION_MAIN) ||
+                    intent.action == Intent.ACTION_MAIN,
+                projection = categories.contains(CATEGORY_PROJECTION) ||
+                    intent.hasCategory(CATEGORY_PROJECTION),
+                oem = categories.contains(CATEGORY_PROJECTION_OEM) ||
+                    intent.hasCategory(CATEGORY_PROJECTION_OEM),
+                media = actions.contains(MEDIA_BROWSER) ||
+                    intent.action == MEDIA_BROWSER
+            )
+        }
+        return QueryResult(hits)
+    }
+
+    private fun appendQuery(
+        out: StringBuilder,
+        result: QueryResult,
+        title: String
+    ) {
+        out.appendLine("--- $title ---")
+        out.appendLine("$title.count=${result.hits.size}")
+        result.hits.forEach { hit ->
             out.appendLine(
-                "  ${service.name} exported=${service.exported} " +
-                    "permission=${service.permission ?: "NONE"} " +
-                    "MAIN=${actions.contains(Intent.ACTION_MAIN)} " +
-                    "PROJECTION=${categories.contains(CATEGORY_PROJECTION)} " +
-                    "OEM=${categories.contains(CATEGORY_PROJECTION_OEM)} " +
-                    "MEDIA=${actions.contains(MEDIA_BROWSER)}"
+                "  ${hit.name} exported=${hit.exported} " +
+                    "permission=${hit.permission} " +
+                    "MAIN=${hit.main} " +
+                    "PROJECTION=${hit.projection} " +
+                    "OEM=${hit.oem} " +
+                    "MEDIA=${hit.media}"
             )
         }
     }
 
-    private fun appendAutomotiveDesc(
-        out: StringBuilder,
+    private fun automotiveDesc(
         context: Context,
         pm: PackageManager,
         pkg: String
-    ) {
-        out.appendLine("--- automotive_app_desc ---")
-        try {
+    ): AutomotiveDesc {
+        return try {
             val app = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA)
             val resId = app.metaData?.getInt(GMS_CAR_APPLICATION) ?: 0
             if (resId == 0) {
-                out.appendLine("automotive_app_desc.readable=false")
-                return
+                return AutomotiveDesc(readable = false)
             }
             val parser = context.resources.getXml(resId)
             val uses = mutableListOf<String>()
@@ -252,13 +366,9 @@ object AndroidAutoDiscoveryDiagnostic {
                 }
                 event = parser.next()
             }
-            out.appendLine("automotive_app_desc.readable=true")
-            out.appendLine(
-                "automotive_app_desc.uses=${uses.joinToString(",")}"
-            )
+            AutomotiveDesc(readable = true, uses = uses)
         } catch (error: Exception) {
-            out.appendLine("automotive_app_desc.readable=false")
-            out.appendLine("automotive_app_desc.error=${error.message}")
+            AutomotiveDesc(readable = false, error = error.message)
         }
     }
 }
