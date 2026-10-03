@@ -23,6 +23,8 @@ object HostedNavigation {
         destination: ProjectionDestination
     ) {
         try {
+            CarVideoPlayerHolder.setPlayWhenReady(false)
+
             val intent = Intent()
             intent.setClassName(
                 from.packageName,

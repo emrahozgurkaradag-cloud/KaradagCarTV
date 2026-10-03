@@ -1,6 +1,25 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <automotiveApp xmlns:tools="http://schemas.android.com/tools">
-    <!-- Fermata Auto: fermata/src/auto/res/xml/automotive_app_desc.xml -->
+    <!--
+        Fermata Auto (fermata/src/auto/res/xml/automotive_app_desc.xml):
+          media + service + projection
+          template commented out
+          no video tag
+
+        Matches Fermata Auto exactly: media + service + projection.
+        template stays commented. video is omitted.
+
+        CarVideoService intent-filter already matches Fermata
+        CarService (MAIN + CATEGORY_PROJECTION + OEM). Gearhead
+        still lists only the media service on a stock real-car
+        session because sideloaded CATEGORY_PROJECTION apps are
+        filtered unless Android Auto Developer settings
+        "Unknown sources" is on (and on current Gearhead that
+        may still be insufficient without a Play-trusted
+        installer). 1.0.9 proved projection-only vanishes here.
+
+        TV is not a MediaItem.
+    -->
     <uses name="media" />
     <!-- <uses name="template" /> -->
     <uses

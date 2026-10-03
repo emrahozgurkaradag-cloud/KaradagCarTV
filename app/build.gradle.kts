@@ -14,8 +14,8 @@ android {
         applicationId = "com.karadaglabs.cartv"
         minSdk = 29
         targetSdk = 37
-        versionCode = 20
-        versionName = "2.0.0"
+        versionCode = 21
+        versionName = "1.0.20"
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
