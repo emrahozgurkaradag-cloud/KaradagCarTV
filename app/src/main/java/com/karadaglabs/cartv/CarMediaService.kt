@@ -1056,6 +1056,7 @@ object CarVideoPlayerHolder {
                         "surfaceView=${surfaceView?.width}x${surfaceView?.height} " +
                         "surface=${surfaceView?.holder?.surface}"
                 )
+                Log.i(TAG, "LIVE_TV_FIRST_FRAME")
             }
 
             override fun onPlayerError(error: PlaybackException) {

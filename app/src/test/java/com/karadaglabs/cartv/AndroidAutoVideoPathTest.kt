@@ -89,7 +89,7 @@ class AndroidAutoVideoPathTest {
     fun carVideoActivityKeepsExistingUiBehindDiscoveryTestScreen() {
         val activity = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
 
-        assertTrue(activity.contains("DISCOVERY_TEST_ONLY = true"))
+        assertTrue(activity.contains("DISCOVERY_TEST_ONLY = false"))
         assertTrue(activity.contains("KARADAG CAR TV\\nPROJECTION OK"))
         assertTrue(activity.contains("showDiscoveryTestScreen()"))
         assertTrue(activity.contains("ViewGroup.LayoutParams.MATCH_PARENT"))
@@ -171,6 +171,7 @@ class AndroidAutoVideoPathTest {
         assertTrue(holder.contains("setVideoSurfaceHolder"))
         assertTrue(holder.contains("onRenderedFirstFrame"))
         assertTrue(holder.contains("CAR VIDEO FIRST FRAME"))
+        assertTrue(holder.contains("LIVE_TV_FIRST_FRAME"))
         assertTrue(holder.contains("ExoPlayer STATE_READY"))
         assertTrue(holder.contains("play deferred: surface not valid"))
         assertFalse(activity.contains("setZOrderMediaOverlay"))
@@ -184,20 +185,31 @@ class AndroidAutoVideoPathTest {
         )
 
         assertTrue(destinations.contains("HOME"))
+        assertTrue(destinations.contains("TV_PLAYER"))
         assertTrue(destinations.contains("menuDestinations"))
         assertTrue(destinations.contains("Canlı TV"))
         assertTrue(destinations.contains("Canlı Radyo"))
         assertTrue(destinations.contains("YouTube"))
         assertTrue(destinations.contains("Google"))
+        assertTrue(destinations.contains("listOf(LIVE_TV, YOUTUBE, GOOGLE)"))
         assertTrue(activity.contains("buildHomeUi"))
         assertTrue(activity.contains("menuDestinations"))
         assertTrue(activity.contains("IptvRepository.loadCached"))
         assertTrue(activity.contains("IptvRepository.loadFromApiWithCacheFallback"))
+        assertTrue(activity.contains("CarProjectionWebView"))
+        assertTrue(activity.contains("CAR YOUTUBE PAGE FINISHED"))
+        assertTrue(activity.contains("CAR GOOGLE PAGE FINISHED"))
+        assertTrue(destinations.contains("https://www.youtube.com/"))
+        assertTrue(destinations.contains("https://www.google.com/"))
+        assertTrue(activity.contains("YOUTUBE_URL"))
+        assertTrue(activity.contains("GOOGLE_URL"))
+        assertFalse(activity.contains("HostedNavigation.open"))
         assertFalse(activity.contains("channels.size == 16"))
         assertFalse(activity.contains("listOf(\"ATV\""))
         assertTrue(activity.contains("selectChannel"))
         assertTrue(activity.contains("showChannelList()"))
         assertTrue(activity.contains("showHome()"))
+        assertTrue(activity.contains("ProjectionDestination.TV_PLAYER"))
     }
 
     private fun source(relativeFromMain: String): String {

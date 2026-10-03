@@ -48,6 +48,7 @@ object HostedNavigation {
         return when (destination) {
             ProjectionDestination.HOME,
             ProjectionDestination.LIVE_TV,
+            ProjectionDestination.TV_PLAYER,
             ProjectionDestination.RADIO ->
                 CarVideoActivity::class.java.name
 
