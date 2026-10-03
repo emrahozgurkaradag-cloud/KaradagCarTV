@@ -5,14 +5,10 @@ import com.google.android.apps.auto.sdk.CarActivity
 import com.google.android.apps.auto.sdk.CarActivityService
 
 /**
- * Fermata CarService shape:
+ * Fermata CarService:
  *   getCarActivity() -> MainCarActivity
  *   onCreate() -> super.onCreate()
  *   no onBind override
- *
- * aauto gms.car.d.onBind forwards to Gearhead's
- * DynamicApiFactory proxy. Extra bind-time behavior is not
- * part of projection discovery and is not added here.
  */
 class CarVideoService : CarActivityService() {
 
@@ -21,28 +17,23 @@ class CarVideoService : CarActivityService() {
     }
 
     override fun getCarActivity(): Class<out CarActivity> {
+        Log.i(TAG, "CAR VIDEO SERVICE GET ACTIVITY")
         CarProjectionRouter.routeLog(
             CarProjectionRouter.TAG_VIDEO_SERVICE_GET_ACTIVITY,
             success = true,
-            detail = "getCarActivity() called -> CarVideoActivity"
+            detail = "getCarActivity() -> CarVideoActivity"
         )
-
         return CarVideoActivity::class.java
-    }
-
-    override fun getHandledConfigChanges(): Int {
-        return 0xFFFFFFFF.toInt()
     }
 
     override fun onCreate() {
         Log.d(TAG, "CAR VIDEO SERVICE ON CREATE")
+        super.onCreate()
+        Log.d(TAG, "CAR VIDEO SERVICE HOST READY")
+    }
 
-        try {
-            super.onCreate()
-            Log.d(TAG, "CAR VIDEO SERVICE HOST READY")
-        } catch (throwable: Throwable) {
-            Log.e(TAG, "CAR VIDEO SERVICE HOST BIND FAILED", throwable)
-            throw throwable
-        }
+    override fun onDestroy() {
+        Log.d(TAG, "CAR VIDEO SERVICE ON DESTROY")
+        super.onDestroy()
     }
 }
