@@ -29,6 +29,43 @@ class AndroidAutoVideoPathTest {
     }
 
     @Test
+    fun discoveryDiagnosticInspectsPackageManagerProjectionFields() {
+        val diagnostic = source(
+            "java/com/karadaglabs/cartv/AndroidAutoDiscoveryDiagnostic.kt"
+        )
+        val activity = source(
+            "java/com/karadaglabs/cartv/DiscoveryDiagnosticActivity.kt"
+        )
+        val manifest = source("AndroidManifest.xml")
+
+        assertTrue(diagnostic.contains("CarVideoService::class.java.name"))
+        assertTrue(diagnostic.contains("CarMediaService::class.java.name"))
+        assertTrue(diagnostic.contains("CATEGORY_PROJECTION"))
+        assertTrue(diagnostic.contains("CATEGORY_PROJECTION_OEM"))
+        assertTrue(diagnostic.contains("Intent.ACTION_MAIN"))
+        assertTrue(diagnostic.contains("MediaBrowserService"))
+        assertTrue(diagnostic.contains("com.google.android.gms.car.application"))
+        assertTrue(diagnostic.contains("getInstallSourceInfo"))
+        assertTrue(diagnostic.contains("info.exported"))
+        assertTrue(diagnostic.contains("info.permission"))
+        assertTrue(activity.contains("collectAndLog"))
+        assertTrue(manifest.contains(".DiscoveryDiagnosticActivity"))
+        assertFalse(
+            "Diagnostic must not be a new projection entry",
+            serviceBlock(manifest, ".DiscoveryDiagnosticActivity")
+                .contains("CATEGORY_PROJECTION")
+        )
+    }
+
+    private fun serviceBlock(xml: String, name: String): String {
+        val start = xml.indexOf("""android:name="$name"""")
+        if (start < 0) return ""
+        val serviceStart = xml.lastIndexOf("<", start)
+        val end = xml.indexOf("</activity>", start)
+        return if (end > serviceStart) xml.substring(serviceStart, end) else ""
+    }
+
+    @Test
     fun carVideoServiceReturnsCarVideoActivity() {
         val service = source("java/com/karadaglabs/cartv/CarVideoService.kt")
 

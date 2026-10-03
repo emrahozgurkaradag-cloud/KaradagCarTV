@@ -167,6 +167,12 @@
             android:excludeFromRecents="true"
             android:theme="@style/Theme.KaradagCarTV" />
 
+        <activity
+            android:name=".DiscoveryDiagnosticActivity"
+            android:exported="false"
+            android:label="AA Discovery"
+            android:theme="@style/Theme.KaradagCarTV" />
+
         <!-- ====================================================== -->
         <!-- ANDROID AUTO MEDIA SERVICE                             -->
         <!-- ====================================================== -->
