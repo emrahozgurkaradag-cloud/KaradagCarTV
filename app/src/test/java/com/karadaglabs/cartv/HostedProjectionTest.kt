@@ -217,11 +217,14 @@ class HostedProjectionSourceTest {
     fun radioCatalogIsSharedWithHostedMenu() {
         assertTrue(RadioStations.all.isNotEmpty())
         assertTrue(RadioStations.all.any { it.id == "power-fm" })
-        val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
-        assertTrue(video.contains("RadioStations.all"))
-        assertTrue(video.contains("prepareAudio"))
-        assertTrue(video.contains("RadioStations.saveLastSelectedId"))
-        assertTrue(video.contains("RadioStations.lastSelectedId"))
+        val media = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+        val destinations = source(
+            "java/com/karadaglabs/cartv/ProjectionDestination.kt"
+        )
+        assertTrue(media.contains("RadioStations.all"))
+        assertTrue(media.contains("createRadioMediaItem"))
+        assertTrue(destinations.contains("Canlı Radyo"))
+        assertTrue(destinations.contains("listOf(LIVE_TV, YOUTUBE, GOOGLE)"))
     }
 
     private fun source(relativeFromMain: String): String {
