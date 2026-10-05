@@ -509,7 +509,11 @@ class AndroidAutoEntryPointTest {
         assertFalse(rootBlock.contains("LIVE_TV_ID"))
         assertFalse(rootBlock.contains("YOUTUBE_ID"))
         assertFalse(rootBlock.contains("GOOGLE_ID"))
-        assertFalse(rootBlock.contains("createLiveTvMediaItem"))
+        assertFalse(media.contains("createLiveTvMediaItem"))
+        assertFalse(media.contains("LIVE_TV_ID"))
+        assertFalse(media.contains("YOUTUBE_ID"))
+        assertFalse(media.contains("GOOGLE_ID"))
+        assertTrue(media.contains("isRejectedVideoOrWebId"))
         assertTrue(rootBlock.contains("createRadioMediaItem"))
         assertTrue(media.contains("MediaLibraryService is discovery-only"))
         assertFalse(
@@ -564,7 +568,8 @@ class AndroidAutoEntryPointTest {
         assertTrue(service.contains("TAG_VIDEO_SERVICE_GET_ACTIVITY"))
         assertTrue(activity.contains("class CarVideoActivity : CarActivity()"))
         assertTrue(activity.contains("setContentView(root)"))
-        assertTrue(activity.contains("setIgnoreConfigChanges(0xFFFFFFFF"))
+        assertTrue(activity.contains("HostedNavigation.initCarActivity(this)"))
+        assertTrue(activity.contains("setContentView(root)"))
         assertTrue(activity.contains("CarProjectionRouter.markHosted"))
     }
 

@@ -1,6 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.util.Log
@@ -10,59 +9,31 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
+import com.google.android.apps.auto.sdk.CarUiController
 
+/**
+ * Fermata MainCarActivity.initCarActivity():
+ *   setIgnoreConfigChanges(0xFFFFFFFF)
+ *   CarUiController.statusBarController.hideAppHeader()
+ *   CarUiController.menuController.hideMenuButton()
+ *
+ * Hosted destinations stay inside one CarVideoActivity
+ * content window. Navigation is in-activity state, not a
+ * second hosted CarActivity class.
+ */
 object HostedNavigation {
 
     private const val TAG = "KaradagHostedNav"
 
-    @OptIn(UnstableApi::class)
-    fun open(
-        from: CarActivity,
-        destination: ProjectionDestination
-    ) {
-        try {
-            CarVideoPlayerHolder.setPlayWhenReady(false)
-
-            val intent = Intent()
-            intent.setClassName(
-                from.packageName,
-                className(destination)
-            )
-            intent.putExtra(
-                ProjectionDestination.EXTRA,
-                destination.name
-            )
-            from.startCarActivity(intent)
-        } catch (exception: Exception) {
-            Log.e(
-                TAG,
-                "CAR HOST NAVIGATION FAILED destination=${destination.name}",
-                exception
-            )
-        }
-    }
-
-    fun className(destination: ProjectionDestination): String {
-        return when (destination) {
-            ProjectionDestination.HOME,
-            ProjectionDestination.LIVE_TV,
-            ProjectionDestination.TV_PLAYER,
-            ProjectionDestination.RADIO ->
-                CarVideoActivity::class.java.name
-
-            ProjectionDestination.YOUTUBE ->
-                CarYouTubeActivity::class.java.name
-
-            ProjectionDestination.GOOGLE ->
-                CarGoogleActivity::class.java.name
-        }
+    fun initCarActivity(activity: CarActivity) {
+        activity.setIgnoreConfigChanges(0xFFFFFFFF.toInt())
+        hideChrome(activity)
     }
 
     fun hideChrome(activity: CarActivity) {
         try {
-            val carUiController = activity.getCarUiController()
+            val carUiController: CarUiController = activity.getCarUiController()
             carUiController.statusBarController.hideAppHeader()
             carUiController.statusBarController.hideTitle()
             carUiController.menuController.hideMenuButton()
@@ -110,22 +81,22 @@ object HostedNavigation {
         ProjectionDestination.entries
             .filter { it != ProjectionDestination.HOME }
             .forEach { destination ->
-            val selected = destination == current
-            val button = Button(activity).apply {
-                text = destination.label
-                isSelected = selected
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setOnClickListener { onSelect(destination) }
-                val params = LinearLayout.LayoutParams(
-                    0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    1f
-                )
-                params.rightMargin = dp(4)
-                layoutParams = params
+                val selected = destination == current
+                val button = Button(activity).apply {
+                    text = destination.label
+                    isSelected = selected
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                    setOnClickListener { onSelect(destination) }
+                    val params = LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        1f
+                    )
+                    params.rightMargin = dp(4)
+                    layoutParams = params
+                }
+                row.addView(button)
             }
-            row.addView(button)
-        }
 
         column.addView(brand)
         column.addView(row)

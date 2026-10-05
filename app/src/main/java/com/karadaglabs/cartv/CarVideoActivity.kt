@@ -76,8 +76,7 @@ class CarVideoActivity : CarActivity() {
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
         CarProjectionRouter.markHosted(packageName)
 
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
+        HostedNavigation.initCarActivity(this)
 
         if (DISCOVERY_TEST_ONLY) {
             showDiscoveryTestScreen()
@@ -178,6 +177,13 @@ class CarVideoActivity : CarActivity() {
         applyState()
     }
 
+    override fun onStop() {
+        if (!DISCOVERY_TEST_ONLY) {
+            webView?.onPause()
+        }
+        super.onStop()
+    }
+
     private fun showDiscoveryTestScreen() {
         val root = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -221,6 +227,7 @@ class CarVideoActivity : CarActivity() {
         }
         applyVideoFocus(request = true)
         bindIfPlaying()
+        webView?.onResume()
     }
 
     override fun onPause() {
@@ -278,8 +285,17 @@ class CarVideoActivity : CarActivity() {
             return true
         }
 
+        val webOpen = destination == ProjectionDestination.YOUTUBE ||
+            destination == ProjectionDestination.GOOGLE
+        val view = webView
+        if (webOpen && view != null && view.canGoBack()) {
+            view.goBack()
+            return true
+        }
+
         if (
             destination == ProjectionDestination.LIVE_TV ||
+            destination == ProjectionDestination.RADIO ||
             destination == ProjectionDestination.YOUTUBE ||
             destination == ProjectionDestination.GOOGLE
         ) {
@@ -302,6 +318,10 @@ class CarVideoActivity : CarActivity() {
             ProjectionDestination.LIVE_TV -> {
                 destination = ProjectionDestination.LIVE_TV
                 state = state.showList()
+                CarVideoPlayerHolder.setPlayWhenReady(false)
+            }
+            ProjectionDestination.RADIO -> {
+                destination = ProjectionDestination.RADIO
                 CarVideoPlayerHolder.setPlayWhenReady(false)
             }
             ProjectionDestination.YOUTUBE,
@@ -396,7 +416,10 @@ class CarVideoActivity : CarActivity() {
             }
 
         listContainer?.visibility =
-            if (destination == ProjectionDestination.LIVE_TV) {
+            if (
+                destination == ProjectionDestination.LIVE_TV ||
+                destination == ProjectionDestination.RADIO
+            ) {
                 View.VISIBLE
             } else {
                 View.GONE
@@ -430,6 +453,11 @@ class CarVideoActivity : CarActivity() {
                 CarVideoPlayerHolder.clearCarSurfaceView(view)
             }
             CarVideoPlayerHolder.setPlayWhenReady(false)
+            return
+        }
+
+        if (destination == ProjectionDestination.RADIO) {
+            applyRadioState()
             return
         }
 
@@ -516,7 +544,22 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun onChannelClicked(channel: IptvChannel) {
+        if (destination == ProjectionDestination.RADIO) {
+            selectRadio(channel)
+            return
+        }
         selectChannel(channel)
+    }
+
+    private fun selectRadio(channel: IptvChannel) {
+        val radio = RadioStations.all.firstOrNull { station ->
+            station.url == channel.streamUrl || station.name == channel.name
+        } ?: return
+
+        selectedRadioId = radio.id
+        RadioStations.saveLastSelectedId(this, radio.id)
+        destination = ProjectionDestination.RADIO
+        applyState()
     }
 
     private fun selectChannel(channel: IptvChannel) {
@@ -580,23 +623,40 @@ class CarVideoActivity : CarActivity() {
         }
         container.addView(title)
 
-        ProjectionDestination.menuDestinations.forEach { dest ->
-            val button = Button(this).apply {
-                text = dest.label
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
-                isAllCaps = false
-                setOnClickListener { onMenuSelected(dest) }
+        val destinations = ProjectionDestination.menuDestinations
+        destinations.chunked(2).forEach { rowDestinations ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     0,
                     1f
-                ).apply {
-                    topMargin = dp(8)
-                    bottomMargin = dp(8)
-                }
-                minHeight = dp(56)
+                )
+                gravity = Gravity.CENTER
             }
-            container.addView(button)
+
+            rowDestinations.forEach { dest ->
+                val button = Button(this).apply {
+                    text = dest.label
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+                    isAllCaps = false
+                    setOnClickListener { onMenuSelected(dest) }
+                    layoutParams = LinearLayout.LayoutParams(
+                        0,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        1f
+                    ).apply {
+                        leftMargin = dp(8)
+                        rightMargin = dp(8)
+                        topMargin = dp(8)
+                        bottomMargin = dp(8)
+                    }
+                    minHeight = dp(56)
+                }
+                row.addView(button)
+            }
+
+            container.addView(row)
         }
 
         return container

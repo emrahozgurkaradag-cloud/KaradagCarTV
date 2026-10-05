@@ -55,13 +55,15 @@ class HostedProjectionDestinationTest {
     fun hostedClassNamesStayOnCarActivities() {
         val nav = source("java/com/karadaglabs/cartv/HostedNavigation.kt")
 
-        assertTrue(nav.contains("CarVideoActivity::class.java.name"))
-        assertTrue(nav.contains("CarYouTubeActivity::class.java.name"))
-        assertTrue(nav.contains("CarGoogleActivity::class.java.name"))
-        assertTrue(nav.contains("CAR HOST NAVIGATION FAILED"))
-        assertTrue(nav.contains("startCarActivity"))
+        assertTrue(nav.contains("fun initCarActivity"))
+        assertTrue(nav.contains("setIgnoreConfigChanges(0xFFFFFFFF.toInt())"))
+        assertTrue(nav.contains("getCarUiController()"))
+        assertTrue(nav.contains("hideAppHeader()"))
+        assertTrue(nav.contains("hideMenuButton()"))
         assertTrue(nav.contains("closeDrawer"))
-        assertTrue(nav.contains("CarVideoPlayerHolder.setPlayWhenReady(false)"))
+        assertFalse(nav.contains("startCarActivity"))
+        assertFalse(nav.contains("CarYouTubeActivity::class.java.name"))
+        assertFalse(nav.contains("CarGoogleActivity::class.java.name"))
     }
 
     private fun source(relativeFromMain: String): String {
@@ -159,11 +161,13 @@ class HostedProjectionSourceTest {
         val google = source("java/com/karadaglabs/cartv/CarGoogleActivity.kt")
 
         assertTrue(video.contains("showChannelList()"))
+        assertTrue(video.contains("showHome()"))
         assertTrue(video.contains("KEYCODE_BACK"))
+        assertTrue(video.contains("canGoBack()"))
         assertTrue(youtube.contains("navigateBack()"))
         assertTrue(google.contains("navigateBack()"))
-        assertTrue(youtube.contains("ProjectionDestination.HOME"))
-        assertTrue(google.contains("ProjectionDestination.HOME"))
+        assertFalse(youtube.contains("startCarActivity"))
+        assertFalse(google.contains("startCarActivity"))
     }
 
     @Test
@@ -224,7 +228,11 @@ class HostedProjectionSourceTest {
         assertTrue(media.contains("RadioStations.all"))
         assertTrue(media.contains("createRadioMediaItem"))
         assertTrue(destinations.contains("Canlı Radyo"))
-        assertTrue(destinations.contains("listOf(LIVE_TV, YOUTUBE, GOOGLE)"))
+        assertTrue(destinations.contains("listOf(LIVE_TV, RADIO, YOUTUBE, GOOGLE)"))
+        assertFalse(media.contains("createLiveTvMediaItem"))
+        assertFalse(media.contains("LIVE_TV_ID"))
+        assertFalse(media.contains("YOUTUBE_ID"))
+        assertFalse(media.contains("GOOGLE_ID"))
     }
 
     private fun source(relativeFromMain: String): String {

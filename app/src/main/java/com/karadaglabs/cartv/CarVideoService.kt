@@ -41,4 +41,9 @@ class CarVideoService : CarActivityService() {
             throw throwable
         }
     }
+
+    override fun onDestroy() {
+        Log.d(TAG, "CAR VIDEO SERVICE ON DESTROY")
+        super.onDestroy()
+    }
 }

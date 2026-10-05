@@ -24,7 +24,7 @@ enum class ProjectionDestination {
         const val GOOGLE_URL = "https://www.google.com/"
 
         val menuDestinations: List<ProjectionDestination> =
-            listOf(LIVE_TV, YOUTUBE, GOOGLE)
+            listOf(LIVE_TV, RADIO, YOUTUBE, GOOGLE)
 
         fun fromExtra(value: String?): ProjectionDestination {
             return entries.firstOrNull { it.name == value } ?: HOME

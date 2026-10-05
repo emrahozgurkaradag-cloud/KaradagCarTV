@@ -31,8 +31,7 @@ class CarGoogleActivity : CarActivity() {
 
         Log.d(TAG, "CAR GOOGLE ACTIVITY AÇILDI")
 
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
+        HostedNavigation.initCarActivity(this)
         attachCarSearchBox()
 
         val overlay = FrameLayout(this).apply {
@@ -53,11 +52,7 @@ class CarGoogleActivity : CarActivity() {
         }
 
         root.addView(
-            HostedNavigation.menuBar(this, ProjectionDestination.GOOGLE) { destination ->
-                if (destination != ProjectionDestination.GOOGLE) {
-                    HostedNavigation.open(this, destination)
-                }
-            }
+            HostedNavigation.menuBar(this, ProjectionDestination.GOOGLE) { }
         )
 
         val view = CarProjectionWebView(HostedWebView.themedContext(this))
@@ -137,7 +132,7 @@ class CarGoogleActivity : CarActivity() {
             return
         }
 
-        HostedNavigation.open(this, ProjectionDestination.HOME)
+        super.onBackPressed()
     }
 
     private fun attachCarSearchBox() {

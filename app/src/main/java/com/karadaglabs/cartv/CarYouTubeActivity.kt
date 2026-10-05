@@ -30,8 +30,7 @@ class CarYouTubeActivity : CarActivity() {
 
         Log.d(TAG, "CAR YOUTUBE ACTIVITY AÇILDI")
 
-        setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        HostedNavigation.hideChrome(this)
+        HostedNavigation.initCarActivity(this)
 
         val overlay = FrameLayout(this).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -51,11 +50,7 @@ class CarYouTubeActivity : CarActivity() {
         }
 
         root.addView(
-            HostedNavigation.menuBar(this, ProjectionDestination.YOUTUBE) { destination ->
-                if (destination != ProjectionDestination.YOUTUBE) {
-                    HostedNavigation.open(this, destination)
-                }
-            }
+            HostedNavigation.menuBar(this, ProjectionDestination.YOUTUBE) { }
         )
 
         val view = CarProjectionWebView(HostedWebView.themedContext(this))
@@ -138,7 +133,7 @@ class CarYouTubeActivity : CarActivity() {
             return
         }
 
-        HostedNavigation.open(this, ProjectionDestination.HOME)
+        super.onBackPressed()
     }
 
     private fun applyVideoFocus(request: Boolean) {

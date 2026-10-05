@@ -26,6 +26,10 @@ class AndroidAutoVideoPathTest {
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
         assertFalse(rootBlock.contains("createHostLauncherItem"))
         assertTrue(media.contains("setIsPlayable"))
+        assertTrue(media.contains("isRejectedVideoOrWebId"))
+        assertFalse(media.contains("createLiveTvMediaItem"))
+        assertFalse(media.contains("\"📺 Canlı TV\""))
+        assertFalse(media.contains("kanal\""))
     }
 
     @Test
@@ -96,8 +100,12 @@ class AndroidAutoVideoPathTest {
         assertTrue(activity.contains("buildHomeUi"))
         assertTrue(activity.contains("IptvRepository.loadCached"))
         assertTrue(activity.contains("ExoPlayer.Builder(this).build()"))
-        assertTrue(activity.contains("setIgnoreConfigChanges(0xFFFFFFFF.toInt())"))
+        assertTrue(activity.contains("HostedNavigation.initCarActivity(this)"))
         assertTrue(activity.contains("HostedNavigation.hideChrome(this)"))
+        assertTrue(activity.contains("onStop()"))
+        assertTrue(activity.contains("onResume()"))
+        assertTrue(activity.contains("onPause()"))
+        assertTrue(activity.contains("onDestroy()"))
     }
 
     @Test
@@ -191,7 +199,7 @@ class AndroidAutoVideoPathTest {
         assertTrue(destinations.contains("Canlı Radyo"))
         assertTrue(destinations.contains("YouTube"))
         assertTrue(destinations.contains("Google"))
-        assertTrue(destinations.contains("listOf(LIVE_TV, YOUTUBE, GOOGLE)"))
+        assertTrue(destinations.contains("listOf(LIVE_TV, RADIO, YOUTUBE, GOOGLE)"))
         assertTrue(activity.contains("buildHomeUi"))
         assertTrue(activity.contains("menuDestinations"))
         assertTrue(activity.contains("IptvRepository.loadCached"))
