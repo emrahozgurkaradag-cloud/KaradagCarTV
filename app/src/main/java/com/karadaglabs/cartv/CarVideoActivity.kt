@@ -71,13 +71,13 @@ class CarVideoActivity : CarActivity() {
     private var loadedWebUrl: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        setTheme(R.style.Theme_KaradagCarTV)
         super.onCreate(savedInstanceState)
+        HostedNavigation.initCarActivity(this)
 
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
         projectionLifecycle("CAR_VIDEO_ACTIVITY_CREATED")
         CarProjectionRouter.markHosted(packageName)
-
-        HostedNavigation.initCarActivity(this)
 
         if (DISCOVERY_TEST_ONLY) {
             showDiscoveryTestScreen()

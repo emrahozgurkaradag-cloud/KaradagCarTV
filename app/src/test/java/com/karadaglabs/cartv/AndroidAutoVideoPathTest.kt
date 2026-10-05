@@ -100,6 +100,7 @@ class AndroidAutoVideoPathTest {
         assertTrue(activity.contains("buildHomeUi"))
         assertTrue(activity.contains("IptvRepository.loadCached"))
         assertTrue(activity.contains("ExoPlayer.Builder(this).build()"))
+        assertTrue(activity.contains("setTheme(R.style.Theme_KaradagCarTV)"))
         assertTrue(activity.contains("HostedNavigation.initCarActivity(this)"))
         assertTrue(activity.contains("HostedNavigation.hideChrome(this)"))
         assertTrue(activity.contains("onStop()"))

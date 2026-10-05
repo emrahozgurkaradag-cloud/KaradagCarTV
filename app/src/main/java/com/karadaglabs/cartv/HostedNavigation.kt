@@ -28,7 +28,13 @@ object HostedNavigation {
 
     fun initCarActivity(activity: CarActivity) {
         activity.setIgnoreConfigChanges(0xFFFFFFFF.toInt())
-        hideChrome(activity)
+        try {
+            val carUiController: CarUiController = activity.getCarUiController()
+            carUiController.statusBarController.hideAppHeader()
+            carUiController.menuController.hideMenuButton()
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to init car activity host chrome", exception)
+        }
     }
 
     fun hideChrome(activity: CarActivity) {
