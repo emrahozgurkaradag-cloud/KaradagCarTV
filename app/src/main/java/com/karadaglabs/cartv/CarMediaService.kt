@@ -355,82 +355,6 @@ class CarMediaService : MediaLibraryService() {
 
             /*
              * ====================================================
-             * CANLI TV
-             * ====================================================
-             */
-
-            if (parentId == LIVE_TV_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createInfoItem(
-                                id = LIVE_TV_HOSTED_ID,
-                                title = "Canlı TV araç ekranında açılır",
-                                subtitle =
-                                    "Kanal listesi ve IPTV videosu " +
-                                        "projection penceresinde. " +
-                                        "MediaSession Now Playing kullanılmaz."
-                            )
-                        ),
-                        params
-                    )
-                )
-            }
-
-            /*
-             * ====================================================
-             * YOUTUBE
-             * ====================================================
-             */
-
-            if (parentId == YOUTUBE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createInfoItem(
-                                id = YOUTUBE_PHONE_ID,
-                                title = "YouTube araç ekranında açılır",
-                                subtitle =
-                                    "YouTube hosted WebView projection " +
-                                        "penceresinde gösterilir."
-                            )
-                        ),
-                        params
-                    )
-                )
-            }
-
-            /*
-             * ====================================================
-             * GOOGLE
-             * ====================================================
-             */
-
-            if (parentId == GOOGLE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItemList(
-                        ImmutableList.of(
-                            createInfoItem(
-                                id = GOOGLE_PHONE_ID,
-                                title = "Google araç ekranında açılır",
-                                subtitle =
-                                    "Arama hosted WebView projection " +
-                                        "penceresinde gösterilir."
-                            )
-                        ),
-                        params
-                    )
-                )
-            }
-
-            /*
-             * ====================================================
              * BİLİNMEYEN ID
              * ====================================================
              */
@@ -487,30 +411,6 @@ class CarMediaService : MediaLibraryService() {
             }
 
             /*
-             * CANLI TV KATEGORİ
-             */
-
-            if (mediaId == LIVE_TV_ID) {
-
-                val channels =
-                    IptvRepository.loadCached(this@CarMediaService)
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createCategoryItem(
-                            LIVE_TV_ID,
-                            "📺 Canlı TV",
-                            "${channels.size} kanal"
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            /*
              * RADYO KATEGORİ
              */
 
@@ -524,99 +424,6 @@ class CarMediaService : MediaLibraryService() {
                             RADIO_ID,
                             "📻 Canlı Radyo",
                             "${radios.size} radyo"
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            /*
-             * YOUTUBE
-             */
-
-            if (mediaId == YOUTUBE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createCategoryItem(
-                            YOUTUBE_ID,
-                            "▶️ YouTube",
-                            "YouTube"
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            /*
-             * GOOGLE
-             */
-
-            if (mediaId == GOOGLE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createCategoryItem(
-                            GOOGLE_ID,
-                            "🔎 Google Arama",
-                            "Web"
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == YOUTUBE_PHONE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            YOUTUBE_PHONE_ID,
-                            "YouTube araç ekranında açılır",
-                            "YouTube hosted WebView projection penceresinde."
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == GOOGLE_PHONE_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            GOOGLE_PHONE_ID,
-                            "Google araç ekranında açılır",
-                            "Arama hosted WebView projection penceresinde."
-                        ),
-
-                        null
-                    )
-                )
-            }
-
-            if (mediaId == LIVE_TV_HOSTED_ID) {
-
-                return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            LIVE_TV_HOSTED_ID,
-                            "Canlı TV araç ekranında açılır",
-                            "IPTV videosu projection penceresinde."
                         ),
 
                         null
@@ -650,23 +457,10 @@ class CarMediaService : MediaLibraryService() {
                 )
             }
 
-            /*
-             * IPTV kanalları MediaSession'da oynatılmaz.
-             */
-
-            if (mediaId.startsWith("live-tv-")) {
-
+            if (isRejectedVideoOrWebId(mediaId)) {
                 return Futures.immediateFuture(
-
-                    LibraryResult.ofItem(
-
-                        createInfoItem(
-                            LIVE_TV_HOSTED_ID,
-                            "Canlı TV araç ekranında açılır",
-                            "MediaSession Now Playing kullanılmaz."
-                        ),
-
-                        null
+                    LibraryResult.ofError(
+                        SessionError.ERROR_BAD_VALUE
                     )
                 )
             }
@@ -708,17 +502,12 @@ class CarMediaService : MediaLibraryService() {
                         "Resolving mediaId=${requested.mediaId}"
                     )
 
-                    if (
-                        requested.mediaId.startsWith("live-tv-") ||
-                        requested.mediaId == LIVE_TV_ID ||
-                        requested.mediaId == YOUTUBE_ID ||
-                        requested.mediaId == GOOGLE_ID
-                    ) {
+                    if (isRejectedVideoOrWebId(requested.mediaId)) {
                         /*
-                         * These are not playable MediaSession items.
-                         * CarMediaService is not a launcher/router for
-                         * CarVideoActivity; reject playback instead of
-                         * reaching into the projection host from here.
+                         * TV / YouTube / Google are CarVideoActivity
+                         * destinations, not MediaSession Now Playing
+                         * items. Reject instead of resolving a playable
+                         * MediaItem that would open the media card.
                          */
                         return@mapNotNull null
                     }
@@ -796,48 +585,6 @@ class CarMediaService : MediaLibraryService() {
     }
 
     /*
-     * Sürüşte video/web zorlanmaz. Bu öğeler yalnızca
-     * Android Auto menüsünün boş görünmesini önler.
-     */
-    private fun createInfoItem(
-        id: String,
-        title: String,
-        subtitle: String
-    ): MediaItem {
-
-        return MediaItem.Builder()
-
-            .setMediaId(
-                id
-            )
-
-            .setMediaMetadata(
-
-                MediaMetadata.Builder()
-
-                    .setTitle(
-                        title
-                    )
-
-                    .setArtist(
-                        subtitle
-                    )
-
-                    .setIsBrowsable(
-                        false
-                    )
-
-                    .setIsPlayable(
-                        false
-                    )
-
-                    .build()
-            )
-
-            .build()
-    }
-
-    /*
      * ============================================================
      * RADIO MEDIA ITEM
      * ============================================================
@@ -891,77 +638,14 @@ class CarMediaService : MediaLibraryService() {
             .build()
     }
 
-    /*
-     * ============================================================
-     * CANLI TV MEDIA ITEM
-     * ============================================================
-     */
-
-    private fun createLiveTvMediaItem(
-        channel: IptvChannel
-    ): MediaItem {
-
-        Log.d(
-            TAG,
-            "Creating Live TV item: " +
-                    "${channel.name} -> " +
-                    channel.streamUrl
-        )
-
-        val metadataBuilder =
-            MediaMetadata.Builder()
-
-                .setTitle(
-                    channel.name
-                )
-
-                .setArtist(
-
-                    channel.category
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?: "Canlı TV"
-                )
-
-                .setIsBrowsable(
-                    false
-                )
-
-                .setIsPlayable(
-                    true
-                )
-
-        channel.logoUrl
-            ?.takeIf {
-                it.isNotBlank()
-            }
-            ?.let { logo ->
-
-                metadataBuilder.setArtworkUri(
-                    Uri.parse(
-                        logo
-                    )
-                )
-            }
-
-        return MediaItem.Builder()
-
-            .setMediaId(
-                channel.mediaId
-            )
-
-            .setUri(
-                Uri.parse(
-                    channel.streamUrl
-                )
-            )
-
-            .setMediaMetadata(
-                metadataBuilder.build()
-            )
-
-            .build()
+    private fun isRejectedVideoOrWebId(mediaId: String): Boolean {
+        return mediaId.startsWith("live-tv-") ||
+            mediaId == "karadag-live-tv" ||
+            mediaId == "karadag-live-tv-hosted" ||
+            mediaId == "karadag-youtube" ||
+            mediaId == "karadag-youtube-phone" ||
+            mediaId == "karadag-google" ||
+            mediaId == "karadag-google-phone"
     }
 
     /*
@@ -978,26 +662,8 @@ class CarMediaService : MediaLibraryService() {
         private const val ROOT_ID =
             "karadag-car-tv-root"
 
-        private const val LIVE_TV_ID =
-            "karadag-live-tv"
-
-        private const val LIVE_TV_HOSTED_ID =
-            "karadag-live-tv-hosted"
-
         private const val RADIO_ID =
             "karadag-live-radio"
-
-        private const val YOUTUBE_ID =
-            "karadag-youtube"
-
-        private const val GOOGLE_ID =
-            "karadag-google"
-
-        private const val YOUTUBE_PHONE_ID =
-            "karadag-youtube-phone"
-
-        private const val GOOGLE_PHONE_ID =
-            "karadag-google-phone"
 
         private const val CONTENT_STYLE_LIST = 1
 

@@ -26,6 +26,10 @@ class AndroidAutoVideoPathTest {
         assertFalse(addBlock.contains("createLiveTvMediaItem"))
         assertFalse(rootBlock.contains("createHostLauncherItem"))
         assertTrue(media.contains("setIsPlayable"))
+        assertTrue(media.contains("isRejectedVideoOrWebId"))
+        assertFalse(media.contains("createLiveTvMediaItem"))
+        assertFalse(media.contains("\"📺 Canlı TV\""))
+        assertFalse(media.contains("kanal\""))
     }
 
     @Test
@@ -96,8 +100,39 @@ class AndroidAutoVideoPathTest {
         assertTrue(activity.contains("buildHomeUi"))
         assertTrue(activity.contains("IptvRepository.loadCached"))
         assertTrue(activity.contains("ExoPlayer.Builder(this).build()"))
-        assertTrue(activity.contains("setIgnoreConfigChanges(0xFFFFFFFF.toInt())"))
+        assertTrue(activity.contains("setTheme(R.style.Theme_KaradagCarTV)"))
+        assertTrue(activity.contains("HostedNavigation.initCarActivity(this)"))
         assertTrue(activity.contains("HostedNavigation.hideChrome(this)"))
+        assertTrue(activity.contains("onStop()"))
+        assertTrue(activity.contains("onResume()"))
+        assertTrue(activity.contains("onPause()"))
+        assertTrue(activity.contains("onDestroy()"))
+        assertTrue(activity.contains("CAR_VIDEO_ACTIVITY_CREATED"))
+        assertTrue(activity.contains("CAR_VIDEO_CONTENT_ATTACHED"))
+        assertTrue(activity.contains("CAR_VIDEO_STARTED"))
+        assertTrue(activity.contains("CAR_VIDEO_RESUMED"))
+        assertTrue(activity.contains("CAR_VIDEO_STOPPED"))
+        assertTrue(activity.contains("CAR_VIDEO_HOME_BUILT"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_LIVE_TV"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_YOUTUBE"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_GOOGLE"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_RADIO"))
+    }
+
+    @Test
+    fun projectionLifecycleLogsDistinguishHostNeverStartedFromInvisibleContent() {
+        val service = source("java/com/karadaglabs/cartv/CarVideoService.kt")
+        val activity = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
+        val router = source("java/com/karadaglabs/cartv/CarProjectionRouter.kt")
+
+        assertTrue(service.contains("CAR_VIDEO_SERVICE_CREATED"))
+        assertTrue(service.contains("TAG_VIDEO_SERVICE_GET_ACTIVITY"))
+        assertTrue(router.contains("CAR_PROJECTION_HOST_MARKED"))
+        assertTrue(router.contains("fun lifecycle("))
+        assertTrue(activity.contains("CAR_VIDEO_ACTIVITY_CREATED"))
+        assertTrue(activity.contains("CAR_VIDEO_CONTENT_ATTACHED"))
+        assertFalse(service.contains("override fun onBind"))
+        assertFalse(activity.contains("startCarActivity"))
     }
 
     @Test
@@ -191,7 +226,7 @@ class AndroidAutoVideoPathTest {
         assertTrue(destinations.contains("Canlı Radyo"))
         assertTrue(destinations.contains("YouTube"))
         assertTrue(destinations.contains("Google"))
-        assertTrue(destinations.contains("listOf(LIVE_TV, YOUTUBE, GOOGLE)"))
+        assertTrue(destinations.contains("listOf(LIVE_TV, RADIO, YOUTUBE, GOOGLE)"))
         assertTrue(activity.contains("buildHomeUi"))
         assertTrue(activity.contains("menuDestinations"))
         assertTrue(activity.contains("IptvRepository.loadCached"))

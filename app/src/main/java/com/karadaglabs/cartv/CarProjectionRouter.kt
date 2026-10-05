@@ -45,12 +45,41 @@ object CarProjectionRouter {
 
     const val TAG_VIDEO_CREATE = "CAR_VIDEO_ON_CREATE"
     const val TAG_VIDEO_SERVICE_GET_ACTIVITY = "CAR_VIDEO_SERVICE_GET_ACTIVITY"
+    const val TAG_HOST_MARKED = "CAR_PROJECTION_HOST_MARKED"
+
+    /**
+     * Real-car A/B:
+     * A) none of SERVICE_CREATED / GET_ACTIVITY / ACTIVITY_CREATED
+     *    → Gearhead never started CarVideoService.
+     * B) those plus CONTENT_ATTACHED / STARTED / RESUMED appear
+     *    → host started the chain; missing pixels are content/window.
+     */
+    fun lifecycle(
+        event: String,
+        packageName: String?,
+        className: String,
+        destination: String = "-"
+    ) {
+        Log.d(
+            event,
+            "packageName=${packageName ?: "-"} " +
+                "class=$className " +
+                "timestamp=${System.currentTimeMillis()} " +
+                "destination=$destination"
+        )
+    }
 
     fun markHosted(packageName: String?) {
         routeLog(
             TAG_VIDEO_CREATE,
             packageName = packageName,
             success = true
+        )
+        lifecycle(
+            TAG_HOST_MARKED,
+            packageName = packageName,
+            className = "CarProjectionRouter",
+            destination = "HOSTED"
         )
     }
 
