@@ -571,6 +571,10 @@ class AndroidAutoEntryPointTest {
         assertTrue(activity.contains("HostedNavigation.initCarActivity(this)"))
         assertTrue(activity.contains("setContentView(root)"))
         assertTrue(activity.contains("CarProjectionRouter.markHosted"))
+        assertTrue(activity.contains("CAR_VIDEO_ACTIVITY_CREATED"))
+        assertTrue(activity.contains("CAR_VIDEO_CONTENT_ATTACHED"))
+        assertTrue(router.contains("CAR_PROJECTION_HOST_MARKED"))
+        assertTrue(service.contains("CAR_VIDEO_SERVICE_CREATED"))
     }
 
     @Test

@@ -106,6 +106,32 @@ class AndroidAutoVideoPathTest {
         assertTrue(activity.contains("onResume()"))
         assertTrue(activity.contains("onPause()"))
         assertTrue(activity.contains("onDestroy()"))
+        assertTrue(activity.contains("CAR_VIDEO_ACTIVITY_CREATED"))
+        assertTrue(activity.contains("CAR_VIDEO_CONTENT_ATTACHED"))
+        assertTrue(activity.contains("CAR_VIDEO_STARTED"))
+        assertTrue(activity.contains("CAR_VIDEO_RESUMED"))
+        assertTrue(activity.contains("CAR_VIDEO_STOPPED"))
+        assertTrue(activity.contains("CAR_VIDEO_HOME_BUILT"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_LIVE_TV"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_YOUTUBE"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_GOOGLE"))
+        assertTrue(activity.contains("CAR_VIDEO_NAV_RADIO"))
+    }
+
+    @Test
+    fun projectionLifecycleLogsDistinguishHostNeverStartedFromInvisibleContent() {
+        val service = source("java/com/karadaglabs/cartv/CarVideoService.kt")
+        val activity = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
+        val router = source("java/com/karadaglabs/cartv/CarProjectionRouter.kt")
+
+        assertTrue(service.contains("CAR_VIDEO_SERVICE_CREATED"))
+        assertTrue(service.contains("TAG_VIDEO_SERVICE_GET_ACTIVITY"))
+        assertTrue(router.contains("CAR_PROJECTION_HOST_MARKED"))
+        assertTrue(router.contains("fun lifecycle("))
+        assertTrue(activity.contains("CAR_VIDEO_ACTIVITY_CREATED"))
+        assertTrue(activity.contains("CAR_VIDEO_CONTENT_ATTACHED"))
+        assertFalse(service.contains("override fun onBind"))
+        assertFalse(activity.contains("startCarActivity"))
     }
 
     @Test

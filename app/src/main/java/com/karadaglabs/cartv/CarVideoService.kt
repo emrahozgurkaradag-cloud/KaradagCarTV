@@ -22,8 +22,15 @@ class CarVideoService : CarActivityService() {
 
     override fun getCarActivity(): Class<out CarActivity> {
         Log.i(TAG, "CAR VIDEO SERVICE GET ACTIVITY")
+        CarProjectionRouter.lifecycle(
+            CarProjectionRouter.TAG_VIDEO_SERVICE_GET_ACTIVITY,
+            packageName = packageName,
+            className = javaClass.name,
+            destination = "CarVideoActivity"
+        )
         CarProjectionRouter.routeLog(
             CarProjectionRouter.TAG_VIDEO_SERVICE_GET_ACTIVITY,
+            packageName = packageName,
             success = true,
             detail = "getCarActivity() -> CarVideoActivity"
         )
@@ -32,6 +39,12 @@ class CarVideoService : CarActivityService() {
 
     override fun onCreate() {
         Log.d(TAG, "CAR VIDEO SERVICE ON CREATE")
+        CarProjectionRouter.lifecycle(
+            "CAR_VIDEO_SERVICE_CREATED",
+            packageName = packageName,
+            className = javaClass.name,
+            destination = "-"
+        )
 
         try {
             super.onCreate()

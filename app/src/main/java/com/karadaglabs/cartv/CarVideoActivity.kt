@@ -74,6 +74,7 @@ class CarVideoActivity : CarActivity() {
         super.onCreate(savedInstanceState)
 
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
+        projectionLifecycle("CAR_VIDEO_ACTIVITY_CREATED")
         CarProjectionRouter.markHosted(packageName)
 
         HostedNavigation.initCarActivity(this)
@@ -170,6 +171,7 @@ class CarVideoActivity : CarActivity() {
         root.addView(webHost)
 
         setContentView(root)
+        projectionLifecycle("CAR_VIDEO_CONTENT_ATTACHED")
         HostedNavigation.hideChrome(this)
 
         applyVideoFocus(request = true)
@@ -178,6 +180,7 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onStop() {
+        projectionLifecycle("CAR_VIDEO_STOPPED")
         if (!DISCOVERY_TEST_ONLY) {
             webView?.onPause()
         }
@@ -207,11 +210,13 @@ class CarVideoActivity : CarActivity() {
         }
         root.addView(text)
         setContentView(root)
+        projectionLifecycle("CAR_VIDEO_CONTENT_ATTACHED")
         Log.d(TAG, "CAR VIDEO ACTIVITY PROJECTION OK")
     }
 
     override fun onStart() {
         super.onStart()
+        projectionLifecycle("CAR_VIDEO_STARTED")
         HostedNavigation.hideChrome(this)
         if (DISCOVERY_TEST_ONLY) {
             return
@@ -221,6 +226,7 @@ class CarVideoActivity : CarActivity() {
 
     override fun onResume() {
         super.onResume()
+        projectionLifecycle("CAR_VIDEO_RESUMED")
         HostedNavigation.hideChrome(this)
         if (DISCOVERY_TEST_ONLY) {
             return
@@ -317,16 +323,23 @@ class CarVideoActivity : CarActivity() {
         when (next) {
             ProjectionDestination.LIVE_TV -> {
                 destination = ProjectionDestination.LIVE_TV
+                projectionLifecycle("CAR_VIDEO_NAV_LIVE_TV")
                 state = state.showList()
                 CarVideoPlayerHolder.setPlayWhenReady(false)
             }
             ProjectionDestination.RADIO -> {
                 destination = ProjectionDestination.RADIO
+                projectionLifecycle("CAR_VIDEO_NAV_RADIO")
                 CarVideoPlayerHolder.setPlayWhenReady(false)
             }
-            ProjectionDestination.YOUTUBE,
+            ProjectionDestination.YOUTUBE -> {
+                destination = next
+                projectionLifecycle("CAR_VIDEO_NAV_YOUTUBE")
+                CarVideoPlayerHolder.setPlayWhenReady(false)
+            }
             ProjectionDestination.GOOGLE -> {
                 destination = next
+                projectionLifecycle("CAR_VIDEO_NAV_GOOGLE")
                 CarVideoPlayerHolder.setPlayWhenReady(false)
             }
             else -> {
@@ -335,6 +348,15 @@ class CarVideoActivity : CarActivity() {
             }
         }
         applyState()
+    }
+
+    private fun projectionLifecycle(event: String) {
+        CarProjectionRouter.lifecycle(
+            event = event,
+            packageName = packageName,
+            className = javaClass.name,
+            destination = destination.name
+        )
     }
 
     private fun loadChannels() {
@@ -659,6 +681,7 @@ class CarVideoActivity : CarActivity() {
             container.addView(row)
         }
 
+        projectionLifecycle("CAR_VIDEO_HOME_BUILT")
         return container
     }
 
