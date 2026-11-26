@@ -32,6 +32,11 @@ package com.karadaglabs.cartv
  *     - head unit sürüş durumunu HİÇ desteklemiyorsa (supported listesinde
  *       yok): hız taze ve duruyor VE (vites P veya el freni çekili).
  *  5. Hiçbir kanıt yoksa kapalı.
+ *  6. Kayıtlı ve desteklenen HER sensör ([requiredFresh]) taze olmalı:
+ *     tek bir taze "park" değeri, diğer sensörler sessiz/bayatken
+ *     yeterli sayılmaz ("missing_required").
+ *  7. [GateStabilizer]: "park" kararı en az [PARK_CONFIRM_MS] kesintisiz
+ *     sürmeden görüntü açılmaz; kapanma anında olur.
  *
  * Saf Kotlin; zaman dışarıdan verilir, JVM unit testinde çalışır.
  */
@@ -89,11 +94,15 @@ object DrivingSafetyGate {
     /** Bu süreden eski doğrulama bayat sayılır. */
     const val STALE_AFTER_MS = 3_000L
 
+    /** Park kararı bu süre kesintisiz sürmeden görüntü açılmaz. */
+    const val PARK_CONFIRM_MS = 2_000L
+
     fun evaluate(
         signals: DrivingSignals,
         nowMs: Long,
         mode: GateMode = GateMode.CAR_SENSORS,
-        drivingStatusSupported: Boolean = true
+        drivingStatusSupported: Boolean = true,
+        requiredFresh: Set<Int> = emptySet()
     ): VideoGateDecision {
         val status = fresh(signals.drivingStatus, nowMs)
         val speed = fresh(signals.speedMetersPerSecond, nowMs)
@@ -121,6 +130,18 @@ object DrivingSafetyGate {
         }
 
         if (parkedEvidence) {
+            val missing = requiredFresh.filter { type ->
+                when (type) {
+                    SENSOR_TYPE_DRIVING_STATUS -> status == null
+                    SENSOR_TYPE_CAR_SPEED -> speed == null
+                    SENSOR_TYPE_GEAR -> gear == null
+                    SENSOR_TYPE_PARKING_BRAKE -> brake == null
+                    else -> false
+                }
+            }
+            if (missing.isNotEmpty()) {
+                return blocked("missing_required_${missing.joinToString("_")}")
+            }
             return VideoGateDecision(videoAllowed = true, reason = "parked")
         }
 
@@ -183,4 +204,37 @@ object DrivingSafetyGate {
 
     private fun blocked(reason: String) =
         VideoGateDecision(videoAllowed = false, reason = reason)
+}
+
+/**
+ * Park kararını sabitler: ham karar en az [confirmMs] boyunca kesintisiz
+ * "izinli" olmadan çıktı izinli olmaz ("confirming_park"). Ham karar
+ * kapalıya döndüğü an çıktı kapanır. Zaman geri giderse sıfırlanır.
+ */
+class GateStabilizer(private val confirmMs: Long = DrivingSafetyGate.PARK_CONFIRM_MS) {
+
+    private var allowedSinceMs: Long? = null
+
+    fun update(raw: VideoGateDecision, nowMs: Long): VideoGateDecision {
+        if (!raw.videoAllowed) {
+            allowedSinceMs = null
+            return raw
+        }
+
+        val since = allowedSinceMs
+        if (since == null || nowMs < since) {
+            allowedSinceMs = nowMs
+            return VideoGateDecision(videoAllowed = false, reason = "confirming_park")
+        }
+
+        return if (nowMs - since >= confirmMs) {
+            raw
+        } else {
+            VideoGateDecision(videoAllowed = false, reason = "confirming_park")
+        }
+    }
+
+    fun reset() {
+        allowedSinceMs = null
+    }
 }

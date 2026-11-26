@@ -166,6 +166,9 @@ private class CarMirrorScreen(
     }
 
     private fun refreshProjection() {
+        if (!MirrorProjectionController.isProjectionActive()) {
+            return
+        }
         try {
             carContext.startService(
                 Intent(
@@ -301,7 +304,8 @@ private class CarMirrorScreen(
 
         try {
 
-            carContext.startService(
+            // Onay yoksa servis başlatılmaz (Android 14+ FGS kuralı).
+            if (MirrorProjectionController.isProjectionActive()) carContext.startService(
                 refreshIntent
             )
 
@@ -353,7 +357,7 @@ private class CarMirrorScreen(
 
         try {
 
-            carContext.startService(
+            if (MirrorProjectionController.isProjectionActive()) carContext.startService(
                 stopIntent
             )
 

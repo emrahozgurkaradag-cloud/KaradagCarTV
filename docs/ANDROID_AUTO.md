@@ -1,272 +1,177 @@
 # Karadag Car TV — Android Auto araç ekranında video
 
-Son güncelleme: 26 Kasım 2026 · Branch: `android-auto-official-video`
+Son güncelleme: 26 Kasım 2026 · Branch: `android-auto-official-video` · Sürüm 1.2.0 (versionCode 8)
 
-Bu belgede üç tür bilgi vardır ve her biri işaretlidir:
+Bu belgedeki her bilgi şu etiketlerden biriyle işaretlidir:
 
-* **[Kod/bytecode ile doğrulandı]** — bu depoda veya `aauto.aar` içinde
-  doğrudan incelendi.
-* **[Kaynak beyanı]** — bir web sayfası böyle söylüyor; bu projede
-  bağımsız olarak doğrulanmadı, değişebilir.
-* **[Gerçek araçta doğrulanmadı]** — çalışması beklenir ama hiçbir
-  gerçek araçta, DHU'da veya emülatörde denenmedi.
+* **[Doğrulandı: kod/bytecode]** — bu depoda veya `app/libs/aauto.aar` içinde `javap` ile incelendi.
+* **[Doğrulandı: otomatik test]** — birim testi, cihaz içi (emülatör) testi veya APK doğrulaması geçiyor. Emülatör testleri **araç ve Android Auto host'u içermez**.
+* **[Kaynak beyanı]** — bir web sayfası böyle diyor; bu projede bağımsız olarak doğrulanmadı.
+* **[Doğrulanmadı]** — gerçek araçta, Android Auto DHU'da veya Android Auto kurulu bir cihazda hiç denenmedi.
 
 ---
 
-## 1. İki ayrı yol
+## 1. Resmî Android Auto desteği
 
-| | **A. Resmî Android Auto desteği** | **B. `projection` yöntemi** |
+Google'ın Android Auto (telefon yansıtma) için üçüncü taraf uygulamalara sunduğu kategoriler medya, mesajlaşma, navigasyon/POI/IoT (şablon) ve park hâlinde oyun/tarayıcıdır.
+
+* [Kaynak beyanı] Medya kategorisi yalnızca ses içerir: "Media apps play audio content … excluding video". https://developer.android.com/agents/skills/cars/android-for-cars-parked-apps/skill
+* [Kaynak beyanı] Google'ın video sayfasında "The video category is coming to Android Auto in beta" ifadesi ve bir erken erişim başvuru bağlantısı var. https://developer.android.com/training/cars/parked/video
+* [Kaynak beyanı] Basın (Ekim 2026): Android Auto video uygulamaları hâlâ "yakında". https://9to5google.com/2026/10/30/google-android-auto-video-apps-deadline/
+* [Doğrulanmadı] Android Auto video betasının kimlere açık olduğu, kabul şartları ve takvim.
+
+KaradagCarTV'de bu yol **`play`** sürümüdür (`com.karadaglabs.cartv`):
+
+* [Doğrulandı: kod + test] `CarMediaService` (Media3 `MediaLibraryService`) Android Auto'da Canlı Radyo ve Canlı TV **sesini** sunar. Kaynak lisans/IPTV API'si (`/api/iptv`), önbellek yedeklidir; video izi kapalıdır.
+* [Doğrulandı: test] `automotive_app_desc.xml` yalnızca `media` içerir.
+
+**Bu yol Android Auto ekranında video göstermez.**
+
+## 2. Resmî Android Automotive OS video desteği
+
+Android Automotive OS (Google built-in) araçlarda uygulama doğrudan araç bilgisayarında çalışır; Android Auto ile karıştırılmamalıdır.
+
+* [Kaynak beyanı] Video kategorisi AAOS'ta park hâlinde kullanılabilir; sürüşe geçince sistem uygulamayı örter ve `onPause` çağırır.
+* [Doğrulandı: kod + test] `play` sürümü: `android:appCategory="video"`, `android.hardware.type.automotive` `required=false`, `display_compatibility`, geniş `configChanges`, manifestte sabit ekran yönü yok. `PlayerActivity` `onPause`'da videoyu durdurur, örtülüyken kendiliğinden başlamaz.
+* [Doğrulandı: test] Yön kilidi yalnızca telefonda uygulanır (iki yön destekli ve araç ekranı değil). AAOS'ta ve sabit yönlü ekranlarda yön zorlanmaz.
+* [Doğrulanmadı] AAOS emülatöründe veya gerçek AAOS araçta çalıştırılmadı. Play'in AAOS kanalına gönderilmedi.
+
+`projection` sürümü (`aauto.aar`) AAOS'ta **kullanılmaz**.
+
+## 3. KaradagCarTV projection yöntemi (Android Auto ekranında görüntü — resmî DEĞİL)
+
+### 3.1 Mimari
+
+[Doğrulandı: kod/bytecode]
+
+| Katman | Bileşen | Kanıt |
 |---|---|---|
-| Sürüm | `play` (`com.karadaglabs.cartv`) | `projection` (`com.karadaglabs.cartv.projection`) |
-| Araç ekranında ne olur | Android Auto **medya** arayüzü: Canlı Radyo + Canlı TV **sesi** | Araç ekranında **görüntülü** Canlı TV / IPTV, kanal ızgarası, kontroller |
-| Google API'si | Media3 `MediaLibraryService` (resmî) | `aauto.aar` `CarActivity` + `CATEGORY_PROJECTION_OEM` (**resmî değil**, Google yayınlamıyor) |
-| Video | Android Auto'da yok | Var — yalnızca park kilidi açıkken |
-| Android Automotive OS | `android:appCategory="video"` ile park hâlinde tam ekran video | Kullanılmaz |
-| Görünürlük şartı | Normal kurulum | Android Auto'nun yükleyici denetimi (bölüm 4) |
+| Keşif | `CarVideoService` (`android.intent.action.MAIN` + `CATEGORY_PROJECTION` + `CATEGORY_PROJECTION_OEM`, exported) | Fermata Auto'nun açık kaynak manifestiyle aynı. Emülatörde `PackageManager.queryIntentServices` ile bulunuyor [otomatik test]. |
+| Host bağlantısı | `aauto.aar` `CarActivityService` → `gms.car.d.onBind` → `CarActivityServiceProxy.onBind` | Bytecode: `gms.car.a` proxy'yi **Android Auto uygulamasından** (`com.google.android.projection.gearhead`, alternatif `…bumblebee`) çalışma anında `DynamicApiFactory.newCarActivityServiceProxy` ile yükler. Araç penceresinin davranışı bu yüzden telefondaki Android Auto sürümüne bağlıdır. |
+| Araç penceresi | `CarVideoActivity` (aauto `CarActivity`) | Kanal ızgarası, kontroller, `SurfaceView` (`setZOrderMediaOverlay`). |
+| Oynatıcı | `CarMediaService`'in tek ExoPlayer'ı (`PlayerFactory`), `CarVideoPlayerHolder` ile `SurfaceView`'e bağlanır | Görüntü telefonda kodlanır, Android Auto bağlantısıyla araca gider. |
+| Servis yaşamı | `CarVideoActivity` → Media3 `MediaController` (SessionToken) ile `CarMediaService`'e bağlanır | `startService` yerine geçti (Android 12+ arka plan başlatma kısıtı). |
+| Park kilidi | `CarDrivingSensors` + `DrivingSafetyGate` + `GateStabilizer` | Bölüm 5. |
+| Yansıtma | `CarMirrorService` (Car App Library NAVIGATION) + `MirrorProjectionService` (MediaProjection) + `MirrorDrivingGate` | Yalnızca hız ≈ 0 iken; Android 14+ ön plan kuralına uygun. |
+| Web | `CarYouTubeActivity`, `CarGoogleActivity` + `HostedWebDrivingLock` | Sürüşte medya duraklatılır, gizlenir. |
 
-İki yol birbirine bağlı değildir. `play` sürümü Google kurallarına
-uyacak şekilde tasarlandı; `projection` sürümü araç ekranında görüntüyü
-hedefler ve Google'ın üçüncü taraf uygulamalar için yayınladığı bir
-yöntem değildir.
+### 3.2 Yayın biçimleri
 
----
+[Doğrulandı: kod + birim testi; emülatörde TS ve HLS gerçek çözümlemeyle]
 
-## 2. A — Resmî Android Auto desteği (`play`)
+* HLS (`.m3u8`, `output=hls|m3u8`): `application/x-mpegURL` (media3-exoplayer-hls).
+* MPEG-TS (`.ts`, `output=ts|mpegts`): `video/mp2t` (TsExtractor).
+* MP4/MKV/uzantısız adres: ExoPlayer içerik koklamasıyla açılır.
+* DASH (`.mpd`): desteklenmez (modül yok).
+* HTTP: http↔https yönlendirmeleri açık (`allowCrossProtocolRedirects`), 10/15 sn zaman aşımı, kendi User-Agent.
+* Canlı hata kurtarma (`LiveRetryPolicy`): `BEHIND_LIVE_WINDOW` → canlı kenara atlama; ağ hatası ve bozuk kapsayıcı → 2/4/8 sn ile en çok 3 deneme; çözücü/biçim/DRM hatası → deneme yok.
 
-Google'ın kendi belgelerinde **yazanlar** (26 Kasım 2026'da okundu):
+### 3.3 Ses ve görüntü izleri, yüzey yaşam döngüsü
 
-* [Kaynak beyanı] Medya kategorisi sesle sınırlı: "Media apps play audio
-  content … excluding video".
-  https://developer.android.com/agents/skills/cars/android-for-cars-parked-apps/skill
-* [Kaynak beyanı] Video kategorisi Android Automotive OS'ta park
-  hâlinde kullanılabilir; aynı sayfada Android Auto için "The video
-  category is coming to Android Auto in beta" ifadesi ve bir "early
-  access partner" başvuru formu bağlantısı vardır.
-  https://developer.android.com/training/cars/parked/video
-* [Kaynak beyanı] "What's new" sayfasında 19 Mayıs 2026 tarihli
-  "Video app experiences are coming to Android Auto" notu.
-  https://developer.android.com/training/cars/whats-new
-* [Kaynak beyanı] Basın: Ekim 2026 itibarıyla Android Auto video
-  uygulamaları hâlâ "yakında".
-  https://9to5google.com/2026/10/30/google-android-auto-video-apps-deadline/
+[Doğrulandı: emülatör testleri — gerçek ExoPlayer + SurfaceView, araç yok]
 
-Bu projede **doğrulanmayanlar**: Android Auto video betasının kimlere
-açık olduğu, erken erişim programının kabul şartları, gerekli ek manifest
-alanları ve takvim. Bunlar Google'ın sayfalarındaki ifadelerdir; Google
-değiştirebilir.
+* Başlangıç fail-safe: görüntü kilitli (`videoBlocked=true`). Oynatıcı bırakılınca (`clearPlayer`) yeniden kilitlenir; yeni oynatıcıya kilit uygulanır.
+* Kilitli: `TRACK_TYPE_VIDEO` devre dışı, yüzey bağlı değil, ses izi seçili, oynatma sürer. Kilit oynatıcı seviyesindedir; testte video izinin seçilmediği ve yüzeye kare düşmediği doğrulanır.
+* Kilit açılınca video izi seçilir, yüzey bağlanır, ilk kare çizilir.
+* Yüzey yok olup yeniden oluşunca ses sürer, yeni yüzeye kare çizilir; yüzey oluşunca oynatma zorla başlatılmaz.
+* Kanal değişimi (TS → HLS) yeni `MediaItem` ile yapılır. Aynı kanal yeni adresle gelirse yeniden hazırlanır; hata sonrası `STATE_IDLE`'da aynı kanal da yeniden hazırlanır.
+* Bağlantı kopması: `onStop` sensörleri bırakır, görüntüyü kilitler, oynatmayı durdurur. Yoklamada `CarNotConnectedException` gelirse karar `car_disconnected` olur ve oynatma duraklatılır. Yeniden bağlanınca son kanal seçili gelir.
 
-`play` sürümünde yapılanlar [Kod ile doğrulandı]:
+### 3.4 Araç ekranındaki kontroller
 
-* `CarMediaService`: Radyo ve Canlı TV kanalları (lisans/IPTV API'si
-  `/api/iptv`, önbellek yedekli) Android Auto'da ses olarak; video izi kapalı.
-* `automotive_app_desc.xml`: yalnızca `media`.
-* `<application android:appCategory="video">`, `android.hardware.type.automotive`
-  `required=false`, `display_compatibility`, geniş `configChanges`.
-* `PlayerActivity` + `ParkedPlaybackPolicy`: sistem aktiviteyi örtünce
-  (`onPause`) video durur, örtülüyken kendiliğinden başlamaz.
-* Ekran yönü: manifestte sabit `screenOrientation` YOK. Yatay kilit
-  yalnızca telefonda (`CarScreen.applyPhoneLandscape`: cihaz iki yönü de
-  destekliyor ve araç ekranı/AAOS değil); AAOS ve sabit yönlü araç
-  ekranlarında yön zorlanmaz.
-* Araç ekranında (AAOS / araç UI modu) YouTube WebView ve Google Arama gizli.
+[Doğrulandı: kod + kaynak testi] [Doğrulanmadı: araçta]
 
----
+Dokununca alt çubuk açılır: ⏮ önceki kanal · ⏸/▶ · ⏭ sonraki kanal · ☰ kanal listesi · ⛶ tam ekran. Medya tuşları: PLAY_PAUSE, PLAY, PAUSE/STOP, NEXT/CHANNEL_UP, PREVIOUS/CHANNEL_DOWN. Kanal geçişi dairesel, son kanal kalıcıdır. Kontrol çubuğu 5 sn sonra gizlenir; kilitliyken ve duraklatılmışken açık kalır.
 
-## 3. B — `projection` yöntemi (araç ekranında görüntü)
+## 4. Kurulum ve APK varyantları
 
-### 3.1 Yöntem ve kanıt
+| Varyant | Paket | versionName | Not |
+|---|---|---|---|
+| `playDebug` / `playRelease` | `com.karadaglabs.cartv` | 1.2.0 | Resmî yol |
+| `projectionDebug` / `projectionRelease` | `com.karadaglabs.cartv.projection` | 1.2.0-projection | Araç ekranında görüntü |
 
-[Kod ile doğrulandı — Fermata Auto açık kaynak manifesti] Fermata Auto
-araç ekranına `CATEGORY_PROJECTION` + `CATEGORY_PROJECTION_OEM`
-kategorili bir servis ve `aauto.aar` ile pencere açar; ayrıca Car App
-Library NAVIGATION yüzeyine MediaProjection ile yansıtma yapar.
-Descriptor: `media`, `service`, `projection`.
-https://raw.githubusercontent.com/AndreyPavlenko/Fermata/master/fermata/src/auto/AndroidManifest.xml
+* [Doğrulandı: otomatik test] Paket adları farklıdır. Uygulama içi provider yetkileri (`…androidx-startup`) ve özel izin tanımları çakışmaz. `play` APK'sında projection bileşeni yoktur. Emülatörde iki paket yan yana kurulup açılır (`scripts/device-checks.sh`).
+* Lisans ayrı pakette ayrıca etkinleştirilir; aynı API ve `device_uuid` mekanizması kullanılır.
 
-KaradagCarTV `projection` aynı aileyi kullanır. Görüntü telefonda
-üretilir ve Android Auto bağlantısının kendi video akışıyla araç
-ekranına gider; araçta değişiklik gerekmez.
+**Android Auto'da görünürlük** — kurulum yönteminin etkisi:
 
-| Bileşen | Görev |
+| Yöntem | Durum |
 |---|---|
-| `CarVideoService` | Android Auto başlatıcısındaki "Karadag Car TV" (PROJECTION) |
-| `CarVideoActivity` | Kanal ızgarası; ExoPlayer → `SurfaceView`; kontroller |
-| `CarVideoPlayerHolder` | `CarMediaService`'in tek ExoPlayer'ını araç yüzeyine bağlar |
-| `CarDrivingSensors` + `DrivingSafetyGate` | Park kilidi (araç sensörleri) |
-| `CarYouTubeActivity` / `CarGoogleActivity` + `HostedWebDrivingLock` | Araçta WebView; sürüşte medya duraklatılır, gizlenir |
-| `CarMirrorService` + `MirrorProjectionService` + `MirrorDrivingGate` | Telefon ekranı yansıtma; yalnızca hız ≈ 0 iken |
+| Play Store (iç/kapalı test kanalı) yükleyicisi | [Kaynak beyanı] Fermata #846/#847: AA 17.7 PROJECTION türünü Play yükleyicisiyle listeliyor; bir yorum (14.11.2026) AA 18.0'da çalıştığını söylüyor. [Doğrulanmadı] |
+| Sideload + Android Auto "Bilinmeyen kaynaklar" | [Kaynak beyanı] Aynı analiz: bu ayar MEDIA'yı açar, PROJECTION/TEMPLATE türlerini **açmaz**. Yani sideload'da `play` medya kısmı görünebilir, projection görünmeyebilir. [Doğrulanmadı] |
+| Geliştirici head unit (Google DHU, AAWireless geliştirici modu, aa-proxy-rs) | [Kaynak beyanı] Denetimleri atlar. [Doğrulanmadı] |
+| Root + Xposed/LSPosed | [Kaynak beyanı] Önerilmez. [Doğrulanmadı] |
 
-Araştırılan diğer çalışmalar:
+Uygulamanın Android Auto başlatıcısında **görünmesi** ile araç penceresinde **video yüzeyinin çalışması** ayrı konulardır. Bu projede ikisi de gerçek bir Android Auto oturumunda doğrulanmadı. Video yüzeyi kod yolu ise emülatörde, sıradan bir `SurfaceView` üzerinde doğrulandı.
 
-* Yasin Hırlak (@car_playandroid) / `github.com/yasinsay1/Yasin-Android-Auto`:
-  depo ve sürüm sayfaları **HTTP 404**. Kaynak kodu incelenemedi; yöntemi
-  **doğrulanamadı**.
-* AA Car Play Video: [Kaynak beyanı] "Play kapalı test kanalından
-  kurulur"; teknik yöntem açıklanmıyor. https://github.com/aacarplayvideo/aacarplayvideo
+## 5. Gereken izinler
 
-### 3.2 Kontroller
+| İzin | Varyant | Neden | Kanıt |
+|---|---|---|---|
+| `INTERNET` | ikisi | IPTV/API | — |
+| `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | ikisi | `CarMediaService` arka plan oynatma (Media3) | — |
+| `POST_NOTIFICATIONS` | ikisi | Medya bildirimi (API 33+) | — |
+| `com.google.android.gms.permission.CAR_SPEED` | projection | Hız sensörü; ayrıca Car App Library `addSpeedListener` | [Doğrulandı: bytecode] gms `CarSensorManager.registerListener` `@RequiresPermission(anyOf={ACCESS_FINE_LOCATION, gms CAR_SPEED, android.car CAR_SPEED, …MILEAGE, …FUEL}, conditional=true)`. Koruma seviyesi belgelenmemiş: verilmemişse çalışma anında istenir (`CarPlayerBridge.requestCarPermissions`). Emülatörde tanımlı olup olmadığı CI'da `device-checks.sh` ile raporlanır. |
+| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | projection | Yansıtma | Android 14+: ön plana yalnızca onaydan sonra (`ACTION_START`) geçilir. |
+| `androidx.car.app.ACCESS_SURFACE`, `NAVIGATION_TEMPLATES` | projection | `CarMirrorService` yüzeyi | — |
 
-Dokununca alt çubuk: ⏮ önceki kanal · ⏸/▶ · ⏭ sonraki kanal ·
-☰ kanal listesi · ⛶ tam ekran (üst menüyü gizler). Medya tuşları:
-PLAY_PAUSE, PLAY, PAUSE/STOP, NEXT/CHANNEL_UP, PREVIOUS/CHANNEL_DOWN.
-Son kanal kalıcıdır. [Gerçek araçta doğrulanmadı]
+Sürüş durumu, vites ve el freni için SDK'da izin listelenmemiştir [Doğrulandı: bytecode].
 
-### 3.3 Ses / görüntü ayrımı ve bağlantı kesilmesi
+## 6. Park kilidi (araç sensörleri)
 
-* `CarVideoPlayerHolder` başlangıçta **görüntü kilitli** (`videoBlocked=true`).
-* Kilitliyken: yüzey bağlantısı kesilir, video izi seçilmez
-  (`TRACK_TYPE_VIDEO` devre dışı), ses izi açık kalır.
-* Kilit açılınca: video izi seçilir, `SurfaceView` hazır olunca bağlanır.
-* Yüzey yeniden oluştuğunda oynatma zorla başlatılmaz (kullanıcı
-  duraklatması korunur).
-* Kanal değiştirme: farklı kanal → yeni `MediaItem` + `prepare`; aynı kanal
-  hata sonrası (`STATE_IDLE`) → yeniden `prepare`.
-* Bağlantı kesilmesi: `onStop` → sensörler bırakılır, görüntü kilitlenir,
-  oynatma durur. Sensör yoklaması `CarNotConnectedException` verirse
-  karar `car_disconnected` olur ve oynatma duraklatılır. Yeniden
-  bağlanınca son kanal seçili gelir.
+### 6.1 `aauto.aar` kanıtı [Doğrulandı: bytecode]
 
----
+* Projection adaptörü `apps.auto.sdk.service.a.f`: `addListener(type, rate)` → gms `registerListener` (tip/hız değişmeden); `getSensorConfig` → "not supported in projection".
+* `CarSensorEvent`: `intValues[i] = byteValues[i]`. Sürüş durumu (11) ve vites (7) → `byteValues[0]`; el freni (6) → `byteValues[0] == 1`; hız (2) → `floatValues[0]` (m/s).
+* Sabitler: `DRIVE_STATUS_UNRESTRICTED=0`, kısıt bitleri 1/2/4/8/16, `FULLY_RESTRICTED=31`; vites `NEUTRAL=0`, `FIRST..TENTH=1..10`, `DRIVE=100`, `PARK=101`, `REVERSE=102`; `SENSOR_RATE_UI=2`; servis adı `"sensor"`.
+* Yönetici: `gms.car.c.a(String)` = `CarActivityHost.getCarManager`.
 
-## 4. Android Auto'nun yükleyici denetimi (projection için)
+### 6.2 Kurallar [Doğrulandı: birim testleri] — kullanıcı kapatamaz
 
-[Kaynak beyanı — bir kullanıcının Android Auto 17.7 tersine mühendisliği,
-Fermata #846/#847] Android Auto, PROJECTION türü uygulamaları yalnızca
-şu durumlarda başlatıcıda listeler: kayıtlı yükleyici Google Play ise,
-Play kitaplığında sahiplik/imza eşleşmesi varsa, Google sunucu izin
-listesindeyse, geliştirici head unit kullanılıyorsa veya root/Xposed ile.
-"Bilinmeyen kaynaklar" ayarı PROJECTION ve TEMPLATE türlerini
-**kapsamaz**. Bir yoruma göre (14 Kasım 2026) Fermata Auto, Android Auto
-18.0'da Play yükleyici kaydıyla çalışıyor.
-https://github.com/AndreyPavlenko/Fermata/issues/846 ·
-https://github.com/AndreyPavlenko/Fermata/discussions/847
+1. Yalnızca taze değerler sayılır: son 3 sn içinde olay **veya** 1 sn'lik `getLatestSensorEvent` yoklaması. Gelecek zamanlı damga güvenilmez.
+2. Sürüş işareti görüntüyü kapatır: sürüş durumu ≠ 0 (her bit ve bilinmeyen değer), hız > 0,5 m/s veya NaN, vites D/R/1–10.
+3. Park işareti ile sürüş işareti aynı anda gelirse sonuç `conflicting_signals`, görüntü kapalı.
+4. Açılma şartı: sürüş durumu taze ve 0. Head unit sürüş durumunu desteklemiyorsa: hız taze ve duruyor **ve** (vites P veya el freni çekili).
+5. Kaydı başarılı ve desteklenen **her** sensör taze olmalıdır (`missing_required_*`). Tek bir taze "park" değeri yetmez.
+6. Park kararı 2 sn kesintisiz sürmeden görüntü açılmaz (`confirming_park`); kapanma anında olur.
+7. Veri yok, bayat veya bağlantı kopuk olduğunda kapalı (`no_signal`, `stale_signal`, `car_disconnected`).
+8. Yansıtma yalnızca hıza bakar: hız taze, ≤ 0,5 m/s ve 2 sn kararlı olmalı; bir bekçi her saniye yeniden değerlendirir.
+9. Kilit oynatıcı seviyesindedir (video izi devre dışı + yüzey bağlantısı yok); arayüzde nedeni yazar. Ses ayrı yönetilir ve sürer.
 
-Bu projede bağımsız olarak doğrulanmadı. Pratik sonuç: `projection`
-APK'sı araç ekranında görünmesi için Play Console iç/kapalı test
-kanalından (gerçek release imzasıyla, bölüm 6) veya geliştirici head
-unit ile kurulmalıdır. Google Play incelemesinin bu uygulamayı kabul
-edeceği garanti değildir.
+## 7. Android Auto sürüm uyumluluğu
 
----
+* [Doğrulandı: bytecode] `aauto.aar` (2019 tarihli) çalışma anında Android Auto uygulamasından sınıf yükler. Android Auto güncellemesi bu arayüzü değiştirir veya kaldırırsa araç penceresi açılmaz ("Error loading car activity host").
+* [Kaynak beyanı] Fermata kullanıcıları: AA 17.7'de görünürlük denetimi; AA 18.0'da Play yükleyici kaydıyla çalışıyor; KingInstaller Android 14+ ile çalışmıyor (#432).
+* [Doğrulanmadı] Belirli bir Android Auto sürümüyle uçtan uca test yapılmadı.
+* Telefon: minSdk 29 (Android 10). Emülatör testleri API 29 ve 34'te çalışır (CI).
 
-## 5. Park kilidi — sensör kanıtı ve kurallar
+## 8. Bilinen kısıtlamalar
 
-### 5.1 `aauto.aar` bytecode incelemesi [Kod/bytecode ile doğrulandı]
+* Projection yolu Google'ın resmî API'si değildir. Play incelemesinden geçmesi ve Android Auto güncellemelerinde çalışmaya devam etmesi garanti değildir.
+* Android Auto DHU testi CI'da yapılamaz. DHU, telefonda Android Auto uygulamasının (gearhead) "head unit server" modunu gerektirir. gearhead emülatör imajlarında yoktur ve Google hesabıyla Play Store'dan elle kurulmalıdır; `aauto.aar` da sınıflarını oradan yükler. `device-checks.sh` gearhead'in bulunup bulunmadığını raporlar.
+* Bazı araçlar parkta da sürüş kısıtı bildiriyorsa görüntü hiç açılmaz (bilinçli güvenli taraf).
+* DASH desteklenmez. DRM'li yayınlar test edilmedi.
+* Release APK'ları imza secret'ları tanımlanmadıkça imzasızdır ve Play'e yüklenemez.
 
-`javap` ile `app/libs/aauto.aar` içindeki `classes.jar`:
+## 9. Gerçek araçta henüz doğrulanmamış davranışlar
 
-* `com.google.android.apps.auto.sdk.service.a.f extends
-  android.support.car.hardware.CarSensorManager` — projection'da kullanılan
-  adaptör. `addListener(l, type, rate)` → `gms.car.CarSensorManager
-  .registerListener(proxy, type, rate)`: **tip ve hız değiştirilmeden**
-  geçirilir. `getSensorConfig` → "not supported in projection".
-* `getLatestSensorEvent(type)` → gms `RawEventData(sensorType, timeStamp,
-  floatValues, byteValues)` aynen `CarSensorEvent`'e sarılır; dinleyici
-  sarmalayıcısı (`service.a.h`) da aynı.
-* `CarSensorEvent` kurucusu: `intValues[i] = byteValues[i]`.
-* Çözümleyiciler:
-  * `getDrivingStatusData()` → tip 11, `intValues[0]` (= `byteValues[0]`)
-  * `getGearData()` → tip 7, `intValues[0]` (= `byteValues[0]`)
-  * `getParkingBrakeData()` → tip 6, `intValues[0] == 1` ise çekili
-  * `getCarSpeedData()` → tip 2, `floatValues[0]`
-* Sabitler: `DRIVE_STATUS_UNRESTRICTED=0`, `NO_VIDEO=1`, `NO_KEYBOARD_INPUT=2`,
-  `NO_VOICE_INPUT=4`, `NO_CONFIG=8`, `LIMIT_MESSAGE_LEN=16`,
-  `FULLY_RESTRICTED=31`; `GEAR_NEUTRAL=0`, `GEAR_FIRST..TENTH=1..10`,
-  `GEAR_DRIVE=100`, `GEAR_PARK=101`, `GEAR_REVERSE=102`;
-  `SENSOR_RATE_UI=2`; `Car.SENSOR_SERVICE="sensor"`.
-* Yönetici erişimi: `gms.car.c.a(String)` →
-  `CarActivityHost.getCarManager(String)`.
+1. Projection APK'sının Android Auto başlatıcısında görünmesi (Play iç test kurulumuyla).
+2. `CarVideoActivity` penceresinin açılması ve `SurfaceView` görüntüsünün araç ekranına ulaşması.
+3. Canlı TV ve IPTV (gerçek sağlayıcı) görüntüsü; ağ kesintisinde yeniden deneme.
+4. Kontroller ve direksiyon tuşları.
+5. Araç sensörlerinin gerçekte gelmesi: `adb logcat -s KaradagCarDriving` → `CAR SENSORS supported=[…]`, `register type=… ok=…`, `VIDEO GATE allowed=… reason=…`.
+6. Hareket başlayınca görüntünün 1–3 sn içinde kesilmesi ve sesin sürmesi; park edince yaklaşık 2–3 sn sonra görüntünün dönmesi.
+7. Bağlantı kesilip yeniden kurulunca toparlanma.
+8. Farklı araç ekranı çözünürlükleri.
+9. `CAR_SPEED` izninin gerçek cihazda verilmesi veya çalışma anında istenmesi.
 
-Önceki sürümdeki (`aa31328`) hata: sürüş durumu, vites ve el freni önce
-`floatValues`'tan okunuyordu; SDK'nın çözümleyicisiyle çelişiyordu.
-Düzeltildi.
+## 10. Test altyapısı ve release imzası
 
-### 5.2 Doğrulanmayanlar [Gerçek araçta doğrulanmadı]
+**Yerel ve CI** (`.github/workflows/android.yml`; push, pull request ve manuel tetikleme):
 
-* Head unit'lerin hangi sensörleri desteklediği ve ne sıklıkla gönderdiği.
-* Parkta sürüş durumunun gerçekten 0 olduğu. Bazı araçlar parkta da
-  kısıt bildirirse görüntü hiç açılmaz (güvenli taraf).
-* Hız/vites için Android Auto'nun uygulamadan izin isteyip istemediği.
-  `aauto.aar` yalnızca AAOS izin adlarını (`android.car.permission.CAR_SPEED`
-  vb.) içeriyor; projection için gereken izin SDK'da yok. Kural bu yüzden
-  hıza değil, sürüş durumuna dayanır.
-* Car App Library yansıtma için `com.google.android.gms.permission.CAR_SPEED`.
+1. `build` işi: bağımlılıklar → imza ayarı → `testPlayDebugUnitTest testProjectionDebugUnitTest` → `lintPlayDebug lintProjectionDebug` → 4 APK → `scripts/verify-apks.sh` (paket adı, versionCode, çakışma, imza) → artifact'lar (`apks`, `reports`).
+2. `device-tests` işi (API 29 ve 34 emülatörü, KVM):
+   * `connectedPlayDebugAndroidTest`, `connectedProjectionDebugAndroidTest`: gerçek ExoPlayer ve SurfaceView ile TS/HLS oynatma, kilitliyken yalnızca ses, kilit açılınca ilk kare, yüzey yeniden oluşturma, kanal değişimi, bozuk yayından toparlanma, duraklat/sürdür, fail-safe sıfırlama; PackageManager keşif sorguları.
+   * `scripts/device-checks.sh`: iki paketin yan yana kurulumu, açılışta çökme kontrolü, servis kaydı, `CAR_SPEED` tanımı, gearhead varlığı.
 
-### 5.3 Kurallar (kullanıcı kapatamaz; ayar, düğme, gizli menü yok)
-
-1. Yalnızca **taze** (son 3 sn içinde olay veya 1 sn'lik yoklamayla
-   doğrulanmış) değerler sayılır. Yoklama başarısız/veri kesik → değer
-   bayatlar → görüntü kapanır (`stale_signal`). Gelecek zamanlı damga
-   güvenilmez.
-2. Taze sürüş işareti → kapalı: sürüş durumu ≠ 0 (her kısıt biti ve
-   bilinmeyen değer), hız > 0,5 m/s veya NaN, vites D/R/1–10.
-3. Park işareti ile sürüş işareti aynı anda → `conflicting_signals`, kapalı.
-4. Açılma şartı: sürüş durumu taze ve 0. Head unit sürüş durumunu
-   **desteklemiyorsa** (desteklenenler listesinde yoksa): hız taze ve
-   duruyor **ve** (vites P veya el freni çekili). Liste alınamazsa en
-   sıkı kural (sürüş durumu şart) uygulanır.
-5. Hiç veri yok → kapalı (`no_signal`). Araç bağlantısı yok → kapalı
-   (`car_disconnected`).
-6. Yansıtma: yalnızca hız (Car App Library); taze ve ≤ 0,5 m/s değilse
-   kapalı; her saniye bekçi yeniden değerlendirir.
-
-Kilitliyken ekranda nedeni yazar; Canlı TV sesi sürer.
-
----
-
-## 6. Release imzası
-
-`app/build.gradle.kts` release için debug anahtarını **kullanmaz**.
-Değerler yalnızca ortam değişkenlerinden okunur:
-`KARADAG_RELEASE_KEYSTORE`, `KARADAG_RELEASE_KEYSTORE_PASSWORD`,
-`KARADAG_RELEASE_KEY_ALIAS`, `KARADAG_RELEASE_KEY_PASSWORD`.
-Eksikse release APK'ları imzasız (`*-release-unsigned.apk`) üretilir
-ve Gradle uyarı yazar.
-
-GitHub Actions için repo → Settings → Secrets and variables → Actions:
-
-* `KARADAG_RELEASE_KEYSTORE_BASE64` — `base64 -w0 release.jks` çıktısı
-* `KARADAG_RELEASE_KEYSTORE_PASSWORD`
-* `KARADAG_RELEASE_KEY_ALIAS`
-* `KARADAG_RELEASE_KEY_PASSWORD`
-
-İş akışı secret yoksa `::warning::` ile "Release imzası yok" bildirir;
-`scripts/verify-apks.sh` imza durumunu raporlar ve debug sertifikasıyla
-imzalı bir release'i hata sayar. Keystore iş sonunda silinir.
-
----
-
-## 7. Test
-
-Otomatik (CI: `.github/workflows/android.yml`, PR'da ve bu branch'e push'ta):
-
-```
-./gradlew testPlayDebugUnitTest testProjectionDebugUnitTest lintPlayDebug lintProjectionDebug assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease
-scripts/verify-apks.sh
-```
-
-`verify-apks.sh`: paket adları (`com.karadaglabs.cartv` /
-`com.karadaglabs.cartv.projection`) farklı; uygulama içi provider
-yetkileri ve özel izin tanımları çakışmıyor; `play` APK'sında projection
-bileşeni yok; `projection` APK'sında araç ekranı bileşenleri var;
-release imza durumu.
-
-### Gerçek araçta doğrulanacaklar (hiçbiri henüz yapılmadı)
-
-1. `projection` APK'sı Play iç test kanalından kurulunca Android Auto
-   başlatıcısında "Karadag Car TV" görünüyor mu.
-2. Lisans etkinleştirme (ayrı paket; telefonda bir kez).
-3. Park + el freni: Canlı TV → kanal → görüntü araç ekranında.
-4. IPTV kanalı görüntülü.
-5. ⏮ ⏭ ⏸/▶ ☰ ⛶ ve direksiyon medya tuşları.
-6. Güvenli alanda, gözlemciyle hareket: görüntü 1–3 sn içinde kesilmeli,
-   uyarı çıkmalı, ses sürmeli; durup park edince görüntü dönmeli.
-7. `adb logcat -s KaradagCarDriving KaradagCarVideo CarVideoPlayerHolder`:
-   `CAR SENSORS supported=[...]`, `CAR SENSOR register type=… ok=…`,
-   `VIDEO GATE allowed=… reason=…` satırlarını kaydet. Parkta
-   `reason=parked` görülmüyorsa nedenini (ör. `no_signal`,
-   `driving_status_restricted`) bildir.
-8. Kablo/kablosuz bağlantı kesilince telefonda sesin durması; yeniden
-   bağlanınca son kanal.
-9. Farklı ekran boyutları (geniş/dikey araç ekranları): ızgara ve
-   kontrol çubuğu okunuyor mu.
+**Release imzası:** Debug anahtarı kullanılmaz. `KARADAG_RELEASE_KEYSTORE`, `…_KEYSTORE_PASSWORD`, `…_KEY_ALIAS`, `…_KEY_PASSWORD` ortam değişkenleri gerekir. CI bunları şu secret'lardan oluşturur: `KARADAG_RELEASE_KEYSTORE_BASE64` (`base64 -w0 release.jks`), `KARADAG_RELEASE_KEYSTORE_PASSWORD`, `KARADAG_RELEASE_KEY_ALIAS`, `KARADAG_RELEASE_KEY_PASSWORD`. Secret yoksa CI uyarı verir ve çıktılar `*-release-unsigned.apk` olur. `verify-apks.sh` debug sertifikalı bir release'i hata sayar. Keystore iş sonunda silinir; parolalar loglanmaz.

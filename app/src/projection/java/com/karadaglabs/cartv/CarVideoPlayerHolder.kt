@@ -8,6 +8,7 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
@@ -58,6 +59,44 @@ object CarVideoPlayerHolder {
 
     private var carSurfaceCallback: SurfaceHolder.Callback? = null
 
+    @Volatile
+    private var retryAttempts: Int = 0
+
+    private val retryRunnable = Runnable {
+        val exoPlayer = player ?: return@Runnable
+        if (exoPlayer.playWhenReady && exoPlayer.currentMediaItem != null) {
+            Log.d(TAG, "LIVE RETRY attempt=$retryAttempts")
+            exoPlayer.prepare()
+        }
+    }
+
+    /** Test ve teşhis: son oynatıcı hatası kodu (yoksa null). */
+    @Volatile
+    var lastErrorCode: Int? = null
+        private set
+
+    private fun handlePlayerError(error: PlaybackException) {
+        lastErrorCode = error.errorCode
+        val exoPlayer = player ?: return
+
+        when (val action = LiveRetryPolicy.decide(error.errorCode, retryAttempts)) {
+            is RetryAction.SeekToLiveEdge -> {
+                Log.w(TAG, "LIVE BEHIND WINDOW -> live edge")
+                exoPlayer.seekToDefaultPosition()
+                exoPlayer.prepare()
+            }
+            is RetryAction.RetryAfter -> {
+                retryAttempts++
+                Log.w(TAG, "PLAYER ERROR ${error.errorCodeName} retry in ${action.delayMs}ms")
+                mainHandler.removeCallbacks(retryRunnable)
+                mainHandler.postDelayed(retryRunnable, action.delayMs)
+            }
+            RetryAction.GiveUp -> {
+                Log.e(TAG, "PLAYER ERROR ${error.errorCodeName} (no retry)", error)
+            }
+        }
+    }
+
     private val playerListener =
 
         object : Player.Listener {
@@ -86,9 +125,17 @@ object CarVideoPlayerHolder {
                 )
             }
 
+            override fun onPlayerError(error: PlaybackException) {
+                handlePlayerError(error)
+            }
+
             override fun onPlaybackStateChanged(
                 playbackState: Int
             ) {
+
+                if (playbackState == Player.STATE_READY) {
+                    retryAttempts = 0
+                }
 
                 Log.d(
                     TAG,
@@ -306,8 +353,12 @@ object CarVideoPlayerHolder {
                 playerListener
             )
 
+            mainHandler.removeCallbacks(retryRunnable)
+            retryAttempts = 0
             carSurfaceView = null
             player = null
+            // Oynatıcı yok: sonraki oynatıcı kilitli başlar.
+            videoBlocked = true
         }
     }
 
@@ -326,10 +377,13 @@ object CarVideoPlayerHolder {
         exoPlayer.clearVideoSurface()
 
         if (exoPlayer.currentMediaItem?.mediaId != request.mediaId) {
+            mainHandler.removeCallbacks(retryRunnable)
+            retryAttempts = 0
             exoPlayer.setMediaItem(
                 MediaItem.Builder()
                     .setMediaId(request.mediaId)
                     .setUri(Uri.parse(request.streamUrl))
+                    .setMimeType(StreamFormat.mimeTypeFor(request.streamUrl))
                     .setMediaMetadata(
                         MediaMetadata.Builder()
                             .setTitle(request.title)
@@ -362,11 +416,20 @@ object CarVideoPlayerHolder {
             return
         }
 
-        if (exoPlayer.currentMediaItem?.mediaId != channel.mediaId) {
+        val current = exoPlayer.currentMediaItem
+        val sameItem =
+            current?.mediaId == channel.mediaId &&
+                current.localConfiguration?.uri?.toString() == channel.streamUrl
+
+        if (!sameItem) {
+            mainHandler.removeCallbacks(retryRunnable)
+            retryAttempts = 0
+            lastErrorCode = null
             exoPlayer.setMediaItem(
                 MediaItem.Builder()
                     .setMediaId(channel.mediaId)
                     .setUri(Uri.parse(channel.streamUrl))
+                    .setMimeType(StreamFormat.mimeTypeFor(channel.streamUrl))
                     .setMediaMetadata(
                         MediaMetadata.Builder()
                             .setTitle(channel.name)
@@ -508,14 +571,13 @@ object CarVideoPlayerHolder {
                     height: Int
                 ) {
 
+                    // ExoPlayer, setVideoSurfaceHolder ile kendi geri
+                    // çağrısını kaydeder ve boyut değişimini yönetir;
+                    // burada yeniden bağlamak gereksiz kare kaybı yapar.
                     Log.d(
                         TAG,
                         "CAR VIDEO SURFACE CHANGED width=$width height=$height"
                     )
-
-                    if (!videoBlocked) {
-                        player?.setVideoSurfaceHolder(holder)
-                    }
                 }
 
                 override fun surfaceDestroyed(

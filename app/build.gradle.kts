@@ -14,8 +14,8 @@ android {
         applicationId = "com.karadaglabs.cartv"
         minSdk = 29
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.1.0"
+        versionCode = 8
+        versionName = "1.2.0"
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
@@ -209,6 +209,12 @@ dependencies {
     androidTestImplementation(
         libs.androidx.junit
     )
+
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+
+    androidTestImplementation("androidx.test:runner:1.6.2")
+
+    androidTestImplementation("androidx.test:rules:1.6.1")
 
     // ============================================================
     // DEBUG

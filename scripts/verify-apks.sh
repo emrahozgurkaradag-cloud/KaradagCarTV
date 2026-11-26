@@ -19,6 +19,9 @@ note() { echo "$*"; }
 find_apk() { ls "$OUT/$1/$2/"*.apk 2>/dev/null | head -1; }
 
 pkg() { "$AAPT2" dump badging "$1" | sed -n "s/^package: name='\([^']*\)'.*/\1/p"; }
+vcode() { "$AAPT2" dump badging "$1" | sed -n "s/^package: .*versionCode='\([0-9]*\)'.*/\1/p"; }
+vname() { "$AAPT2" dump badging "$1" | sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p"; }
+EXPECTED_VC="$(sed -n 's/^ *versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -1)"
 manifest() { "$AAPT2" dump xmltree --file AndroidManifest.xml "$1"; }
 # Yalnızca <application> altındaki provider'lar (<queries> hariç).
 authorities() {
@@ -35,8 +38,13 @@ for flavor in play projection; do
     apk="$(find_apk "$flavor" "$type")"
     if [ -z "$apk" ]; then err "APK yok: $flavor/$type"; continue; fi
     p="$(pkg "$apk")"
+    vc="$(vcode "$apk")"
     PKG["$flavor-$type"]="$p"
-    note "APK $flavor/$type: $(basename "$apk") paket=$p boyut=$(stat -c %s "$apk")"
+    note "APK $flavor/$type: $(basename "$apk") paket=$p versionCode=$vc versionName=$(vname "$apk") boyut=$(stat -c %s "$apk")"
+    [ "$vc" = "$EXPECTED_VC" ] || err "$flavor/$type versionCode=$vc, beklenen $EXPECTED_VC (app/build.gradle.kts)"
+    case "$(basename "$apk")" in
+      *-unsigned.apk) [ "$type" = "release" ] || err "$flavor/$type beklenmedik imzasız APK" ;;
+    esac
   done
 done
 

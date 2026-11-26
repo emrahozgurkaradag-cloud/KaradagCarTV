@@ -53,22 +53,39 @@ class MirrorProjectionService : Service() {
         super.onCreate()
 
         createNotificationChannel()
-        val notification = createNotification()
 
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            )
-        } else {
-            startForeground(
-                NOTIFICATION_ID,
-                notification
-            )
-        }
-
+        /*
+         * Android 14+: mediaProjection türündeki ön plan servisi ancak
+         * kullanıcı MediaProjection onayı verdikten SONRA başlatılabilir;
+         * aksi hâlde startForeground SecurityException atar. Bu yüzden
+         * ön plana yalnızca ACTION_START (onay sonucu) ile geçilir.
+         */
         Log.d(TAG, "MirrorProjectionService created")
+    }
+
+    private var foregroundStarted = false
+
+    private fun enterForeground(): Boolean {
+        if (foregroundStarted) {
+            return true
+        }
+        return try {
+            val notification = createNotification()
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+            foregroundStarted = true
+            true
+        } catch (throwable: Throwable) {
+            Log.e(TAG, "startForeground(mediaProjection) failed", throwable)
+            false
+        }
     }
 
     override fun onStartCommand(
@@ -80,6 +97,12 @@ class MirrorProjectionService : Service() {
         when (intent?.action) {
 
             ACTION_START -> {
+                if (!enterForeground()) {
+                    MirrorProjectionController.markProjectionInactive()
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+
                 /*
                  * Prefer the in-process consent object. The permission
                  * Activity stores the original result Intent here before
@@ -151,6 +174,11 @@ class MirrorProjectionService : Service() {
                     TAG,
                     "Surface refresh requested"
                 )
+                if (mediaProjection == null) {
+                    // Onay yok: ön plan yok, servis bekletilmez.
+                    stopSelf(startId)
+                    return START_NOT_STICKY
+                }
                 createVirtualDisplayIfPossible()
             }
 
@@ -172,7 +200,9 @@ class MirrorProjectionService : Service() {
             }
         }
 
-        return START_STICKY
+        // MediaProjection belirteci süreç ölümünden sonra geçersizdir:
+        // sistem servisi yeniden başlatmasın.
+        return START_NOT_STICKY
     }
 
     private fun startMirror(

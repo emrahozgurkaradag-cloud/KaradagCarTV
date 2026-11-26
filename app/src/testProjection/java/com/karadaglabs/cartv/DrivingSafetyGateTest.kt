@@ -196,24 +196,95 @@ class DrivingSafetyGateTest {
         assertFalse(DrivingSafetyGate.evaluate(sig, t + DrivingSafetyGate.STALE_AFTER_MS + 1).videoAllowed)
     }
 
+    // --- Zorunlu sensörlerin tazeliği --------------------------------
+
+    @Test
+    fun singleFreshStatusIsNotEnoughWhenOtherRegisteredSensorIsStale() {
+        val sig = DrivingSignals(
+            drivingStatus = s(0),
+            speedMetersPerSecond = s(0f, DrivingSafetyGate.STALE_AFTER_MS + 500)
+        )
+        val required = setOf(DrivingSafetyGate.SENSOR_TYPE_DRIVING_STATUS, DrivingSafetyGate.SENSOR_TYPE_CAR_SPEED)
+        val d = DrivingSafetyGate.evaluate(sig, now, GateMode.CAR_SENSORS, true, required)
+        assertFalse(d.videoAllowed)
+        assertTrue(d.reason, d.reason.startsWith("missing_required"))
+    }
+
+    @Test
+    fun allRequiredFreshAllows() {
+        val sig = DrivingSignals(
+            drivingStatus = s(0),
+            speedMetersPerSecond = s(0f),
+            gear = s(DrivingSafetyGate.GEAR_PARK),
+            parkingBrakeEngaged = s(true)
+        )
+        val required = setOf(2, 6, 7, 11)
+        assertTrue(DrivingSafetyGate.evaluate(sig, now, GateMode.CAR_SENSORS, true, required).videoAllowed)
+    }
+
+    @Test
+    fun missingRegisteredGearBlocks() {
+        val sig = DrivingSignals(drivingStatus = s(0))
+        val d = DrivingSafetyGate.evaluate(sig, now, GateMode.CAR_SENSORS, true, setOf(11, 7))
+        assertFalse(d.videoAllowed)
+        assertEquals("missing_required_7", d.reason)
+    }
+
+    // --- Park onayı (GateStabilizer) ----------------------------------
+
+    @Test
+    fun parkMustHoldForConfirmWindow() {
+        val st = GateStabilizer(confirmMs = 2_000)
+        val ok = VideoGateDecision(true, "parked")
+        assertFalse(st.update(ok, 1_000).videoAllowed)
+        assertEquals("confirming_park", st.update(ok, 2_500).reason)
+        assertTrue(st.update(ok, 3_000).videoAllowed)
+    }
+
+    @Test
+    fun anyBlockResetsConfirmationImmediately() {
+        val st = GateStabilizer(confirmMs = 2_000)
+        val ok = VideoGateDecision(true, "parked")
+        val bad = VideoGateDecision(false, "speed")
+        st.update(ok, 0)
+        assertTrue(st.update(ok, 2_000).videoAllowed)
+        assertEquals("speed", st.update(bad, 2_100).reason) // anında kapanır
+        assertFalse(st.update(ok, 2_200).videoAllowed) // yeniden onay gerekir
+        assertTrue(st.update(ok, 4_200).videoAllowed)
+    }
+
+    @Test
+    fun clockGoingBackwardsRestartsConfirmation() {
+        val st = GateStabilizer(confirmMs = 2_000)
+        val ok = VideoGateDecision(true, "parked")
+        st.update(ok, 10_000)
+        assertFalse(st.update(ok, 5_000).videoAllowed)
+        assertFalse(st.update(ok, 6_000).videoAllowed)
+        assertTrue(st.update(ok, 7_000).videoAllowed)
+    }
+
     // --- Yansıtma (yalnızca hız) ---------------------------------------
 
     @Test
-    fun mirrorGateRequiresFreshStoppedSpeed() {
+    fun mirrorGateRequiresFreshStoppedSpeedHeldForConfirmWindow() {
         var clock = 50_000L
         MirrorDrivingGate.clock = { clock }
         try {
             MirrorDrivingGate.reset()
             assertFalse(MirrorDrivingGate.decision.videoAllowed)
             MirrorDrivingGate.updateSpeed(0f)
-            assertTrue(MirrorDrivingGate.decision.videoAllowed)
-            MirrorDrivingGate.updateSpeed(8f)
+            assertEquals("confirming_park", MirrorDrivingGate.decision.reason)
+            clock += 1_000; MirrorDrivingGate.updateSpeed(0f)
             assertFalse(MirrorDrivingGate.decision.videoAllowed)
-            MirrorDrivingGate.updateSpeed(0f)
+            clock += 1_000; MirrorDrivingGate.updateSpeed(0f)
             assertTrue(MirrorDrivingGate.decision.videoAllowed)
+            clock += 500; MirrorDrivingGate.updateSpeed(8f)
+            assertFalse(MirrorDrivingGate.decision.videoAllowed) // hareket: anında
+            clock += 500; MirrorDrivingGate.updateSpeed(0f)
+            assertFalse(MirrorDrivingGate.decision.videoAllowed) // yeniden onay
             clock += DrivingSafetyGate.STALE_AFTER_MS + 1
             assertFalse(MirrorDrivingGate.decision.videoAllowed) // hız kesildi
-            MirrorDrivingGate.updateSpeed(null) // geçersiz değer yenilemez
+            MirrorDrivingGate.updateSpeed(null)
             assertFalse(MirrorDrivingGate.decision.videoAllowed)
         } finally {
             MirrorDrivingGate.reset()

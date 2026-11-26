@@ -1,6 +1,10 @@
 package com.karadaglabs.cartv
 
+import android.app.Activity
+import android.content.pm.PackageManager
 import androidx.annotation.OptIn
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 
@@ -26,5 +30,30 @@ object CarPlayerBridge {
 
     fun detach() {
         CarVideoPlayerHolder.clearPlayer()
+    }
+
+    /**
+     * aauto.aar gms CarSensorManager.registerListener:
+     * @RequiresPermission(anyOf = {ACCESS_FINE_LOCATION,
+     *   com.google.android.gms.permission.CAR_SPEED, ... }, conditional = true)
+     * Hız sensörü için CAR_SPEED gerekir. Koruma seviyesi belgelenmediği
+     * için verilmemişse çalışma anında istenir (normal izinse sistem
+     * zaten verir, tanımsızsa istek anında reddedilir — zararsız).
+     * Sürüş durumu / vites / el freni için SDK izin listelemiyor.
+     */
+    const val CAR_SPEED_PERMISSION = "com.google.android.gms.permission.CAR_SPEED"
+    private const val REQUEST_CODE = 4107
+
+    fun requestCarPermissions(activity: Activity) {
+        if (
+            ContextCompat.checkSelfPermission(activity, CAR_SPEED_PERMISSION) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                activity,
+                arrayOf(CAR_SPEED_PERMISSION),
+                REQUEST_CODE
+            )
+        }
     }
 }

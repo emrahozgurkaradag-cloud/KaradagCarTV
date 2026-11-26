@@ -80,6 +80,9 @@ class MainActivity : ComponentActivity() {
         // Telefonda yatay; araç ekranı / AAOS'ta yön zorlanmaz.
         CarScreen.applyPhoneLandscape(this)
 
+        // projection: araç hız sensörü izni (play: işlem yok).
+        CarPlayerBridge.requestCarPermissions(this)
+
         val email = AppSession.email(this)
         val licenseKey = AppSession.licenseKey(this)
 

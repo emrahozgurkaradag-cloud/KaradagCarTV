@@ -22,8 +22,22 @@ object MirrorDrivingGate {
 
     var clock: () -> Long = { SystemClock.elapsedRealtime() }
 
+    private val stabilizer = GateStabilizer()
+
+    /** Ham kararın [GateStabilizer] ile sabitlenmiş hâli. */
     val decision: VideoGateDecision
-        get() = DrivingSafetyGate.evaluate(signals, clock(), GateMode.SPEED_ONLY)
+        @Synchronized get() {
+            val now = clock()
+            return stabilizer.update(
+                DrivingSafetyGate.evaluate(
+                    signals,
+                    now,
+                    GateMode.SPEED_ONLY,
+                    requiredFresh = setOf(DrivingSafetyGate.SENSOR_TYPE_CAR_SPEED)
+                ),
+                now
+            )
+        }
 
     /** Hız örneği kaydeder (null = geçersiz değer, kaydedilmez). */
     @Synchronized
@@ -39,6 +53,7 @@ object MirrorDrivingGate {
     @Synchronized
     fun reset() {
         signals = DrivingSignals()
+        stabilizer.reset()
     }
 
     /** Kilitliyken araç yüzeyine uyarı çizer (yansıtma kopukken). */

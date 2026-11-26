@@ -1,5 +1,6 @@
 package com.karadaglabs.cartv
 
+import android.app.Activity
 import androidx.media3.exoplayer.ExoPlayer
 
 /**
@@ -19,4 +20,7 @@ object CarPlayerBridge {
     fun attach(player: ExoPlayer) = Unit
 
     fun detach() = Unit
+
+    /** play: araç sensör izni gerekmez. */
+    fun requestCarPermissions(activity: Activity) = Unit
 }

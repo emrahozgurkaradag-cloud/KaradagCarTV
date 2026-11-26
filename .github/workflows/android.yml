@@ -11,9 +11,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
+    name: Build, unit test, lint, verify APKs
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -26,13 +32,15 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Download dependencies
+        run: ./gradlew --no-daemon :app:dependencies --configuration projectionReleaseRuntimeClasspath > /dev/null
+
       # Release imzası: yalnızca GitHub Actions Secrets.
       #   KARADAG_RELEASE_KEYSTORE_BASE64   (keystore dosyasının base64 hâli)
       #   KARADAG_RELEASE_KEYSTORE_PASSWORD
       #   KARADAG_RELEASE_KEY_ALIAS
       #   KARADAG_RELEASE_KEY_PASSWORD
       # Biri eksikse release APK'ları imzasız üretilir ve bu adım uyarır.
-      # PR'larda (fork) secret verilmez; bu beklenen durumdur.
       - name: Release signing setup
         env:
           KEYSTORE_BASE64: ${{ secrets.KARADAG_RELEASE_KEYSTORE_BASE64 }}
@@ -56,13 +64,13 @@ jobs:
       - name: Unit tests (play + projection)
         run: ./gradlew --no-daemon testPlayDebugUnitTest testProjectionDebugUnitTest
 
-      - name: Lint (play + projection)
+      - name: Lint / static analysis (play + projection)
         run: ./gradlew --no-daemon lintPlayDebug lintProjectionDebug
 
       - name: Assemble all APKs
         run: ./gradlew --no-daemon assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease
 
-      - name: Verify APKs (packages, conflicts, signing)
+      - name: Verify APKs (packages, versionCode, conflicts, signing)
         run: scripts/verify-apks.sh
 
       - name: Remove keystore
@@ -83,4 +91,56 @@ jobs:
           path: |
             app/build/reports/
             app/build/test-results/
+          if-no-files-found: ignore
+
+  device-tests:
+    # Android Emulator (Android Auto host / araç YOK). Gerçek ExoPlayer +
+    # SurfaceView, PackageManager keşif sorguları, yan yana kurulum.
+    name: Emulator tests (API ${{ matrix.api-level }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [29, 34]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            21
+            25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Build debug and test APKs
+        run: ./gradlew --no-daemon assemblePlayDebug assembleProjectionDebug assemblePlayDebugAndroidTest assembleProjectionDebugAndroidTest
+
+      - name: Instrumented tests + device checks
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim
+          script: |
+            ./gradlew --no-daemon connectedPlayDebugAndroidTest connectedProjectionDebugAndroidTest
+            scripts/device-checks.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: device-test-reports-api${{ matrix.api-level }}
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
           if-no-files-found: ignore

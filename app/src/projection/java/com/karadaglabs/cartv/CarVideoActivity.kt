@@ -1,6 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -153,11 +152,7 @@ class CarVideoActivity : CarActivity() {
 
         applyVideoFocus(request = true)
 
-        try {
-            startService(Intent(this, CarMediaService::class.java))
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to start CarMediaService", exception)
-        }
+        connectMediaService()
 
         loadChannels()
         applyState()
@@ -193,8 +188,45 @@ class CarVideoActivity : CarActivity() {
         super.onPause()
     }
 
+    /*
+     * CarMediaService'e Media3 MediaController ile bağlan. Bağlantı:
+     *  - servisi oluşturur ve canlı tutar (startService Android 12+
+     *    arka plan kısıtında IllegalStateException atabilir),
+     *  - oynatma başlayınca Media3'ün servisi ön plana almasını sağlar
+     *    (FOREGROUND_SERVICE_MEDIA_PLAYBACK).
+     * Oynatıcı nesnesi aynı süreçte CarVideoPlayerHolder'a verilir.
+     */
+    private var controllerFuture:
+        com.google.common.util.concurrent.ListenableFuture<androidx.media3.session.MediaController>? = null
+
+    private fun connectMediaService() {
+        try {
+            val token = androidx.media3.session.SessionToken(
+                this,
+                android.content.ComponentName(this, CarMediaService::class.java)
+            )
+            val future = androidx.media3.session.MediaController.Builder(this, token).buildAsync()
+            controllerFuture = future
+            future.addListener(
+                {
+                    val ok = runCatching { future.get() }.isSuccess
+                    Log.d(TAG, "CarMediaService controller connected=$ok")
+                },
+                androidx.core.content.ContextCompat.getMainExecutor(this)
+            )
+        } catch (throwable: Throwable) {
+            Log.e(TAG, "Unable to connect CarMediaService", throwable)
+        }
+    }
+
+    private fun disconnectMediaService() {
+        controllerFuture?.let { androidx.media3.session.MediaController.releaseFuture(it) }
+        controllerFuture = null
+    }
+
     override fun onDestroy() {
         destroyed = true
+        disconnectMediaService()
         mainHandler.removeCallbacks(hideControlsRunnable)
         drivingSensors?.stop()
         drivingSensors = null

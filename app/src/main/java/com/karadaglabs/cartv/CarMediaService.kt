@@ -50,8 +50,7 @@ class CarMediaService : MediaLibraryService() {
         super.onCreate()
 
         player =
-            ExoPlayer.Builder(this)
-                .build()
+            PlayerFactory.create(this)
 
         player.setAudioAttributes(
             androidx.media3.common.AudioAttributes.Builder()
@@ -1036,6 +1035,12 @@ class CarMediaService : MediaLibraryService() {
 
             .setUri(
                 Uri.parse(
+                    channel.streamUrl
+                )
+            )
+
+            .setMimeType(
+                StreamFormat.mimeTypeFor(
                     channel.streamUrl
                 )
             )

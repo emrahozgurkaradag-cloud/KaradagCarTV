@@ -50,6 +50,8 @@ class CarDrivingSensors(
     private var running = false
     private var signals = DrivingSignals()
     private var drivingStatusSupported = true
+    private val registeredTypes = mutableSetOf<Int>()
+    private val stabilizer = GateStabilizer()
     private val loggedFailures = mutableSetOf<String>()
 
     var carConnected: Boolean = false
@@ -85,6 +87,8 @@ class CarDrivingSensors(
         if (running) return
         running = true
         signals = DrivingSignals()
+        registeredTypes.clear()
+        stabilizer.reset()
 
         val sensorManager = try {
             activity.a("sensor") as? CarSensorManager
@@ -115,6 +119,9 @@ class CarDrivingSensors(
             for (type in WATCHED) {
                 try {
                     val ok = sensorManager.registerListener(listener, type, SENSOR_RATE_UI)
+                    if (ok) {
+                        registeredTypes.add(type)
+                    }
                     Log.d(TAG, "CAR SENSOR register type=$type ok=$ok")
                 } catch (throwable: Throwable) {
                     logOnce("register$type", "CAR SENSOR register type=$type failed", throwable)
@@ -134,6 +141,8 @@ class CarDrivingSensors(
         manager = null
         carConnected = false
         signals = DrivingSignals()
+        registeredTypes.clear()
+        stabilizer.reset()
 
         if (sensorManager != null) {
             try {
@@ -174,12 +183,30 @@ class CarDrivingSensors(
         if (!carConnected) {
             return VideoGateDecision(videoAllowed = false, reason = "car_disconnected")
         }
-        return DrivingSafetyGate.evaluate(
+        val now = clock()
+        val raw = DrivingSafetyGate.evaluate(
             signals,
-            clock(),
+            now,
             GateMode.CAR_SENSORS,
-            drivingStatusSupported
+            drivingStatusSupported,
+            requiredFresh()
         )
+        return stabilizer.update(raw, now)
+    }
+
+    /**
+     * Taze olması zorunlu sensörler: kaydı başarılı olanlar (listede
+     * destekleniyorsa). Sürüş durumu destekleniyorsa her zaman zorunlu.
+     */
+    private fun requiredFresh(): Set<Int> {
+        val supported = supportedSensors
+        val required = registeredTypes
+            .filter { supported == null || it in supported }
+            .toMutableSet()
+        if (drivingStatusSupported) {
+            required.add(DrivingSafetyGate.SENSOR_TYPE_DRIVING_STATUS)
+        }
+        return required
     }
 
     private fun publish() {

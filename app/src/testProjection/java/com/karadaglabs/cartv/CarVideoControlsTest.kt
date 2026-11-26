@@ -56,6 +56,10 @@ class CarVideoControlsTest {
         assertTrue(holder.contains("applyVideoTrackLocked()"))
         assertTrue(holder.contains("setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)"))
         assertTrue(holder.contains("Re-prepared projection channel"))
+        assertTrue(holder.contains("LiveRetryPolicy.decide"))
+        assertTrue(holder.contains("StreamFormat.mimeTypeFor"))
+        assertTrue(activity.contains("MediaController.Builder"))
+        assertFalse(activity.contains("startService(Intent(this, CarMediaService"))
         // Araç bağlantısı koparsa oynatma durur.
         assertTrue(activity.contains("\"car_disconnected\""))
         assertTrue(holder.contains("if (videoBlocked)"))
@@ -72,6 +76,10 @@ class CarVideoControlsTest {
         }
         val mirror = source("java/com/karadaglabs/cartv/MirrorProjectionService.kt")
         assertTrue(mirror.contains("MirrorDrivingGate.decision"))
+        // Android 14+: mediaProjection FGS yalnızca onaydan sonra.
+        val onCreate = mirror.substring(mirror.indexOf("override fun onCreate()"), mirror.indexOf("private var foregroundStarted"))
+        assertFalse(onCreate.contains("startForeground("))
+        assertTrue(mirror.contains("START_NOT_STICKY"))
         val screen = source("java/com/karadaglabs/cartv/CarMirrorService.kt")
         assertTrue(screen.contains("addSpeedListener"))
         assertTrue(screen.contains("gateWatchdog"))
