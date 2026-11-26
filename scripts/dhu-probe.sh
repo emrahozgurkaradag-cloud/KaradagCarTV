@@ -119,33 +119,57 @@ adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -i ':149D'" | hea
 
 adb forward tcp:5277 tcp:5277
 CFG="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/extras/google/auto/config/default_sensors.ini"
-run_dhu() { # run_dhu <label> <seconds> [faketime-date]
-  local label="$1" secs="$2" when="${3:-}"
+
+# DHU'yu arka planda FIFO'dan komut okuyacak şekilde çalıştırır; oturum
+# sırasında telefon tarafında onay ekranlarını geçer ve ekran görüntüleri alır.
+run_dhu() { # run_dhu <tag> <seconds> [faketime-date]
+  local tag="$1" secs="$2" when="${3:-}"
   local pre=(); [ -n "$when" ] && command -v faketime >/dev/null && pre=(faketime "$when")
-  ( sleep 12; echo "help"; sleep 25; echo "screenshot $PWD/$OUT/dhu-$label-1.png"; sleep $((secs-50)); echo "screenshot $PWD/$OUT/dhu-$label-2.png"; sleep 8; echo "quit" ) | \
-    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout $((secs+10)) "${pre[@]}" "$DHU" --headless -a 127.0.0.1:5277 -c "$CFG" > "$OUT/dhu-$label.txt" 2>&1
-  grep -v "^ALSA" "$OUT/dhu-$label.txt" | head -80
+  local fifo="$OUT/dhu-$tag.fifo"; rm -f "$fifo"; mkfifo "$fifo"
+  SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout $((secs+15)) "${pre[@]}" "$DHU" --headless -a 127.0.0.1:5277 -c "$CFG" \
+    < "$fifo" > "$OUT/dhu-$tag.txt" 2>&1 &
+  local pid=$!
+  exec 3> "$fifo"
+  send() { echo "$1" >&3 2>/dev/null; log "DHU <- $1"; }
+  sleep 8; send "help"
+  local t=8 n=0
+  while [ $t -lt "$secs" ] && kill -0 $pid 2>/dev/null; do
+    n=$((n+1))
+    if grep -qE "auth failure|Failed to read from transport" "$OUT/dhu-$tag.txt"; then break; fi
+    [ $n -eq 1 ] && send "focus video"
+    # Telefon: Android Auto onay/izin/güncelleme ekranları
+    shot "phone-$tag-$n"
+    tap "phone-$tag-$n" "^(Accept|Continue|Got it|OK|Allow|Agree|Kabul|Devam|İzin ver|Next|Not now|Later|Skip|Done|Turn on|While using the app|Only this time)$" || true
+    send "screenshot $PWD/$OUT/dhu-$tag-$n.png"
+    sleep 12; t=$((t+15))
+  done
+  send "quit"; sleep 3; exec 3>&-
+  kill $pid 2>/dev/null; wait $pid 2>/dev/null
+  rm -f "$fifo"
+  grep -v "^ALSA" "$OUT/dhu-$tag.txt" | grep -vE "^\s+\"|^\t" | head -60
 }
 if [ -x "$DHU" ]; then
   log "== DHU gerçek saatle (sertifika kontrolü)"
-  run_dhu now 60
+  run_dhu now 45
   if grep -qE "certificate has expired|certificate is not yet valid|auth failure" "$OUT/dhu-now.txt"; then
-    # Android Auto'nun gömülü sertifikası süresi dolmuş: hem DHU hem telefon
-    # saati, sertifikaların geçerli olduğu bir tarihe alınır (yalnızca test).
+    # Android Auto 5.3'ün gömülü sertifikası bugünün tarihinde süresi dolmuş
+    # (CI 45849636694: 2021/2022'de "expired", 2020-10-01'de "Verify ok").
     adb shell settings put global auto_time 0
-    for when in "2022-06-01 12:00:00" "2021-06-01 12:00:00" "2020-10-01 12:00:00" "2023-03-01 12:00:00"; do
-      d="$(date -d "$when" +%m%d%H%M%Y.%S)"
-      adb shell date "$d" >/dev/null 2>&1; log "emülatör saati: $(adb shell date | tr -d '\r') | DHU faketime: $when"
+    for when in "2020-10-01 12:00:00" "2020-12-01 12:00:00"; do
+      tag="t$(echo "$when" | cut -c1-10 | tr -d '-')"
+      adb shell date "$(date -d "$when" +%m%d%H%M%Y.%S)" >/dev/null 2>&1
+      log "emülatör saati: $(adb shell date | tr -d '\r') | DHU faketime: $when"
       adb shell am force-stop $GH; sleep 2
       adb shell am start -n $GH/.companion.settings.DefaultSettingsActivity >/dev/null 2>&1; sleep 4
-      tap "hus-$when" "More options|Diğer seçenekler" >/dev/null && tap "hus2-$when" "Start head unit server|head unit server" >/dev/null
+      tap "hus-$tag" "More options|Diğer seçenekler" >/dev/null && tap "hus2-$tag" "Start head unit server|head unit server" >/dev/null
       sleep 3; adb forward tcp:5277 tcp:5277 >/dev/null
-      tag="$(echo "$when" | cut -c1-7)"
-      log "== DHU faketime $when"
-      run_dhu "t$tag" 150 "$when"
-      if ! grep -qE "certificate has expired|certificate is not yet valid|auth failure|Failed to read from transport" "$OUT/dhu-t$tag.txt"; then
-        log "DHU oturumu bu tarihte açıldı: $when"; break
-      fi
+      adb logcat -c
+      log "== DHU faketime $when (oturum 180 sn)"
+      run_dhu "$tag" 180 "$when"
+      adb logcat -d -v time > "$OUT/logcat-$tag.txt"
+      log "== Oturum logcat (CAR./Karadag/gearhead)"
+      grep -E "CAR\.|KaradagCar|KaradagProjection|karadaglabs|DynamicApiFactory|ApiFactory" "$OUT/logcat-$tag.txt" | cut -c1-230 | tail -120
+      if grep -q "Verify returned: ok" "$OUT/dhu-$tag.txt"; then log "Sertifika bu tarihte geçerli: $when"; break; fi
     done
   fi
 else
@@ -154,5 +178,5 @@ fi
 
 log "== logcat (gearhead / Karadag / projection)"
 adb logcat -d -v time > "$OUT/logcat.txt"
-grep -iE "CAR\.|gearhead|KaradagCar|KaradagProjection|Projection|HeadUnit|CarActivity|DynamicApiFactory" "$OUT/logcat.txt" | head -150
+grep -iE "KaradagCar|KaradagProjection|CarVideoService" "$OUT/logcat.txt" | head -60
 exit 0
