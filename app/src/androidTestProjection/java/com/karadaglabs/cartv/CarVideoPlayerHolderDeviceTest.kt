@@ -177,7 +177,7 @@ class CarVideoPlayerHolderDeviceTest {
         onMain { surfaceView.visibility = View.VISIBLE }
         waitUntil("surface recreated") { surfaceView.holder.surface?.isValid == true }
         waitUntil("frame on new surface") { firstFrames.get() > before }
-        onMain { assertTrue(player.isPlaying) }
+        waitUntil("playing after surface recreate") { player.isPlaying }
     }
 
     @Test
@@ -189,9 +189,11 @@ class CarVideoPlayerHolderDeviceTest {
         waitUntil("hls item") { player.currentMediaItem?.mediaId == "live-tv-2" }
         waitUntil("hls frame") { firstFrames.get() > before }
         waitUntil("hls size") { player.videoSize.width == 426 }
+        // Parça geçişinde kısa tamponlama olabilir: oynamaya dönmesini bekle.
+        waitUntil("hls playing") { player.isPlaying }
         onMain {
             assertEquals("application/x-mpegURL", player.currentMediaItem?.localConfiguration?.mimeType)
-            assertTrue(player.isPlaying)
+            assertTrue(videoSelected() && audioSelected())
         }
     }
 
@@ -205,7 +207,8 @@ class CarVideoPlayerHolderDeviceTest {
         val fixed = broken.copy(streamUrl = tsChannel.streamUrl)
         onMain { CarVideoPlayerHolder.prepareChannel(fixed); CarVideoPlayerHolder.setPlayWhenReady(true) }
         waitUntil("recovered frame") { firstFrames.get() > 0 }
-        onMain { assertTrue(player.isPlaying) }
+        waitUntil("recovered playing") { player.isPlaying }
+        onMain { assertEquals("live-tv-5", player.currentMediaItem?.mediaId) }
     }
 
     @Test

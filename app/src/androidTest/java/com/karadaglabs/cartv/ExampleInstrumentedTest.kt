@@ -14,10 +14,6 @@ import org.junit.Assert.*
  * See [testing documentation](http://d.android.com/tools/testing).
  */
 @RunWith(AndroidJUnit4::class)
-private object BuildConfigFlavor {
-    fun isProjection(pkg: String) = pkg.endsWith(".projection")
-}
-
 class ExampleInstrumentedTest {
     @Test
     fun useAppContext() {
@@ -25,7 +21,7 @@ class ExampleInstrumentedTest {
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         // play: com.karadaglabs.cartv, projection: com.karadaglabs.cartv.projection
         assertEquals(
-            "com.karadaglabs.cartv" + if (BuildConfigFlavor.isProjection(appContext.packageName)) ".projection" else "",
+            "com.karadaglabs.cartv" + if (appContext.packageName.endsWith(".projection")) ".projection" else "",
             appContext.packageName
         )
     }
