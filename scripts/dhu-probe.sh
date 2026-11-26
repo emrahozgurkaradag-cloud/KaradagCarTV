@@ -138,13 +138,17 @@ run_dhu() { # run_dhu <tag> <seconds> [faketime-date]
   while [ $t -lt "$secs" ] && kill -0 $pid 2>/dev/null; do
     n=$((n+1))
     if grep -qE "auth failure|Failed to read from transport" "$OUT/dhu-$tag.txt"; then break; fi
-    [ $n -eq 1 ] && send "focus video"
-    # Telefon: Android Auto onay/izin/güncelleme ekranları
-    shot "phone-$tag-$n"
-    tap "phone-$tag-$n" "^(Accept|Continue|Got it|OK|Allow|Agree|Kabul|Devam|İzin ver|Next|Not now|Later|Skip|Done|Turn on|While using the app|Only this time)$" || true
-    send "screenshot $PWD/$OUT/dhu-$tag-$n.png"
-    sleep 12; t=$((t+15))
+    [ $n -eq 2 ] && send "focus video"
+    # Telefon: Android Auto ilk kurulum (FRX) / izin / şart ekranları.
+    if tap "phone-$tag-$n" "^(Get started|Accept|Accept all|Agree|Agree and continue|I agree|Continue|Next|Got it|OK|Allow|Allow all the time|While using the app|Only this time|Done|Turn on|Kabul|Kabul et|Devam|İzin ver|Başlayın)$"; then
+      shot "phone-$tag-$n"
+    fi
+    # İzin verme gibi sistem diyalogları (permissioncontroller) için de dene
+    [ $((n % 5)) -eq 0 ] && { shot "phone-$tag-$n"; send "screenshot $PWD/$OUT/dhu-$tag-$n.png"; }
+    sleep 3; t=$((t+4))
   done
+  shot "phone-$tag-end"; dump "phone-$tag-end"
+  send "screenshot $PWD/$OUT/dhu-$tag-end.png"; sleep 2
   send "quit"; sleep 3; exec 3>&-
   kill $pid 2>/dev/null; wait $pid 2>/dev/null
   rm -f "$fifo"
@@ -171,7 +175,19 @@ if [ -x "$DHU" ]; then
       adb logcat -d -v time > "$OUT/logcat-$tag.txt"
       log "== Oturum logcat (CAR./Karadag/gearhead)"
       grep -E "CAR\.|KaradagCar|KaradagProjection|karadaglabs|DynamicApiFactory|ApiFactory" "$OUT/logcat-$tag.txt" | cut -c1-230 | tail -120
-      if grep -q "Verify returned: ok" "$OUT/dhu-$tag.txt"; then log "Sertifika bu tarihte geçerli: $when"; break; fi
+      if grep -q "Verify returned: ok" "$OUT/dhu-$tag.txt"; then
+        log "Sertifika bu tarihte geçerli: $when"
+        # İkinci oturum: ilk kurulum (FRX) tamamlandıysa araç artık izinli.
+        adb shell am force-stop $GH; sleep 2
+        adb shell am start -n $GH/.companion.settings.DefaultSettingsActivity >/dev/null 2>&1; sleep 4
+        tap "hus3-$tag" "More options|Diğer seçenekler" >/dev/null && tap "hus4-$tag" "Start head unit server|head unit server" >/dev/null
+        sleep 3; adb forward tcp:5277 tcp:5277 >/dev/null; adb logcat -c
+        log "== İkinci DHU oturumu (FRX sonrası, 180 sn)"
+        run_dhu "${tag}b" 180 "$when"
+        adb logcat -d -v time > "$OUT/logcat-${tag}b.txt"
+        grep -E "CAR\.(SETUP|STARTUP|SERVICE|FIRST|PROJECTION|VALIDATOR|APP|LAUNCHER)|GH\.(App|Launcher|Projection|CarActivity)|KaradagCar|KaradagProjection|karadaglabs|DynamicApiFactory" "$OUT/logcat-${tag}b.txt" | cut -c1-230 | tail -120
+        break
+      fi
     done
   fi
 else
