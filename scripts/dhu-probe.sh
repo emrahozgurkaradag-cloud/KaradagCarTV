@@ -54,7 +54,7 @@ shot() { adb exec-out screencap -p > "$OUT/ui-$1.png" 2>/dev/null; }
 dump() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-$1.xml" >/dev/null 2>&1; }
 tap() { # tap <step> <regex>
   dump "$1"; local r; r="$(python3 "$UI" "$OUT/ui-$1.xml" "$2")" || return 1
-  set -- "$1" "$2" $r; adb shell input tap "$3" "$4"; log "tap '$2' -> $5 $6 $7 ($3,$4)"; sleep 2; return 0
+  local x y lbl; read -r x y lbl <<<"$r"; adb shell input tap "$x" "$y"; log "tap '$2' -> ${lbl} ($x,$y)"; sleep 2; return 0
 }
 adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
 read SW SH < <(adb shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+' | tail -1 | tr 'x' ' ')
@@ -78,6 +78,10 @@ if [ -n "$found" ]; then
   for k in $(seq 1 10); do adb shell input tap "$1" "$2"; sleep 0.3; done
   sleep 2; shot 05-after-version-taps
   tap 06-devdialog "^(OK|Allow|Tamam|İzin ver)$" && shot 06-devdialog
+  # Geliştirici menüsü ayarlar yeniden açılınca görünür (AA 4.3'te diyalog çıkmıyor).
+  adb shell am force-stop $GH; sleep 1
+  adb shell am start -n $GH/.companion.settings.DefaultSettingsActivity >/dev/null 2>&1; sleep 5; shot 06b-reopened
+  dump 06b-reopened; log "araç çubuğu: $(grep -oE 'content-desc="[^"]+"' "$OUT/ui-06b-reopened.xml" | tr '\n' ' ')"
   # Geliştirici ayarları -> "Unknown sources" (Play dışı kurulum; AA 4.x/5.x)
   if tap 07a-overflow "More options|Diğer seçenekler" && tap 07b-devsettings "^Developer settings$|Geliştirici ayarları"; then
     shot 07b-devsettings
