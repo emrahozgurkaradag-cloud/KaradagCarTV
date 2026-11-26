@@ -48,6 +48,44 @@ done
 adb shell dumpsys package com.google.android.gms | tr -d '\r' | grep -oE "com.google.android.gms/[A-Za-z0-9_.\$]*(car|Car)[A-Za-z0-9_.\$]*" | sort -u | head -60 > "$OUT/gms-car-components.txt"
 log "GMS car bileşenleri:"; cat "$OUT/gms-car-components.txt"
 
+log "== Arayüz otomasyonu: Android Auto ayarları -> geliştirici modu -> Start head unit server"
+UI="$(dirname "$0")/aa-ui.py"
+shot() { adb exec-out screencap -p > "$OUT/ui-$1.png" 2>/dev/null; }
+dump() { adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-$1.xml" >/dev/null 2>&1; }
+tap() { # tap <step> <regex>
+  dump "$1"; local r; r="$(python3 "$UI" "$OUT/ui-$1.xml" "$2")" || return 1
+  set -- "$1" "$2" $r; adb shell input tap "$3" "$4"; log "tap '$2' -> $5 $6 $7 ($3,$4)"; sleep 2; return 0
+}
+adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
+adb shell am start -n $GH/.companion.settings.DefaultSettingsActivity >/dev/null 2>&1; sleep 6; shot 01-settings
+# İlk kurulum / izin / kabul ekranları (birkaç tur)
+for i in 1 2 3 4 5; do
+  tap "02-setup-$i" "^(Accept|Continue|Got it|OK|Allow|Agree|Kabul|Devam|İzin ver|Next|Skip|Not now|Later)$" || break
+  shot "02-setup-$i"
+done
+dump 03-settings; grep -oE 'text="[^"]{2,60}"' "$OUT/ui-03-settings.xml" | head -30
+# Sürüm satırını bul (kaydırarak) ve 10 kez dokun
+found=""
+for i in 1 2 3 4 5 6; do
+  dump "04-scan-$i"
+  if r="$(python3 "$UI" "$OUT/ui-04-scan-$i.xml" "^Version|^Sürüm|^Version [0-9]")"; then found="$r"; break; fi
+  adb shell input swipe 500 1500 500 400 300; sleep 1
+done
+if [ -n "$found" ]; then
+  set -- $found; log "Sürüm satırı: $3 $4 ($1,$2)"
+  for k in $(seq 1 10); do adb shell input tap "$1" "$2"; sleep 0.3; done
+  sleep 2; shot 05-after-version-taps
+  tap 06-devdialog "^(OK|Allow|Tamam|İzin ver)$" && shot 06-devdialog
+  tap 07-overflow "More options|Diğer seçenekler" && shot 07-overflow
+  if tap 08-hus "Start head unit server|Ana birim sunucusunu başlat|head unit server"; then shot 08-hus
+  else dump 08-menu; grep -oE 'text="[^"]{2,60}"' "$OUT/ui-08-menu.xml" | head -20; fi
+else
+  log "Sürüm satırı bulunamadı (Android Auto ilk kurulumu tamamlanmamış olabilir)"
+fi
+shot 09-final
+log "== 5277 dinleyen soket (hex 149D)"
+adb shell "grep -i ':149D' /proc/net/tcp /proc/net/tcp6" 2>/dev/null | head -5
+
 log "== Head unit server başlatma denemeleri"
 adb logcat -c
 for comp in $(grep -iE "HeadUnitServer|HeadunitServer|HeadUnitService|DeveloperHeadUnit|HuServer|headunit" "$OUT/gearhead-components.txt"); do
