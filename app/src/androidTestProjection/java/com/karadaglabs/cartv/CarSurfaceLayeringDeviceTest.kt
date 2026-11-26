@@ -13,7 +13,6 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -103,6 +102,32 @@ class CarSurfaceLayeringDeviceTest {
         Thread.sleep(1_000)
     }
 
+    /**
+     * Ekran görüntüsü videoyu gerçekten içeriyor mu? Video bölgesinden
+     * (kontrol katmanının üstü) alınan örneklerde birden çok farklı renk
+     * olmalı (ffmpeg testsrc renkli desen + kayan sayaç). Tek düze siyah
+     * görüntü, yüzeyin ekran görüntüsüne girmediği anlamına gelir.
+     */
+    private fun videoCapturedOnScreen(): Boolean {
+        val loc = IntArray(2)
+        var w = 0
+        var h = 0
+        instrumentation.runOnMainSync {
+            surfaceView.getLocationOnScreen(loc); w = surfaceView.width; h = surfaceView.height
+        }
+        val shot = instrumentation.uiAutomation.takeScreenshot()!!
+        val colors = mutableSetOf<Int>()
+        for (fx in listOf(0.1f, 0.3f, 0.5f, 0.7f, 0.9f)) for (fy in listOf(0.15f, 0.3f, 0.45f)) {
+            val p = shot.getPixel(
+                (loc[0] + w * fx).toInt().coerceIn(0, shot.width - 1),
+                (loc[1] + h * fy).toInt().coerceIn(0, shot.height - 1)
+            )
+            colors += (p and 0xF0F0F0)
+        }
+        android.util.Log.i("KaradagLayerTest", "video region distinct colors=${colors.size}")
+        return colors.size >= 3
+    }
+
     /** Kontrol katmanının ortasındaki piksel katman rengi mi? */
     private fun overlayVisibleOnScreen(): Boolean {
         val loc = IntArray(2)
@@ -130,6 +155,7 @@ class CarSurfaceLayeringDeviceTest {
     @Test
     fun controlsOverlayIsVisibleAboveVideoWithCarSurfaceLayering() {
         startVideo { CarSurfaceLayering.configureVideoSurface(it) }
+        assertTrue("ekran görüntüsü video içermeli", videoCapturedOnScreen())
         assertTrue(
             "kontrol katmanı video oynarken görünmeli (varsayılan z-sırası)",
             overlayVisibleOnScreen()
@@ -137,12 +163,13 @@ class CarSurfaceLayeringDeviceTest {
     }
 
     @Test
-    fun mediaOverlayZOrderHidesControls_regressionEvidence() {
-        // Eski yapılandırma (aa31328..b242230): kontroller videonun altında kalır.
+    fun mediaOverlayZOrderAlsoStaysBehindWindowControls() {
+        // CI 45825713489 (API 29) ölçümü: setZOrderMediaOverlay(true) yüzeyi
+        // yalnızca diğer SurfaceView'lerin üstüne alır, PENCERENİN ARKASINDA
+        // kalır; pencere içindeki kontroller yine görünür. (Önceki
+        // "kontrolleri gizler" varsayımı yanlıştı.)
         startVideo { it.setZOrderMediaOverlay(true) }
-        assertFalse(
-            "setZOrderMediaOverlay(true) ile video pencere içeriğinin üstünde çizilir",
-            overlayVisibleOnScreen()
-        )
+        assertTrue("ekran görüntüsü video içermeli", videoCapturedOnScreen())
+        assertTrue(overlayVisibleOnScreen())
     }
 }
