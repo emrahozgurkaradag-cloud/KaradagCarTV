@@ -8,8 +8,9 @@ try:
 except Exception:
     sys.exit(1)
 for node in root.iter("node"):
-    label = " ".join(filter(None, [node.get("text"), node.get("content-desc"), node.get("resource-id")]))
-    if label and pattern.search(label):
+    attrs = [node.get("text"), node.get("content-desc"), node.get("resource-id")]
+    label = " ".join(filter(None, attrs))
+    if any(v and pattern.search(v.strip()) for v in attrs):
         m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
         if m:
             x1, y1, x2, y2 = map(int, m.groups())
