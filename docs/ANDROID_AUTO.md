@@ -48,7 +48,7 @@ Android Automotive OS (Google built-in) araçlarda uygulama doğrudan araç bilg
 |---|---|---|
 | Keşif | `CarVideoService` (`android.intent.action.MAIN` + `CATEGORY_PROJECTION` + `CATEGORY_PROJECTION_OEM`, exported) | Fermata Auto'nun açık kaynak manifestiyle aynı. Emülatörde `PackageManager.queryIntentServices` ile bulunuyor [otomatik test]. |
 | Host bağlantısı | `aauto.aar` `CarActivityService` → `gms.car.d.onBind` → `CarActivityServiceProxy.onBind` | Bytecode: `gms.car.a` proxy'yi **Android Auto uygulamasından** (`com.google.android.projection.gearhead`, alternatif `…bumblebee`) çalışma anında `DynamicApiFactory.newCarActivityServiceProxy` ile yükler. Araç penceresinin davranışı bu yüzden telefondaki Android Auto sürümüne bağlıdır. |
-| Araç penceresi | `CarVideoActivity` (aauto `CarActivity`) | Kanal ızgarası, kontroller, `SurfaceView` (`setZOrderMediaOverlay`). |
+| Araç penceresi | `CarVideoActivity` (aauto `CarActivity`) | Kanal ızgarası, kontroller, `SurfaceView` (varsayılan z-sırası, Fermata ile aynı; cihazda ekran görüntüsüyle ölçüldü). |
 | Oynatıcı | `CarMediaService`'in tek ExoPlayer'ı (`PlayerFactory`), `CarVideoPlayerHolder` ile `SurfaceView`'e bağlanır | Görüntü telefonda kodlanır, Android Auto bağlantısıyla araca gider. |
 | Servis yaşamı | `CarVideoActivity` → Media3 `MediaController` (SessionToken) ile `CarMediaService`'e bağlanır | `startService` yerine geçti (Android 12+ arka plan başlatma kısıtı). |
 | Park kilidi | `CarDrivingSensors` + `DrivingSafetyGate` + `GateStabilizer` | Bölüm 5. |
@@ -82,6 +82,30 @@ Android Automotive OS (Google built-in) araçlarda uygulama doğrudan araç bilg
 [Doğrulandı: kod + kaynak testi] [Doğrulanmadı: araçta]
 
 Dokununca alt çubuk açılır: ⏮ önceki kanal · ⏸/▶ · ⏭ sonraki kanal · ☰ kanal listesi · ⛶ tam ekran. Medya tuşları: PLAY_PAUSE, PLAY, PAUSE/STOP, NEXT/CHANNEL_UP, PREVIOUS/CHANNEL_DOWN. Kanal geçişi dairesel, son kanal kalıcıdır. Kontrol çubuğu 5 sn sonra gizlenir; kilitliyken ve duraklatılmışken açık kalır.
+
+### 3.5 Android Auto host bağlantı zinciri ve araç ekranı yüzeyi
+
+Soru: `CarVideoService` Android Auto tarafından başlatıldığında ExoPlayer görüntüsü hangi araç ekranı yüzeyine, hangi API üzerinden gider?
+
+| Adım | Ne olur | Kanıt |
+|---|---|---|
+| 1. Keşif | Android Auto, `MAIN` + `CATEGORY_PROJECTION_OEM` ile servisleri sorgular | [Kaynak beyanı] Fermata #846/#847 (AA 17.7). [Doğrulandı: AA 4.3 dex] Gerçek Android Auto 4.3 APK'sında `CATEGORY_PROJECTION_OEM`, `CATEGORY_PROJECTION`, `com.google.android.gms.car.application` ve `allow_unknown_sources` dizeleri var. [Doğrulandı: emülatör] `queryIntentServices` `CarVideoService`'i döndürüyor. |
+| 2. Bağlanma | Android Auto `bindService` yapar → `CarActivityService.onCreate` | [Doğrulandı: bytecode] `gms.car.d.onCreate` → `gms.car.a.a(ctx)` |
+| 3. Host kodu yükleme | `gms.car.g`: `MAIN`+`CAR_DOCK` ile paketi çözer (yalnızca gearhead/bumblebee); `gms.car.i`: imza = gömülü Google "gearhead" sertifikası; `createPackageContext` → `com.google.android.gms.car.DynamicApiFactory.newCarActivityServiceProxy` | [Doğrulandı: bytecode] + [Doğrulandı: emülatör API 29, Google imzalı Android Auto 4.3.591848] `"Will load car API impls dynamically from com.google.android.projection.gearhead"`, `HOST READY`, `HOST BIND OK`, binder döndü. [Doğrulandı: emülatör API 34, taslak 1.2.531830-stub] `ClassNotFoundException: DynamicApiFactory` → `Error loading car activity host`; servis artık çökmüyor. |
+| 4. Araç penceresi | Proxy, `getCarActivity()` = `CarVideoActivity`'yi örnekler ve `CarActivityHost` ile bağlar. `setContentView` / `getWindow` host'a gider | [Doğrulandı: bytecode] `CarActivityHost.getWindow()`, `setContentView(View)`; `gms.car.c` host referansını tutar. |
+| 5. Host yüzeyi | Android Auto, aracın video akışı için bir **VirtualDisplay** oluşturur ve uygulama penceresini bu ekranda bir **Presentation** olarak gösterir; ekran içeriği **MediaCodec giriş yüzeyi** üzerinden H.264 (`video/avc`) kodlanıp araca gönderilir | [Doğrulandı: AA 4.3 dex, CI içinde yerinde analiz] `DisplayManager.createVirtualDisplay` → `com.google.android.gms.car.VirtualDisplayHelper`; `Presentation.<init>` → `com.google.android.gms.car.ProjectedPresentation`; `MediaCodec.createInputSurface` ve `"video/avc"` mevcut. Bu sınıflar arası çağrı zinciri (ör. `VirtualDisplayHelper` yüzeyinin kodlayıcı girişi olması) yalnızca imza/çağrı düzeyinde incelendi. **Güncel Android Auto (16–18) için doğrulanmadı.** |
+| 6. Video | `CarVideoActivity` içindeki `SurfaceView` bu Presentation penceresinin alt yüzeyidir; `CarVideoPlayerHolder` → `ExoPlayer.setVideoSurfaceHolder(surfaceView.holder)`. SurfaceFlinger bu alt yüzeyi sanal ekrana birleştirir, kodlayıcı araca gönderir | [Doğrulandı: kod] Fermata'nın araç video yolu aynı: `player.setVideoSurfaceHolder(view.getVideoSurface().getHolder())`, `MainCarActivity.getWindow()` = `c()` (host penceresi). [Doğrulandı: emülatör] ExoPlayer'ın SurfaceView'e çizdiği (telefon ekranında). [Doğrulanmadı] Host'un sanal ekranında. |
+| 7. Kanıt toplama (gerçek araç) | `ProjectionDiagnostics`, yüzey oluşunca bağlı olduğu `Display`'i loglar: `adb logcat -s KaradagProjectionDiag` | Araçta `phoneDisplay=false` (displayId ≠ 0) ve sanal ekran adı görülmeli. |
+
+**`CATEGORY_PROJECTION` ve `CATEGORY_PROJECTION_OEM`:** İkisi de AA 4.3 APK'sında dize olarak var [Doğrulandı: dex]. [Kaynak beyanı] Fermata #846'ya göre AA 17.7 başlatıcısı uygulamaları `CATEGORY_PROJECTION_OEM` ile listeler ve PROJECTION türü olarak doğrular. `CATEGORY_PROJECTION` eski sürümlerin sorgusu olabilir; bu projede ayrımı kanıtlayan bir kaynak kod bulunmadı. `CarVideoService` iki kategoriyi de taşır (Fermata `CarService` ile aynı); emülatörde iki kategoriyle de çözülüyor.
+
+**Kesin cevap.** Kodda ExoPlayer görüntüsü `ExoPlayer.setVideoSurfaceHolder(SurfaceHolder)` ile `CarVideoActivity` içindeki `SurfaceView`'e bağlanır. Bu `SurfaceView`, `aauto.aar` `CarActivity`'sinin penceresindedir. Pencereyi çalışma anında Android Auto'nun kendi kodu sağlar. Android Auto 4.3'te bu kod `VirtualDisplayHelper` (DisplayManager.createVirtualDisplay) ve `ProjectedPresentation` (android.app.Presentation) sınıflarını, ayrıca H.264 `MediaCodec` giriş yüzeyini içerir. Gerçek bir araç bağlantısında bu yüzeyin araca ulaştığı **gösterilmedi**.
+
+**Bilinen engeller (kanıtlı):**
+
+1. Host kodunun yüklenmesi Android Auto APK'sında `com.google.android.gms.car.DynamicApiFactory` sınıfının bulunmasına bağlıdır: AA 4.3'te var, taslak pakette yok. Güncel Android Auto sürümlerinde bu sınıf ve `newCarActivityServiceProxy` imzası doğrulanmadı. Yoksa araç penceresi hiç oluşmaz (`Error loading car activity host`).
+2. Görünürlük denetimi: [Kaynak beyanı] AA 17.x PROJECTION türünü yalnızca Play yükleyicisi / geliştirici head unit / root ile listeler. Bu denetim geçilmezse Android Auto servise hiç bağlanmaz; 2–6. adımlar başlamaz.
+3. CI emülatörlerinde araç bağlantısı yoktur. Android Auto servisi testle bağlandı, Android Auto'nun kendisi bağlanmadı; `CarVideoActivity` hiç oluşturulmadı.
 
 ## 4. Kurulum ve APK varyantları
 

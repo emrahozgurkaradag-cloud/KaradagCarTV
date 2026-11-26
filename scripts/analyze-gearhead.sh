@@ -31,6 +31,7 @@ for s in com.google.android.gms.car.DynamicApiFactory newCarActivityServiceProxy
 done
 
 [ -x "$DEXDUMP" ] || { echo "dexdump yok"; exit 0; }
+export LC_ALL=C
 DUMP="$WORK/dump.txt"
 for d in $dexes; do "$DEXDUMP" -d "$d" 2>/dev/null; done > "$DUMP"
 
@@ -56,3 +57,26 @@ for s in video/avc "OMX." "CAR.VIDEO" "VideoEncoder" "projection" "Presentation"
   n=0; for d in $dexes; do grep -aqF "$s" "$d" && n=$((n+1)); done
   echo "  '$s' -> $n dex"
 done
+
+echo "== Pencere zinciri sınıfları: üst sınıf, alanlar ve metod imzaları"
+for cls in "Lcom/google/android/gms/car/ProjectedPresentation;" "Lcom/google/android/gms/car/VirtualDisplayHelper;"; do
+  echo "-- $cls"
+  awk -v c="'$cls'" '
+    $0 ~ "Class descriptor" { inside = (index($0, c) > 0) }
+    inside && /Superclass|Interfaces|#[0-9]+ *: \(in L|name *:|type *:/ { print "   " $0 }
+  ' "$DUMP" | grep -vE "^\s*$" | sed 's/^ *//' | head -40
+done
+
+echo "== Bu sınıfları kullanan (çağıran) sınıflar"
+for ref in "Lcom/google/android/gms/car/ProjectedPresentation;" "Lcom/google/android/gms/car/VirtualDisplayHelper;"; do
+  callers="$(awk -v r="$ref" '/Class descriptor/ { cls=$4 } index($0, r) && cls != "\x27" r "\x27" { print cls }' "$DUMP" | sort -u | grep -vF "'$ref'" | head -8 | tr '\n' ' ')"
+  echo "  $ref <- $callers"
+done
+
+echo "== createVirtualDisplay çağrı bağlamı (VirtualDisplayHelper)"
+awk '/Class descriptor.*VirtualDisplayHelper;/{f=1} f && /Class descriptor/ && !/VirtualDisplayHelper/{f=0} f' "$DUMP" | grep -E "createVirtualDisplay|Landroid/view/Surface;|getSurface|setSurface|Presentation" | head -12
+
+echo "== MediaCodec giriş yüzeyi bağlamı"
+awk '/Class descriptor/{cls=$4} /createInputSurface/{print cls}' "$DUMP" | sort -u | head -3
+awk '/Class descriptor/ && /'"'"'Lfps;'"'"'/{f=1} f && /Class descriptor/ && !/Lfps;/{f=0} f' "$DUMP" | grep -E "MediaCodec;\.|video/avc|createVirtualDisplay|Surface;" | sed 's/^.*|[0-9a-f]*: //' | sort -u | head -12
+
