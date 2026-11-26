@@ -1,7 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.content.pm.ActivityInfo
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -87,25 +85,8 @@ class PlayerActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
-        /*
-         * Sabit yön yalnızca cihaz her iki yönü de destekliyorsa
-         * (telefon). Araç ekranları sabit yönlüdür; orada zorlamak
-         * letterbox'a yol açar (car-app-quality DO-1).
-         */
-        if (
-            packageManager.hasSystemFeature(
-                PackageManager.FEATURE_SCREEN_LANDSCAPE
-            ) &&
-            packageManager.hasSystemFeature(
-                PackageManager.FEATURE_SCREEN_PORTRAIT
-            ) &&
-            !packageManager.hasSystemFeature(
-                PackageManager.FEATURE_AUTOMOTIVE
-            )
-        ) {
-            requestedOrientation =
-                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        }
+        // Telefonda yatay; araç ekranı / AAOS'ta yön zorlanmaz (DO-1).
+        CarScreen.applyPhoneLandscape(this)
 
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON

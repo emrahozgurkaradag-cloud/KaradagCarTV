@@ -54,7 +54,7 @@ object CarVideoPlayerHolder {
      * kapatılır; ses (canlı yayın sesi) sürer.
      */
     @Volatile
-    private var videoBlocked: Boolean = false
+    private var videoBlocked: Boolean = true
 
     private var carSurfaceCallback: SurfaceHolder.Callback? = null
 
@@ -125,6 +125,12 @@ object CarVideoPlayerHolder {
 
             this.player = player
 
+            // Yeni oynatıcıya mevcut park kilidi durumunu uygula.
+            applyVideoTrackLocked()
+            if (videoBlocked) {
+                player?.clearVideoSurface()
+            }
+
             pendingAudio?.let {
                 prepareAudioLocked()
             }
@@ -169,22 +175,33 @@ object CarVideoPlayerHolder {
             }
 
             videoBlocked = blocked
-            val exoPlayer = player
 
             if (blocked) {
-                exoPlayer?.clearVideoSurface()
-                exoPlayer?.let {
-                    it.trackSelectionParameters =
-                        it.trackSelectionParameters
-                            .buildUpon()
-                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
-                            .build()
-                }
+                player?.clearVideoSurface()
+                applyVideoTrackLocked()
                 Log.d(TAG, "CAR VIDEO BLOCKED (driving/park unknown) audio continues")
             } else {
+                applyVideoTrackLocked()
                 Log.d(TAG, "CAR VIDEO UNBLOCKED (parked)")
                 bindLocked()
             }
+        }
+    }
+
+    /**
+     * Görüntü izi yalnızca kilit açıkken seçilir; ses izi her zaman açık.
+     */
+    private fun applyVideoTrackLocked() {
+        val exoPlayer = player ?: return
+        val disabled = exoPlayer.trackSelectionParameters
+            .disabledTrackTypes.contains(C.TRACK_TYPE_VIDEO)
+        if (disabled != videoBlocked) {
+            exoPlayer.trackSelectionParameters =
+                exoPlayer.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, videoBlocked)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+                    .build()
         }
     }
 
@@ -366,6 +383,10 @@ object CarVideoPlayerHolder {
                 TAG,
                 "Prepared projection channel ${channel.mediaId}"
             )
+        } else if (exoPlayer.playbackState == Player.STATE_IDLE) {
+            // Aynı kanal hata/durdurma sonrası tekrar seçildi: yeniden hazırla.
+            exoPlayer.prepare()
+            Log.d(TAG, "Re-prepared projection channel ${channel.mediaId}")
         }
     }
 
@@ -418,18 +439,13 @@ object CarVideoPlayerHolder {
 
         if (videoBlocked) {
             exoPlayer.clearVideoSurface()
+            applyVideoTrackLocked()
             Log.d(TAG, "Projection bind skipped: video blocked")
             return
         }
 
-        exoPlayer.trackSelectionParameters =
-            exoPlayer.trackSelectionParameters
-                .buildUpon()
-                .setTrackTypeDisabled(
-                    C.TRACK_TYPE_VIDEO,
-                    false
-                )
-                .build()
+        // Kilit açık: görüntü izini seç (TRACK_TYPE_VIDEO etkin).
+        applyVideoTrackLocked()
 
         val holder = surfaceView.holder
         val surface = holder.surface

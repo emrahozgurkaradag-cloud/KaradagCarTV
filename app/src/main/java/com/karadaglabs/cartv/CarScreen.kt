@@ -1,6 +1,8 @@
 package com.karadaglabs.cartv
 
+import android.app.Activity
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 
@@ -35,6 +37,31 @@ object CarScreen {
     ): Boolean {
         val type = uiMode and Configuration.UI_MODE_TYPE_MASK
         return isAutomotiveDevice || type == Configuration.UI_MODE_TYPE_CAR
+    }
+
+    /**
+     * Yön kilidi yalnızca telefonda: cihaz iki yönü de destekliyor ve
+     * araç ekranı değil. Android Automotive OS ve sabit yönlü araç
+     * ekranlarında yön zorlanmaz (car-app-quality DO-1; zorlamak
+     * letterbox / uyumluluk moduna yol açar).
+     */
+    fun shouldLockLandscape(
+        hasLandscape: Boolean,
+        hasPortrait: Boolean,
+        onCarScreen: Boolean
+    ): Boolean = hasLandscape && hasPortrait && !onCarScreen
+
+    fun applyPhoneLandscape(activity: Activity) {
+        val pm = activity.packageManager
+        if (
+            shouldLockLandscape(
+                hasLandscape = pm.hasSystemFeature(PackageManager.FEATURE_SCREEN_LANDSCAPE),
+                hasPortrait = pm.hasSystemFeature(PackageManager.FEATURE_SCREEN_PORTRAIT),
+                onCarScreen = isCarScreen(activity)
+            )
+        ) {
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
     }
 
     /** Araç ekranında izin verilen ana menü kategorileri. */

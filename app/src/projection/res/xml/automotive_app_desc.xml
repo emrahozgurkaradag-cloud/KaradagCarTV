@@ -2,9 +2,9 @@
 <!--
     projection yapısı — Android Auto uygulama tanımı.
 
-    Android Auto 17.x doğrulayıcısı (CAR.VALIDATOR) her tür için burada
-    <uses> bekler ("Uses for <TYPE> not defined"). Fermata Auto'nun
-    auto flavor'ı ile aynı set:
+    Bir kullanıcının AA 17.7 analizine göre (Fermata #847, doğrulanmadı)
+    doğrulayıcı her tür için burada <uses> bekler. Set, Fermata Auto
+    auto flavor'ındaki dosyayla aynıdır (kaynak koddan doğrulandı):
       media      CarMediaService (Radyo, Canlı TV sesi)
       service    CarVideoService (aauto.aar CarActivityService)
       projection CarVideoService CATEGORY_PROJECTION(_OEM) -> araç ekranı

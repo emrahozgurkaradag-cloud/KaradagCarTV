@@ -77,17 +77,36 @@ private class CarMirrorScreen(
             val value =
                 if (raw.status == CarValue.STATUS_SUCCESS) raw.value else null
 
-            if (MirrorDrivingGate.updateSpeed(value)) {
-                Log.d(
-                    TAG,
-                    "MIRROR GATE changed allowed=" +
-                        "${MirrorDrivingGate.decision.videoAllowed} speed=$value"
-                )
-                refreshProjection()
-            }
+            MirrorDrivingGate.updateSpeed(value)
+            checkGate()
         }
 
     private var speedRegistered = false
+    private var lastAllowed: Boolean? = null
+    private val gateHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /*
+     * Bekçi: hız verisi kesilirse (bayat) karar değişir; olay
+     * gelmese bile her saniye yeniden değerlendirilir.
+     */
+    private val gateWatchdog = object : Runnable {
+        override fun run() {
+            checkGate()
+            gateHandler.postDelayed(this, 1_000L)
+        }
+    }
+
+    private fun checkGate() {
+        val decision = MirrorDrivingGate.decision
+        if (decision.videoAllowed != lastAllowed) {
+            lastAllowed = decision.videoAllowed
+            Log.d(
+                TAG,
+                "MIRROR GATE allowed=${decision.videoAllowed} reason=${decision.reason}"
+            )
+            refreshProjection()
+        }
+    }
 
     init {
 
@@ -99,10 +118,12 @@ private class CarMirrorScreen(
         MirrorDrivingGate.reset()
         appManager.setSurfaceCallback(this)
         registerSpeed()
+        gateHandler.postDelayed(gateWatchdog, 1_000L)
 
         lifecycle.addObserver(
             object : androidx.lifecycle.DefaultLifecycleObserver {
                 override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                    gateHandler.removeCallbacks(gateWatchdog)
                     unregisterSpeed()
                     MirrorDrivingGate.reset()
                 }

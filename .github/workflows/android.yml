@@ -1,9 +1,15 @@
 name: Android
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  push:
+    branches:
+      - main
+      - android-auto-official-video
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -20,16 +26,61 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Release imzası: yalnızca GitHub Actions Secrets.
+      #   KARADAG_RELEASE_KEYSTORE_BASE64   (keystore dosyasının base64 hâli)
+      #   KARADAG_RELEASE_KEYSTORE_PASSWORD
+      #   KARADAG_RELEASE_KEY_ALIAS
+      #   KARADAG_RELEASE_KEY_PASSWORD
+      # Biri eksikse release APK'ları imzasız üretilir ve bu adım uyarır.
+      # PR'larda (fork) secret verilmez; bu beklenen durumdur.
+      - name: Release signing setup
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KARADAG_RELEASE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KARADAG_RELEASE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KARADAG_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KARADAG_RELEASE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "KARADAG_RELEASE_KEYSTORE=$RUNNER_TEMP/release.jks"
+              echo "KARADAG_RELEASE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "KARADAG_RELEASE_KEY_ALIAS=$KEY_ALIAS"
+              echo "KARADAG_RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "Release imzası: secrets bulundu, release APK'ları imzalanacak."
+          else
+            echo "::warning title=Release imzası yok::KARADAG_RELEASE_* secrets tanımlı değil. Release APK'ları İMZASIZ üretilecek (Play'e yüklenemez)."
+          fi
+
       - name: Unit tests (play + projection)
         run: ./gradlew --no-daemon testPlayDebugUnitTest testProjectionDebugUnitTest
 
       - name: Lint (play + projection)
         run: ./gradlew --no-daemon lintPlayDebug lintProjectionDebug
 
-      - name: Assemble
+      - name: Assemble all APKs
         run: ./gradlew --no-daemon assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease
 
+      - name: Verify APKs (packages, conflicts, signing)
+        run: scripts/verify-apks.sh
+
+      - name: Remove keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: apks
           path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          if-no-files-found: ignore

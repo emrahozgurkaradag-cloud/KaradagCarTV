@@ -51,6 +51,13 @@ class CarVideoControlsTest {
         assertTrue(onStop.contains("setPlayWhenReady(false)"))
 
         assertTrue(holder.contains("fun setVideoBlocked"))
+        // Fail-safe başlangıç: karar gelene kadar görüntü kapalı.
+        assertTrue(holder.contains("private var videoBlocked: Boolean = true"))
+        assertTrue(holder.contains("applyVideoTrackLocked()"))
+        assertTrue(holder.contains("setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)"))
+        assertTrue(holder.contains("Re-prepared projection channel"))
+        // Araç bağlantısı koparsa oynatma durur.
+        assertTrue(activity.contains("\"car_disconnected\""))
         assertTrue(holder.contains("if (videoBlocked)"))
         // Yüzey yeniden oluştuğunda zorla oynatma yok.
         assertFalse(holder.contains("exoPlayer.playWhenReady = true\n                    }"))
@@ -67,6 +74,7 @@ class CarVideoControlsTest {
         assertTrue(mirror.contains("MirrorDrivingGate.decision"))
         val screen = source("java/com/karadaglabs/cartv/CarMirrorService.kt")
         assertTrue(screen.contains("addSpeedListener"))
+        assertTrue(screen.contains("gateWatchdog"))
         val manifest = source("AndroidManifest.xml")
         assertTrue(manifest.contains("com.google.android.gms.permission.CAR_SPEED"))
     }

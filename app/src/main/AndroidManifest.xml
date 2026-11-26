@@ -63,8 +63,10 @@
             android:resource="@xml/automotive_app_desc" />
 
         <!--
-            Google'ın park hâlinde video kategorisi (Android Automotive
-            OS'ta genel, Android Auto'da beta / erken erişim).
+            Google'ın park hâlinde video kategorisi. Google belgelerine
+            göre Android Automotive OS'ta kullanılabilir; Android Auto
+            için durumu belgelerde "beta" olarak geçer, bu projede
+            doğrulanmadı (docs/ANDROID_AUTO.md, bölüm 2).
             android:appCategory="video" yukarıda <application> üzerinde.
             Video uygulamaları "distractionOptimized" meta-data'sı
             TAŞIMAZ; sürüşe geçildiğinde sistem aktiviteyi örter ve
@@ -86,7 +88,6 @@
         <activity
             android:name=".RegistrationActivity"
             android:exported="true"
-            android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:label="Karadag Car TV"
             android:theme="@style/Theme.KaradagCarTV"
@@ -110,7 +111,6 @@
         <activity
             android:name=".MainActivity"
             android:exported="false"
-            android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:label="Karadag Car TV"
             android:theme="@style/Theme.KaradagCarTV"
@@ -125,14 +125,12 @@
         <activity
             android:name=".YouTubeActivity"
             android:exported="false"
-            android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".IptvActivity"
             android:exported="false"
-            android:screenOrientation="landscape"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:windowSoftInputMode="adjustResize" />
 

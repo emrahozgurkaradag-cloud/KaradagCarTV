@@ -52,6 +52,25 @@ class PlayComplianceTest {
     }
 
     @Test
+    fun noHardcodedScreenOrientationInManifest() {
+        assertFalse(withoutComments(manifest).contains("screenOrientation"))
+        listOf("RegistrationActivity", "MainActivity", "PlayerActivity", "IptvActivity", "YouTubeActivity")
+            .forEach {
+                val src = read("main/java/com/karadaglabs/cartv/$it.kt")
+                assertTrue(it, src.contains("CarScreen.applyPhoneLandscape(this)"))
+                assertFalse(it, src.contains("SCREEN_ORIENTATION_LANDSCAPE"))
+            }
+    }
+
+    @Test
+    fun releaseIsNotSignedWithDebugKey() {
+        val gradle = srcRoot().parentFile.resolve("build.gradle.kts").readText()
+        assertFalse(gradle.contains("signingConfigs.getByName(\"debug\")"))
+        assertTrue(gradle.contains("System.getenv(\"KARADAG_RELEASE_KEYSTORE\")"))
+        assertFalse(Regex("""storePassword\s*=\s*"""").containsMatchIn(gradle))
+    }
+
+    @Test
     fun automotiveHardwareIsOptional() {
         assertTrue(
             Regex(

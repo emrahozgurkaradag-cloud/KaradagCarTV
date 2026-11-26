@@ -66,6 +66,9 @@ class IptvActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
+        // Telefonda yatay; araç ekranı / AAOS'ta yön zorlanmaz.
+        CarScreen.applyPhoneLandscape(this)
+
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {

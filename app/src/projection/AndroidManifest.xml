@@ -8,10 +8,11 @@
         CarActivity -> araç ekranında pencere, ExoPlayer SurfaceView.
       * CarMirrorService: Car App Library NAVIGATION şablonu yüzeyi +
         MediaProjection (telefon ekranı yansıtma).
-    Bunlar Google'ın resmî üçüncü taraf API'leri DEĞİLDİR. Android Auto
-    (17.x) PROJECTION/TEMPLATE türlerini "Bilinmeyen kaynaklar" ile
-    açmaz; uygulama Play Store yükleyicisiyle kurulmuş olmalıdır
-    (Play iç/kapalı test kanalı) ya da geliştirici head unit kullanılır.
+    Bunlar Google'ın resmî üçüncü taraf API'leri DEĞİLDİR. Bir
+    kullanıcının AA 17.7 analizine göre (Fermata #846/#847, bu projede
+    doğrulanmadı) PROJECTION/TEMPLATE türleri "Bilinmeyen kaynaklar" ile
+    açılmaz; Play yükleyicisi (iç/kapalı test) veya geliştirici head
+    unit gerekir.
     Sürüşte görüntü park kilidiyle kapatılır (DrivingSafetyGate).
 -->
 <manifest

@@ -61,7 +61,7 @@ class CarVideoActivity : CarActivity() {
      */
     private var drivingSensors: CarDrivingSensors? = null
     private var gate: VideoGateDecision =
-        DrivingSafetyGate.evaluate(DrivingSignals())
+        VideoGateDecision(videoAllowed = false, reason = "not_started")
 
     private var userPaused = false
     private var fullscreen = false
@@ -176,7 +176,7 @@ class CarVideoActivity : CarActivity() {
          * çalmaya devam etmez).
          */
         drivingSensors?.stop()
-        gate = DrivingSafetyGate.evaluate(DrivingSignals())
+        gate = VideoGateDecision(videoAllowed = false, reason = "stopped")
         CarVideoPlayerHolder.setVideoBlocked(true)
         CarVideoPlayerHolder.setPlayWhenReady(false)
         super.onStop()
@@ -432,10 +432,23 @@ class CarVideoActivity : CarActivity() {
         if (destroyed) {
             return
         }
-        val changed = decision.videoAllowed != gate.videoAllowed
+        val changed = decision != gate
+        val previous = gate
         gate = decision
-        if (changed) {
-            Log.d(TAG, "PARK GATE videoAllowed=${decision.videoAllowed} reason=${decision.reason}")
+        if (!changed) {
+            return
+        }
+        Log.d(TAG, "PARK GATE videoAllowed=${decision.videoAllowed} reason=${decision.reason}")
+
+        /*
+         * Araç bağlantısı koptuysa (sensör yöneticisi CarNotConnected):
+         * telefonda kendi kendine çalmaya devam etmesin.
+         */
+        if (
+            decision.reason == "car_disconnected" &&
+            previous.reason !in setOf("not_started", "stopped", "car_disconnected")
+        ) {
+            userPaused = true
         }
         applyState()
     }

@@ -44,4 +44,14 @@ class CarScreenTest {
         assertFalse(CarScreen.allowsWebFeatures(onCarScreen = true))
         assertTrue(CarScreen.allowsWebFeatures(onCarScreen = false))
     }
+
+    @Test
+    fun landscapeLockOnlyOnPhones() {
+        assertTrue(CarScreen.shouldLockLandscape(hasLandscape = true, hasPortrait = true, onCarScreen = false))
+        // Android Automotive OS / araç ekranı: yön zorlanmaz.
+        assertFalse(CarScreen.shouldLockLandscape(hasLandscape = true, hasPortrait = true, onCarScreen = true))
+        // Sabit yönlü ekran (yalnızca yatay veya yalnızca dikey).
+        assertFalse(CarScreen.shouldLockLandscape(hasLandscape = true, hasPortrait = false, onCarScreen = false))
+        assertFalse(CarScreen.shouldLockLandscape(hasLandscape = false, hasPortrait = true, onCarScreen = false))
+    }
 }

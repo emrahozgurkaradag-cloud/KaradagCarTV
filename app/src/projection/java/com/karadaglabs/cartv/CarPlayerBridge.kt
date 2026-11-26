@@ -9,9 +9,10 @@ import androidx.media3.exoplayer.ExoPlayer
  *
  * aauto.aar (resmî olmayan Google Auto SDK; Fermata ile aynı yöntem)
  * CarActivity penceresine ExoPlayer görüntüsü bağlar. Google bu yolu
- * üçüncü taraf uygulamalar için yayınlamaz. Android Auto uygulamayı
- * araç başlatıcısında yalnızca Play Store yükleyicisiyle kurulmuşsa
- * gösterir. Sürüşte görüntü DrivingSafetyGate ile kapanır.
+ * üçüncü taraf uygulamalar için yayınlamaz. Bir kullanıcının AA 17.7
+ * analizine göre (doğrulanmadı) Android Auto bu türü yalnızca Play
+ * yükleyicisiyle veya geliştirici head unit'te listeler.
+ * Sürüşte görüntü DrivingSafetyGate ile kapanır.
  * Bkz. docs/ANDROID_AUTO.md.
  */
 @OptIn(UnstableApi::class)

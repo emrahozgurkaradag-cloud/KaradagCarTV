@@ -48,6 +48,9 @@ class RegistrationActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
+        // Telefonda yatay; araç ekranı / AAOS'ta yön zorlanmaz.
+        CarScreen.applyPhoneLandscape(this)
+
         val savedEmail =
             AppSession.email(this)
 

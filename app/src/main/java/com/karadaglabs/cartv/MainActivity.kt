@@ -77,6 +77,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Telefonda yatay; araç ekranı / AAOS'ta yön zorlanmaz.
+        CarScreen.applyPhoneLandscape(this)
+
         val email = AppSession.email(this)
         val licenseKey = AppSession.licenseKey(this)
 

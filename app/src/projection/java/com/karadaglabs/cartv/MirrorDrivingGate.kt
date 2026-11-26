@@ -2,29 +2,38 @@ package com.karadaglabs.cartv
 
 import android.graphics.Color
 import android.graphics.Paint
+import android.os.SystemClock
 import android.view.Surface
 
 /**
  * Ekran yansıtma (CarMirrorService, Car App Library) için park kilidi.
- * Kaynak: CarHardwareManager.carInfo hız verisi
- * (com.google.android.gms.permission.CAR_SPEED). Hız alınamazsa
- * görüntü KAPALI (fail-safe).
+ *
+ * Kaynak: `CarHardwareManager.carInfo.addSpeedListener`
+ * (androidx.car.app, izin com.google.android.gms.permission.CAR_SPEED).
+ * Car App Library bu yolda sürüş durumu sunmaz; tek kanıt hızdır
+ * ([GateMode.SPEED_ONLY]). Hız [DrivingSafetyGate.STALE_AFTER_MS]
+ * içinde yenilenmezse görüntü kapanır; CarMirrorScreen her saniye
+ * yeniden değerlendirir.
  */
 object MirrorDrivingGate {
 
     @Volatile
-    var signals: DrivingSignals = DrivingSignals()
-        private set
+    private var signals: DrivingSignals = DrivingSignals()
+
+    var clock: () -> Long = { SystemClock.elapsedRealtime() }
 
     val decision: VideoGateDecision
-        get() = DrivingSafetyGate.evaluate(signals)
+        get() = DrivingSafetyGate.evaluate(signals, clock(), GateMode.SPEED_ONLY)
 
-    /** @return karar değiştiyse true */
+    /** Hız örneği kaydeder (null = geçersiz değer, kaydedilmez). */
     @Synchronized
-    fun updateSpeed(metersPerSecond: Float?): Boolean {
-        val before = decision.videoAllowed
-        signals = signals.copy(speedMetersPerSecond = metersPerSecond)
-        return before != decision.videoAllowed
+    fun updateSpeed(metersPerSecond: Float?) {
+        if (metersPerSecond == null) {
+            return
+        }
+        signals = signals.copy(
+            speedMetersPerSecond = Sample(metersPerSecond, clock())
+        )
     }
 
     @Synchronized

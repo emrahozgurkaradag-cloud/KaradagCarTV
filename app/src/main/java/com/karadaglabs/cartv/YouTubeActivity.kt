@@ -28,6 +28,9 @@ class YouTubeActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Telefonda yatay; araç ekranı / AAOS'ta yön zorlanmaz.
+        CarScreen.applyPhoneLandscape(this)
+
         /*
          * YouTube ekranının telefonun durum çubuğunun altına
          * taşmasını engelle.

@@ -27,16 +27,16 @@ android {
      * play (varsayılan): Google Play / Android Auto kurallarına uygun.
      *   - Android Auto: medya kategorisi (Radyo + Canlı TV sesi).
      *   - Park hâlinde video: android:appCategory="video"
-     *     (Android Automotive OS'ta genel kullanım, Android Auto'da
-     *     Google beta / erken erişim programına bağlı).
+     *     (Google belgelerine göre AAOS'ta; Android Auto durumu
+     *     belgelerde "beta", bu projede doğrulanmadı).
      *
      * projection: Android Auto araç ekranında GÖRÜNTÜLÜ oynatma.
      *   aauto.aar CarActivity (CATEGORY_PROJECTION_OEM) penceresine
      *   ExoPlayer SurfaceView; araç sensörlerine bağlı park kilidi.
-     *   Google'ın resmî üçüncü taraf API'si DEĞİLDİR. Android Auto
-     *   17.x bu tür uygulamaları yalnızca Play Store yükleyicisiyle
-     *   kurulmuşsa (ör. Play iç/kapalı test kanalı) veya geliştirici
-     *   head unit'te listeler. Ayrı applicationId ile yan yana kurulur.
+     *   Google'ın resmî üçüncü taraf API'si DEĞİLDİR. Görünürlük
+     *   şartı (Play yükleyicisi / geliştirici head unit) bir kullanıcının
+     *   AA 17.7 analizine dayanır, doğrulanmadı. Ayrı applicationId
+     *   (.projection) ile yan yana kurulur.
      */
     flavorDimensions += "distribution"
 
@@ -52,12 +52,58 @@ android {
         }
     }
 
+    /*
+     * Release imzası — debug anahtarından AYRI.
+     *
+     * Değerler yalnızca ortam değişkenlerinden okunur (GitHub Actions
+     * Secrets veya yerel kabuk); depoda anahtar/parola YOKTUR:
+     *   KARADAG_RELEASE_KEYSTORE           keystore dosya yolu
+     *   KARADAG_RELEASE_KEYSTORE_PASSWORD
+     *   KARADAG_RELEASE_KEY_ALIAS
+     *   KARADAG_RELEASE_KEY_PASSWORD
+     * Biri eksikse release APK'ları İMZASIZ üretilir
+     * (app-*-release-unsigned.apk) ve derleme bunu uyarı olarak yazar.
+     */
+    val releaseKeystorePath = System.getenv("KARADAG_RELEASE_KEYSTORE").orEmpty()
+    val releaseKeystorePassword = System.getenv("KARADAG_RELEASE_KEYSTORE_PASSWORD").orEmpty()
+    val releaseKeyAlias = System.getenv("KARADAG_RELEASE_KEY_ALIAS").orEmpty()
+    val releaseKeyPassword = System.getenv("KARADAG_RELEASE_KEY_PASSWORD").orEmpty()
+    val releaseSigningAvailable =
+        releaseKeystorePath.isNotBlank() &&
+            file(releaseKeystorePath).isFile &&
+            releaseKeystorePassword.isNotBlank() &&
+            releaseKeyAlias.isNotBlank() &&
+            releaseKeyPassword.isNotBlank()
+
+    signingConfigs {
+        if (releaseSigningAvailable) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    if (releaseSigningAvailable) {
+        logger.lifecycle("KaradagCarTV: release imzası YAPILANDIRILDI (alias=$releaseKeyAlias).")
+    } else {
+        logger.warn(
+            "KaradagCarTV: release imza bilgileri YOK — release APK'ları " +
+                "İMZASIZ üretilecek. KARADAG_RELEASE_KEYSTORE, " +
+                "KARADAG_RELEASE_KEYSTORE_PASSWORD, KARADAG_RELEASE_KEY_ALIAS, " +
+                "KARADAG_RELEASE_KEY_PASSWORD gerekli."
+        )
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
             }
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig =
+                if (releaseSigningAvailable) signingConfigs.getByName("release") else null
         }
     }
 
