@@ -4,6 +4,8 @@
 # bir head unit'e bağlanıp KaradagCarTV projection servisini KENDİSİNİN
 # başlatıp başlatmadığını ve araç akışında görüntü olup olmadığını görmek.
 set -uo pipefail
+# DHU kapanınca FIFO'ya yazma SIGPIPE üretir; betik ölmesin (yazma hatası yok sayılır).
+trap '' PIPE
 OUT="${DHU_OUT:-dhu-out}"
 mkdir -p "$OUT"
 GH=com.google.android.projection.gearhead
