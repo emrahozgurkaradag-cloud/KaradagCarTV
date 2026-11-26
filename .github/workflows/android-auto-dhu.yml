@@ -42,7 +42,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - name: Install DHU and libc++
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq libc++1 libc++abi1
+          sudo apt-get update -qq && sudo apt-get install -y -qq libc++1 libc++abi1 faketime
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "extras;google;auto" > /dev/null
           ls -la "$ANDROID_HOME/extras/google/auto/"
       - name: Build projection debug APK

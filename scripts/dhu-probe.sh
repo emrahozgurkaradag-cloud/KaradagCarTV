@@ -118,12 +118,36 @@ log "== 5277 dinleniyor mu"
 adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -i ':149D'" | head -5   # 5277 = 0x149D
 
 adb forward tcp:5277 tcp:5277
+CFG="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/extras/google/auto/config/default_sensors.ini"
+run_dhu() { # run_dhu <label> <seconds> [faketime-date]
+  local label="$1" secs="$2" when="${3:-}"
+  local pre=(); [ -n "$when" ] && command -v faketime >/dev/null && pre=(faketime "$when")
+  ( sleep 12; echo "help"; sleep 25; echo "screenshot $PWD/$OUT/dhu-$label-1.png"; sleep $((secs-50)); echo "screenshot $PWD/$OUT/dhu-$label-2.png"; sleep 8; echo "quit" ) | \
+    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout $((secs+10)) "${pre[@]}" "$DHU" --headless -a 127.0.0.1:5277 -c "$CFG" > "$OUT/dhu-$label.txt" 2>&1
+  grep -v "^ALSA" "$OUT/dhu-$label.txt" | head -80
+}
 if [ -x "$DHU" ]; then
-  log "== DHU (headless, SDL dummy) 90 sn"
-  ( sleep 15; echo "help"; sleep 25; echo "screenshot $PWD/$OUT/dhu-screen-1.png"; sleep 40; echo "screenshot $PWD/$OUT/dhu-screen-2.png"; sleep 15; echo "quit" ) | \
-    SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout 100 "$DHU" --headless -a 127.0.0.1:5277 \
-      -c "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/extras/google/auto/config/default_sensors.ini" > "$OUT/dhu.txt" 2>&1
-  grep -v "^ALSA" "$OUT/dhu.txt" | head -120
+  log "== DHU gerçek saatle (sertifika kontrolü)"
+  run_dhu now 60
+  if grep -qE "certificate has expired|certificate is not yet valid|auth failure" "$OUT/dhu-now.txt"; then
+    # Android Auto'nun gömülü sertifikası süresi dolmuş: hem DHU hem telefon
+    # saati, sertifikaların geçerli olduğu bir tarihe alınır (yalnızca test).
+    adb shell settings put global auto_time 0
+    for when in "2022-06-01 12:00:00" "2021-06-01 12:00:00" "2020-10-01 12:00:00" "2023-03-01 12:00:00"; do
+      d="$(date -d "$when" +%m%d%H%M%Y.%S)"
+      adb shell date "$d" >/dev/null 2>&1; log "emülatör saati: $(adb shell date | tr -d '\r') | DHU faketime: $when"
+      adb shell am force-stop $GH; sleep 2
+      adb shell am start -n $GH/.companion.settings.DefaultSettingsActivity >/dev/null 2>&1; sleep 4
+      tap "hus-$when" "More options|Diğer seçenekler" >/dev/null && tap "hus2-$when" "Start head unit server|head unit server" >/dev/null
+      sleep 3; adb forward tcp:5277 tcp:5277 >/dev/null
+      tag="$(echo "$when" | cut -c1-7)"
+      log "== DHU faketime $when"
+      run_dhu "t$tag" 150 "$when"
+      if ! grep -qE "certificate has expired|certificate is not yet valid|auth failure|Failed to read from transport" "$OUT/dhu-t$tag.txt"; then
+        log "DHU oturumu bu tarihte açıldı: $when"; break
+      fi
+    done
+  fi
 else
   log "DHU yok"
 fi
