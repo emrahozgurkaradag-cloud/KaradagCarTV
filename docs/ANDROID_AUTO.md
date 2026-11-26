@@ -164,10 +164,42 @@ Sürüş durumu, vites ve el freni için SDK'da izin listelenmemiştir [Doğrula
 
 ## 7. Android Auto sürüm uyumluluğu
 
-* [Doğrulandı: bytecode] `aauto.aar` (2019 tarihli) çalışma anında Android Auto uygulamasından sınıf yükler. Android Auto güncellemesi bu arayüzü değiştirir veya kaldırırsa araç penceresi açılmaz ("Error loading car activity host").
-* [Kaynak beyanı] Fermata kullanıcıları: AA 17.7'de görünürlük denetimi; AA 18.0'da Play yükleyici kaydıyla çalışıyor; KingInstaller Android 14+ ile çalışmıyor (#432).
-* [Doğrulanmadı] Belirli bir Android Auto sürümüyle uçtan uca test yapılmadı.
-* Telefon: minSdk 29 (Android 10). Emülatör testleri API 29 ve 34'te çalışır (CI).
+### 7.1 Host kodu yükleme (çalışma anında, `CarVideoServiceHostDeviceTest`)
+
+| Emülatör imajı | Android Auto paketi | `DynamicApiFactory` / `VirtualDisplayHelper` | Host yükleme (çalışma anı) |
+|---|---|---|---|
+| API 29 | 4.3.591848-release | var / var | **başarılı**: `HOST READY`, `HOST BIND OK`, binder döndü |
+| API 30 | 5.3.801658-preinstall | var / var | **başarılı**: aynı log satırları |
+| API 31, 32 | 1.2.512130-stub | yok | beklenen hata: `ClassNotFoundException`, servis çökmez |
+| API 33 | 1.2.526000-stub | yok | beklenen hata |
+| API 34 | 1.2.531830-stub | yok | beklenen hata |
+| API 35 | 1.2.542030-stub | yok | beklenen hata |
+| API 36 | 1.2.551000-stub | yok | beklenen hata |
+
+Kaynak: CI "Android Auto DHU probe" iş akışı, `aa-versions` işi (ör. çalışma 45843246920).
+
+* [Doğrulandı: bytecode] Fermata'nın güncel (2026-11-15) `aauto.aar`'ı ile bizimki aynı SDK. Sabit havuzu normalize edilince tek fark `android.support.v4` → `androidx` dönüşümü (Fermata önceden jetify edilmiş sürüm kullanıyor; bizde Jetifier derlemede yapıyor). APK dex'inde SDK'nın referans verdiği eksik sınıf yok (`android.support.car`, `gms.car`, `apps.auto`, `androidx`).
+* [Kaynak beyanı] Fermata #847 yorumu (14.11.2026): Fermata Auto 2.0.2 aynı SDK ile Android Auto 18.0'da (Play yükleyici kaydıyla) çalışıyor. Bu da güncel Android Auto'da `DynamicApiFactory` arayüzünün hâlâ bulunduğuna dolaylı bir işaret.
+* [Doğrulanmadı] Android Auto 16–18'de çalışma anında host yükleme. Bu sürümler emülatör imajlarında yok; Play'den kurulum için Google hesabı gerekir.
+* Uyumluluk katmanı: host kodu yüklenemezse `CarVideoService` çökmez; `HOST_LOAD ok=false error=<kök neden>` teşhis olayı yazılır ve bağlantı reddedilir.
+
+### 7.2 Android Auto'nun kendisinin bağlanması (Desktop Head Unit)
+
+Google'ın resmî **Desktop Head Unit 2.0** aracı (başsız, SDL dummy sürücü) CI'da emülatördeki gerçek Android Auto'ya bağlandı. Gerçek araç DEĞİLDİR; telefon tarafı gerçek Android Auto'dur.
+
+| Adım | Android Auto 5.3 (API 30) | Kanıt |
+|---|---|---|
+| Geliştirici modu (Sürüm'e 10 dokunuş → "Allow development settings?") | ✔ | uiautomator dökümleri |
+| Developer settings → Unknown sources | ✔ dokunuldu | 〃 |
+| "Start head unit server" → 5277 portu | ✔ dinliyor (gearhead uid) | `/proc/net/tcp6 :149D` |
+| DHU ↔ telefon protokol + TLS | ✔ protokol 1.5, TLSv1.2 | DHU çıktısı |
+| Sertifika | ✘ bugünün tarihinde `certificate has expired`; ✔ saat 2020-10-01'e alınınca `Verify returned: ok` | DHU + `CAR.GAL.SECURITY` |
+| Oturum devri | ✔ `Handoff complete … Success: true`, DHU `Has video focus: true` | logcat |
+| Araç yetkisi | ✔ ilk oturumda `UNKNOWN` → GET STARTED, CONTINUE → ikinci oturumda `CarInfo authorization: ALLOWED` | logcat |
+| İlk kurulum (FRX) | ✘ **"Android Auto — Update needed … Download apps from Google Play"**; `gearheadUpToDate=false`, `did not finish FRX`, `PROJECTION_NOT_STARTED` | telefon ekran dökümü + logcat |
+| Android Auto'nun `CarVideoService`'i bağlaması / `CarVideoActivity` | **ulaşılamadı** (projeksiyon FRX'te durdu) | — |
+
+Sonuç: Bu CI ortamında Android Auto'nun bizim uygulamayı kendisinin başlatması **gösterilemedi**. Engel bizim kodumuz değil; emülatördeki Android Auto `-preinstall` paketinin Play'den güncellenmeden projeksiyona izin vermemesi. Android Auto 4.3 (API 29) ayarlarında geliştirici menüsü (Head Unit Server) arayüzde çıkmıyor.
 
 ## 8. Bilinen kısıtlamalar
 
@@ -207,3 +239,15 @@ Sürüş durumu, vites ve el freni için SDK'da izin listelenmemiştir [Doğrula
 **`gearhead` notu:** Emülatörde `com.google.android.projection.gearhead` paketinin bulunması gerçek araçtaki Android Auto davranışını **kanıtlamaz**. Emülatörde araç/head unit bağlantısı yoktur; Android Auto oturumu başlamaz, `CarVideoService` host tarafından bağlanmaz ve görünürlük denetimi (yükleyici, sunucu listesi) çalışmaz.
 
 **Release imzası:** Debug anahtarı kullanılmaz. `KARADAG_RELEASE_KEYSTORE`, `…_KEYSTORE_PASSWORD`, `…_KEY_ALIAS`, `…_KEY_PASSWORD` ortam değişkenleri gerekir. CI bunları şu secret'lardan oluşturur: `KARADAG_RELEASE_KEYSTORE_BASE64` (`base64 -w0 release.jks`), `KARADAG_RELEASE_KEYSTORE_PASSWORD`, `KARADAG_RELEASE_KEY_ALIAS`, `KARADAG_RELEASE_KEY_PASSWORD`. Secret yoksa CI uyarı verir ve çıktılar `*-release-unsigned.apk` olur. `verify-apks.sh` debug sertifikalı bir release'i hata sayar. Keystore iş sonunda silinir; parolalar loglanmaz.
+
+### 10.1 Play Console iç test dağıtımı (projection)
+
+Durum: depoda ve GitHub Secrets'ta **release imza anahtarı yok**. Mevcut bir anahtar varsa onu kullanmak gerekir; yenisini üretmek, aynı paketin önceki sürümleriyle imza sürekliliğini bozar. Bu çalışmada hiçbir anahtar üretilmedi veya depoya eklenmedi.
+
+1. **Paket:** `com.karadaglabs.cartv.projection`, Play'de ayrı ve yeni bir uygulamadır (`play` sürümü `com.karadaglabs.cartv`).
+2. **Biçim:** Google Play yeni uygulamalar için yalnızca **AAB** kabul eder. CI `bundleProjectionRelease` üretir (`release-bundles` artifact).
+3. **İmza:** Play App Signing (Google uygulama imza anahtarını yönetir) + sizin **upload key**'iniz. Upload key'i kendi güvenli ortamınızda oluşturup saklayın. Ardından GitHub → Settings → Secrets and variables → Actions'a şunları ekleyin: `KARADAG_RELEASE_KEYSTORE_BASE64`, `KARADAG_RELEASE_KEYSTORE_PASSWORD`, `KARADAG_RELEASE_KEY_ALIAS`, `KARADAG_RELEASE_KEY_PASSWORD`. CI imzalı AAB/APK üretir; `verify-apks.sh` imzayı denetler.
+4. **Kanal:** Internal testing (iç test). Test kullanıcılarının e-postaları eklenir ve kurulum Play bağlantısıyla yapılır. Böylece kayıtlı yükleyici `com.android.vending` olur. `ProjectionDiag` bunu `SELF_INSTALL installer=com.android.vending playInstalled=true` olarak kaydeder.
+5. **İnceleme riski:** Projection yolu Google'ın resmî kategorilerinde değildir. İç test kanalı geniş incelemeden geçmeden dağıtılabilir; kapalı ve üretim kanallarında reddedilme olasılığı yüksektir. [Doğrulanmadı]
+6. **Görünürlük ile ilişki:** [Kaynak beyanı] AA 17.x PROJECTION türünü Play yükleyicisiyle listeler. Sideload + "Unknown sources" bu türü kapsamaz (Fermata #846/#847). [Doğrulandı: DHU, AA 5.3] Eski sürümde "Unknown sources" geliştirici ayarı arayüzde bulunuyor ve açılabiliyor; etkisi FRX engeli nedeniyle ölçülemedi.
+

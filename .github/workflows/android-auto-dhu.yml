@@ -6,6 +6,8 @@ on:
   push:
     branches:
       - android-auto-official-video
+    paths-ignore:
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
