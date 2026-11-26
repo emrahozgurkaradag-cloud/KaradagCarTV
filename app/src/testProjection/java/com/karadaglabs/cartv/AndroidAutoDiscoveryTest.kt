@@ -118,7 +118,7 @@ class AndroidAutoDiscoveryTest {
             video.contains("createScreenCaptureIntent")
         )
         assertTrue(video.contains("SurfaceView"))
-        assertTrue(video.contains("setZOrderMediaOverlay"))
+        assertTrue(video.contains("CarSurfaceLayering.configureVideoSurface"))
     }
 
     @Test
@@ -205,7 +205,8 @@ class AndroidAutoDiscoveryTest {
         ).readText()
 
         assertTrue(activity.contains("SurfaceView"))
-        assertTrue(activity.contains("setZOrderMediaOverlay"))
+        assertTrue(activity.contains("CarSurfaceLayering.configureVideoSurface"))
+        assertFalse(activity.contains("setZOrderMediaOverlay(true)"))
         assertTrue(activity.contains("CarVideoPlayerHolder.setCarSurfaceView"))
         assertTrue(chrome.contains("Karadag Car TV"))
         assertTrue(destinations.contains("Canlı TV"))

@@ -28,7 +28,8 @@ import java.net.URL
 
 /**
  * Hosted CarActivity window. IPTV channel UI is Android Views.
- * Video renders into a SurfaceView with setZOrderMediaOverlay.
+ * Video renders into a SurfaceView (default z-order, controls on top)
+ * inside the window provided by the Android Auto host.
  * Phone IPTV Compose screen is not used here.
  */
 @UnstableApi
@@ -751,6 +752,8 @@ class CarVideoActivity : CarActivity() {
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
             Log.d(TAG, "CAR VIDEO SURFACE CREATED")
+            // Kanıt: video yüzeyi host'un projection ekranında mı?
+            surfaceView?.let { ProjectionDiagnostics.capture("CAR VIDEO SURFACE CREATED", it) }
             state = state.surfaceChanged(true)
             applyState()
         }
@@ -762,6 +765,7 @@ class CarVideoActivity : CarActivity() {
             height: Int
         ) {
             Log.d(TAG, "CAR VIDEO SURFACE CHANGED width=$width height=$height")
+            surfaceView?.let { ProjectionDiagnostics.capture("CAR VIDEO SURFACE CHANGED", it) }
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -774,12 +778,8 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun configureSurfaceZOrder(view: SurfaceView) {
-        try {
-            view.setZOrderMediaOverlay(true)
-            Log.d(TAG, "SurfaceView setZOrderMediaOverlay=true")
-        } catch (exception: Exception) {
-            Log.e(TAG, "Unable to set SurfaceView z-order", exception)
-        }
+        // Varsayılan sıra: kontroller ve park uyarısı videonun üstünde.
+        CarSurfaceLayering.configureVideoSurface(view)
     }
 
     private inner class ChannelAdapter(

@@ -370,7 +370,8 @@ class ProjectionSourceContractTest {
 
         assertTrue(video.contains("GridView"))
         assertTrue(video.contains("SurfaceView"))
-        assertTrue(video.contains("setZOrderMediaOverlay"))
+        // Video yüzeyi varsayılan z-sırasında: kontroller üstte (CarSurfaceLayeringDeviceTest).
+        assertTrue(video.contains("CarSurfaceLayering.configureVideoSurface"))
         assertFalse(video.contains("PlayerView"))
         assertFalse(video.contains("TextureView"))
         assertFalse(video.contains("setContent {"))

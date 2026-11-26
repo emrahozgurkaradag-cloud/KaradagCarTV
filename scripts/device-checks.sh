@@ -51,4 +51,7 @@ else
   echo "gearhead KURULU DEĞİL: aauto.aar CarActivity sınıflarını çalışma anında gearhead'den yükler; bu cihazda Android Auto oturumu ve DHU testi yapılamaz."
 fi
 
+echo "== gearhead APK analizi (yerinde, APK dışarı yüklenmez)"
+"$(dirname "$0")/analyze-gearhead.sh" || echo "analiz tamamlanamadı (bilgi amaçlı)"
+
 exit $fail
