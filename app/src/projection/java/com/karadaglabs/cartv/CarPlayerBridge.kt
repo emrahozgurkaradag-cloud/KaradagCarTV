@@ -5,14 +5,14 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 
 /**
- * sideloadLegacy yapı türü — DESTEKLENMEYEN, deneysel yol.
+ * projection yapı türü — Android Auto araç ekranında görüntü.
  *
- * aauto.aar (resmî olmayan Google Auto SDK / Fermata yöntemi)
+ * aauto.aar (resmî olmayan Google Auto SDK; Fermata ile aynı yöntem)
  * CarActivity penceresine ExoPlayer görüntüsü bağlar. Google bu yolu
- * üçüncü taraf uygulamalar için yayınlamaz; Play'e gönderilemez ve
- * gerçek araçta yalnızca Android Auto geliştirici ayarlarında
- * "Bilinmeyen kaynaklar" açıkken, host sürümüne bağlı olarak
- * görünebilir. Bkz. docs/ANDROID_AUTO.md.
+ * üçüncü taraf uygulamalar için yayınlamaz. Android Auto uygulamayı
+ * araç başlatıcısında yalnızca Play Store yükleyicisiyle kurulmuşsa
+ * gösterir. Sürüşte görüntü DrivingSafetyGate ile kapanır.
+ * Bkz. docs/ANDROID_AUTO.md.
  */
 @OptIn(UnstableApi::class)
 object CarPlayerBridge {

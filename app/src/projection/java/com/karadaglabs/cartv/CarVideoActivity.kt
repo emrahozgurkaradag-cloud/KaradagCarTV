@@ -55,6 +55,27 @@ class CarVideoActivity : CarActivity() {
     private var state = ProjectionUiState()
     private var destroyed = false
 
+    /*
+     * Park kilidi (araç sensörleri). Varsayılan: görüntü kapalı
+     * (sensör gelene kadar fail-safe).
+     */
+    private var drivingSensors: CarDrivingSensors? = null
+    private var gate: VideoGateDecision =
+        DrivingSafetyGate.evaluate(DrivingSignals())
+
+    private var userPaused = false
+    private var fullscreen = false
+    private var controlsVisible = true
+    private var controlsBar: LinearLayout? = null
+    private var playPauseButton: TextView? = null
+    private var nowPlayingView: TextView? = null
+    private var parkedOverlay: TextView? = null
+
+    private val hideControlsRunnable = Runnable {
+        controlsVisible = false
+        applyControlsVisibility()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -112,6 +133,21 @@ class CarVideoActivity : CarActivity() {
         content.addView(view)
         surfaceView = view
 
+        content.setOnClickListener { onVideoTapped() }
+        view.setOnClickListener { onVideoTapped() }
+
+        val overlay = buildParkedOverlay()
+        parkedOverlay = overlay
+        content.addView(overlay)
+
+        val controls = buildControlsBar()
+        controlsBar = controls
+        content.addView(controls)
+
+        drivingSensors = CarDrivingSensors(this) { decision ->
+            onGateDecision(decision)
+        }
+
         root.addView(content)
         setContentView(root)
 
@@ -129,7 +165,21 @@ class CarVideoActivity : CarActivity() {
 
     override fun onStart() {
         super.onStart()
+        drivingSensors?.start()
         bindIfPlaying()
+    }
+
+    override fun onStop() {
+        /*
+         * Bağlantı kesildi / pencere gizlendi: sensör yok sayılır,
+         * görüntü kilitlenir, oynatma durur (telefonda kendi kendine
+         * çalmaya devam etmez).
+         */
+        drivingSensors?.stop()
+        gate = DrivingSafetyGate.evaluate(DrivingSignals())
+        CarVideoPlayerHolder.setVideoBlocked(true)
+        CarVideoPlayerHolder.setPlayWhenReady(false)
+        super.onStop()
     }
 
     override fun onResume() {
@@ -145,6 +195,9 @@ class CarVideoActivity : CarActivity() {
 
     override fun onDestroy() {
         destroyed = true
+        mainHandler.removeCallbacks(hideControlsRunnable)
+        drivingSensors?.stop()
+        drivingSensors = null
         applyVideoFocus(request = false)
         CarVideoPlayerHolder.setPlayWhenReady(false)
 
@@ -170,6 +223,35 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onKeyUp(keyCode: Int, keyEvent: KeyEvent): Boolean {
+        if (destination == ProjectionDestination.LIVE_TV) {
+            when (keyCode) {
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                KeyEvent.KEYCODE_HEADSETHOOK -> {
+                    togglePlayPause()
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                    setUserPaused(false)
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PAUSE,
+                KeyEvent.KEYCODE_MEDIA_STOP -> {
+                    setUserPaused(true)
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_NEXT,
+                KeyEvent.KEYCODE_CHANNEL_UP -> {
+                    stepChannel(1)
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                KeyEvent.KEYCODE_CHANNEL_DOWN -> {
+                    stepChannel(-1)
+                    return true
+                }
+            }
+        }
+
         if (
             keyCode == KeyEvent.KEYCODE_BACK &&
             destination == ProjectionDestination.LIVE_TV &&
@@ -293,8 +375,17 @@ class CarVideoActivity : CarActivity() {
             state.hostAvailable &&
             state.selected != null
 
+        val videoVisible = playing && gate.videoAllowed
+
         listContainer?.visibility = if (playing) View.GONE else View.VISIBLE
-        surfaceView?.visibility = if (playing) View.VISIBLE else View.GONE
+        surfaceView?.visibility = if (videoVisible) View.VISIBLE else View.GONE
+        parkedOverlay?.visibility =
+            if (playing && !gate.videoAllowed) View.VISIBLE else View.GONE
+        parkedOverlay?.text = gate.userMessage
+        menuContainer?.visibility =
+            if (playing && fullscreen) View.GONE else View.VISIBLE
+
+        CarVideoPlayerHolder.setVideoBlocked(!gate.videoAllowed)
 
         val plan = state.bindPlan()
         val selected = state.selected
@@ -304,14 +395,174 @@ class CarVideoActivity : CarActivity() {
             CarVideoPlayerHolder.prepareChannel(selected)
         }
 
-        if (plan.shouldBindSurface && view != null) {
+        if (videoVisible && plan.shouldBindSurface && view != null) {
             configureSurfaceZOrder(view)
             CarVideoPlayerHolder.setCarSurfaceView(view)
-        } else if (view != null && !playing) {
+        } else if (view != null && !videoVisible) {
             CarVideoPlayerHolder.clearCarSurfaceView(view)
         }
 
-        CarVideoPlayerHolder.setPlayWhenReady(plan.shouldPlay)
+        /*
+         * Parkta: yüzey hazır olunca oynat. Sürüşte (görüntü kilitli):
+         * yalnızca ses sürer. Kullanıcı duraklattıysa hiçbiri.
+         */
+        val shouldPlay = !userPaused && playing && (
+            plan.shouldPlay || (!gate.videoAllowed && selected != null)
+            )
+
+        CarVideoPlayerHolder.setPlayWhenReady(shouldPlay)
+
+        nowPlayingView?.text = selected?.name.orEmpty()
+        playPauseButton?.text = if (userPaused) "▶  Oynat" else "⏸  Duraklat"
+        applyControlsVisibility()
+    }
+
+    private fun applyControlsVisibility() {
+        val playing = destination == ProjectionDestination.LIVE_TV &&
+            state.mode == ProjectionMode.PLAYING
+        controlsBar?.visibility =
+            if (playing && (controlsVisible || userPaused || !gate.videoAllowed)) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+    }
+
+    private fun onGateDecision(decision: VideoGateDecision) {
+        if (destroyed) {
+            return
+        }
+        val changed = decision.videoAllowed != gate.videoAllowed
+        gate = decision
+        if (changed) {
+            Log.d(TAG, "PARK GATE videoAllowed=${decision.videoAllowed} reason=${decision.reason}")
+        }
+        applyState()
+    }
+
+    private fun onVideoTapped() {
+        controlsVisible = !controlsVisible
+        applyControlsVisibility()
+        scheduleHideControls()
+    }
+
+    private fun scheduleHideControls() {
+        mainHandler.removeCallbacks(hideControlsRunnable)
+        if (controlsVisible && !userPaused) {
+            mainHandler.postDelayed(hideControlsRunnable, 5_000L)
+        }
+    }
+
+    private fun togglePlayPause() {
+        setUserPaused(!userPaused)
+    }
+
+    private fun setUserPaused(paused: Boolean) {
+        userPaused = paused
+        controlsVisible = true
+        applyState()
+        scheduleHideControls()
+    }
+
+    private fun stepChannel(delta: Int) {
+        if (state.channels.isEmpty()) {
+            return
+        }
+        state = state.step(delta)
+        userPaused = false
+        persistSelection()
+        controlsVisible = true
+        applyState()
+        scheduleHideControls()
+    }
+
+    private fun toggleFullscreen() {
+        fullscreen = !fullscreen
+        applyState()
+        scheduleHideControls()
+    }
+
+    private fun controlButton(label: String, onClick: () -> Unit): TextView {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).toInt()
+
+        return TextView(this).apply {
+            text = label
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            gravity = Gravity.CENTER
+            minHeight = dp(64)
+            minWidth = dp(64)
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+            setBackgroundColor(Color.argb(170, 40, 40, 40))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { onClick() }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(dp(12), 0, dp(12), 0)
+            }
+        }
+    }
+
+    private fun buildControlsBar(): LinearLayout {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = (value * density).toInt()
+
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.argb(140, 0, 0, 0))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM
+            )
+            visibility = View.GONE
+        }
+
+        nowPlayingView = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            maxLines = 1
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+        }
+
+        bar.addView(nowPlayingView)
+        bar.addView(controlButton("⏮") { stepChannel(-1) })
+        val play = controlButton("⏸  Duraklat") { togglePlayPause() }
+        playPauseButton = play
+        bar.addView(play)
+        bar.addView(controlButton("⏭") { stepChannel(1) })
+        bar.addView(controlButton("☰ Kanallar") { showChannelList() })
+        bar.addView(controlButton("⛶") { toggleFullscreen() })
+
+        return bar
+    }
+
+    private fun buildParkedOverlay(): TextView {
+        val density = resources.displayMetrics.density
+
+        return TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.BLACK)
+            setPadding((24 * density).toInt(), 0, (24 * density).toInt(), 0)
+            layoutParams = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            visibility = View.GONE
+            setOnClickListener { onVideoTapped() }
+        }
     }
 
     private fun applyRadioState() {
@@ -366,6 +617,7 @@ class CarVideoActivity : CarActivity() {
 
     private fun showChannelList() {
         state = state.showList()
+        fullscreen = false
         applyState()
     }
 
@@ -385,8 +637,11 @@ class CarVideoActivity : CarActivity() {
         }
 
         state = state.select(channel.id)
+        userPaused = false
+        controlsVisible = true
         persistSelection()
         applyState()
+        scheduleHideControls()
     }
 
     private fun applyVideoFocus(request: Boolean) {

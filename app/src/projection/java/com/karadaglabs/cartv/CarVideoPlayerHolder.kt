@@ -49,6 +49,13 @@ object CarVideoPlayerHolder {
     @Volatile
     private var requireSurface: Boolean = true
 
+    /*
+     * Park kilidi: true iken görüntü yüzeye bağlanmaz ve video izi
+     * kapatılır; ses (canlı yayın sesi) sürer.
+     */
+    @Volatile
+    private var videoBlocked: Boolean = false
+
     private var carSurfaceCallback: SurfaceHolder.Callback? = null
 
     private val playerListener =
@@ -148,6 +155,36 @@ object CarVideoPlayerHolder {
             pendingChannel = null
             pendingAudio = AudioRequest(mediaId, title, streamUrl)
             prepareAudioLocked()
+        }
+    }
+
+    fun isVideoBlocked(): Boolean = videoBlocked
+
+    fun isPlayRequested(): Boolean = player?.playWhenReady == true
+
+    fun setVideoBlocked(blocked: Boolean) {
+        runOnMainThread {
+            if (videoBlocked == blocked) {
+                return@runOnMainThread
+            }
+
+            videoBlocked = blocked
+            val exoPlayer = player
+
+            if (blocked) {
+                exoPlayer?.clearVideoSurface()
+                exoPlayer?.let {
+                    it.trackSelectionParameters =
+                        it.trackSelectionParameters
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true)
+                            .build()
+                }
+                Log.d(TAG, "CAR VIDEO BLOCKED (driving/park unknown) audio continues")
+            } else {
+                Log.d(TAG, "CAR VIDEO UNBLOCKED (parked)")
+                bindLocked()
+            }
         }
     }
 
@@ -351,7 +388,7 @@ object CarVideoPlayerHolder {
         val surfaceValid =
             carSurfaceView?.holder?.surface?.isValid == true
 
-        if (requireSurface && !surfaceValid) {
+        if (requireSurface && !surfaceValid && !videoBlocked) {
             Log.d(
                 TAG,
                 "play deferred: surface not valid"
@@ -376,6 +413,12 @@ object CarVideoPlayerHolder {
                     "surfaceView=${surfaceView != null}"
             )
 
+            return
+        }
+
+        if (videoBlocked) {
+            exoPlayer.clearVideoSurface()
+            Log.d(TAG, "Projection bind skipped: video blocked")
             return
         }
 
@@ -429,12 +472,17 @@ object CarVideoPlayerHolder {
                         player
                             ?: return
 
+                    if (videoBlocked) {
+                        return
+                    }
+
                     exoPlayer.setVideoSurfaceHolder(holder)
 
-                    if (exoPlayer.currentMediaItem != null) {
-
-                        exoPlayer.playWhenReady = true
-                    }
+                    /*
+                     * Oynat/Duraklat kararı CarVideoActivity'dedir
+                     * (kullanıcı duraklatması + park kilidi);
+                     * yüzey yeniden oluştuğunda zorla oynatılmaz.
+                     */
                 }
 
                 override fun surfaceChanged(
@@ -449,7 +497,9 @@ object CarVideoPlayerHolder {
                         "CAR VIDEO SURFACE CHANGED width=$width height=$height"
                     )
 
-                    player?.setVideoSurfaceHolder(holder)
+                    if (!videoBlocked) {
+                        player?.setVideoSurfaceHolder(holder)
+                    }
                 }
 
                 override fun surfaceDestroyed(

@@ -1,16 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    sideloadLegacy — DESTEKLENMEYEN deneysel yapı türü.
+    projection — Android Auto araç ekranında GÖRÜNTÜLÜ oynatma.
 
-    Bu manifest yalnızca ./gradlew assembleSideloadLegacyDebug ile
-    birleştirilir. Buradaki yollar (aauto.aar CarActivity, MediaProjection
-    ekran yansıtma, NAVIGATION kategorisinde video yüzeyi) Google'ın
-    Android Auto üçüncü taraf uygulama kategorilerinde yoktur:
-      * Google Play'e gönderilemez (car-app-quality PC-1, NF kriterleri),
-      * gerçek araçta yalnızca Android Auto geliştirici ayarlarında
-        "Bilinmeyen kaynaklar" açıkken ve host sürümüne bağlı olarak
-        görünebilir; garanti edilmez.
-    Play'e uygun varsayılan yapı: app/src/main + app/src/play.
+    ./gradlew assembleProjectionRelease ile main manifest'e eklenir.
+    Yöntem (Fermata Auto / AA Car Play Video ile aynı aile):
+      * CarVideoService: CATEGORY_PROJECTION(_OEM) + aauto.aar
+        CarActivity -> araç ekranında pencere, ExoPlayer SurfaceView.
+      * CarMirrorService: Car App Library NAVIGATION şablonu yüzeyi +
+        MediaProjection (telefon ekranı yansıtma).
+    Bunlar Google'ın resmî üçüncü taraf API'leri DEĞİLDİR. Android Auto
+    (17.x) PROJECTION/TEMPLATE türlerini "Bilinmeyen kaynaklar" ile
+    açmaz; uygulama Play Store yükleyicisiyle kurulmuş olmalıdır
+    (Play iç/kapalı test kanalı) ya da geliştirici head unit kullanılır.
+    Sürüşte görüntü park kilidiyle kapatılır (DrivingSafetyGate).
 -->
 <manifest
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -21,6 +23,10 @@
 
     <uses-permission
         android:name="androidx.car.app.ACCESS_SURFACE" />
+
+    <!-- Park kilidi: ekran yansıtma yalnızca araç hızı ~0 iken. -->
+    <uses-permission
+        android:name="com.google.android.gms.permission.CAR_SPEED" />
 
     <uses-permission
         android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
@@ -41,7 +47,7 @@
     </queries>
 
     <application
-        android:label="Karadag Car TV (Legacy)"
+        android:label="Karadag Car TV (Araç Video)"
         tools:replace="android:label">
 
         <meta-data

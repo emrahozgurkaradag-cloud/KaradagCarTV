@@ -272,6 +272,20 @@ class MirrorProjectionService : Service() {
                 .takeIf { it > 0 }
                 ?: DEFAULT_DPI
 
+        val gate = MirrorDrivingGate.decision
+
+        if (!gate.videoAllowed) {
+            /*
+             * Park kilidi: sürüşte (veya hız bilinmiyorsa) telefon
+             * ekranı araç yüzeyine aktarılmaz.
+             */
+            virtualDisplay?.setSurface(null)
+            projectionSurface = null
+            MirrorDrivingGate.drawBlockedMessage(surface, width, height)
+            Log.d(TAG, "MIRROR BLOCKED reason=${gate.reason}")
+            return
+        }
+
         Log.d(TAG, "====================================")
         Log.d(TAG, "UPDATING ANDROID AUTO SURFACE")
         Log.d(TAG, "width=$width")

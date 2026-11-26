@@ -30,9 +30,13 @@ android {
      *     (Android Automotive OS'ta genel kullanım, Android Auto'da
      *     Google beta / erken erişim programına bağlı).
      *
-     * sideloadLegacy: önceki aauto.aar / MediaProjection / NAVIGATION
-     *   denemeleri korunur. Google tarafından DESTEKLENMEZ, Play'e
-     *   gönderilmez. Ayrı applicationId ile yan yana kurulur.
+     * projection: Android Auto araç ekranında GÖRÜNTÜLÜ oynatma.
+     *   aauto.aar CarActivity (CATEGORY_PROJECTION_OEM) penceresine
+     *   ExoPlayer SurfaceView; araç sensörlerine bağlı park kilidi.
+     *   Google'ın resmî üçüncü taraf API'si DEĞİLDİR. Android Auto
+     *   17.x bu tür uygulamaları yalnızca Play Store yükleyicisiyle
+     *   kurulmuşsa (ör. Play iç/kapalı test kanalı) veya geliştirici
+     *   head unit'te listeler. Ayrı applicationId ile yan yana kurulur.
      */
     flavorDimensions += "distribution"
 
@@ -41,10 +45,10 @@ android {
             dimension = "distribution"
             isDefault = true
         }
-        create("sideloadLegacy") {
+        create("projection") {
             dimension = "distribution"
-            applicationIdSuffix = ".legacy"
-            versionNameSuffix = "-legacy-unsupported"
+            applicationIdSuffix = ".projection"
+            versionNameSuffix = "-projection"
         }
     }
 
@@ -73,8 +77,8 @@ dependencies {
     // FERMATA / ANDROID AUTO VIDEO SDK
     // ============================================================
 
-    // Yalnızca desteklenmeyen sideloadLegacy yapısı.
-    "sideloadLegacyImplementation"(files("libs/aauto.aar"))
+    // Yalnızca projection yapısı (resmî olmayan Google Auto SDK).
+    "projectionImplementation"(files("libs/aauto.aar"))
 
     // ============================================================
     // ANDROIDX CORE
@@ -107,18 +111,18 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
 
     // ============================================================
-    // ANDROID AUTO - CAR APP LIBRARY (yalnızca sideloadLegacy)
+    // ANDROID AUTO - CAR APP LIBRARY (yalnızca projection)
     //
     // CarMirrorService.kt (NAVIGATION şablonu + MediaProjection)
     // Google kurallarına uymadığı için play yapısında yok.
     // ============================================================
 
-    "sideloadLegacyImplementation"("androidx.car.app:app:1.7.0")
+    "projectionImplementation"("androidx.car.app:app:1.7.0")
 
-    "sideloadLegacyImplementation"("androidx.car.app:app-projected:1.7.0")
+    "projectionImplementation"("androidx.car.app:app-projected:1.7.0")
 
     // Jetifier rewrites aauto.aar onto AndroidX FragmentManager.
-    "sideloadLegacyImplementation"("androidx.fragment:fragment-ktx:1.8.8")
+    "projectionImplementation"("androidx.fragment:fragment-ktx:1.8.8")
 
     // ============================================================
     // MEDIA3 / EXOPLAYER

@@ -15,7 +15,9 @@ class AndroidAutoDiscoveryTest {
         assertTrue(xml.contains("""<uses name="media" />"""))
         assertTrue(xml.contains("""<uses name="template" />"""))
         assertTrue(xml.contains("""name="projection""""))
-        assertTrue(xml.contains("""<uses name="video" />"""))
+        // "video" geçerli bir <uses> değeri değil (lint InvalidUsesTagAttribute);
+        // Fermata auto descriptor ile aynı set: media/service/projection.
+        assertFalse(xml.contains("""<uses name="video" />"""))
         assertTrue(xml.contains("""name="service""""))
     }
 
@@ -237,7 +239,7 @@ class AndroidAutoDiscoveryTest {
         )
     }
 
-    /** main + sideloadLegacy manifestleri (Gradle birleştirmesine eşdeğer içerik). */
+    /** main + projection manifestleri (Gradle birleştirmesine eşdeğer içerik). */
     private fun mergedManifest(): String {
         val legacy = sourceFile("AndroidManifest.xml")
         val main = File(legacy.parentFile.parentFile, "main/AndroidManifest.xml")

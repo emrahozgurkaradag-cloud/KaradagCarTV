@@ -24,6 +24,7 @@ class CarYouTubeActivity : CarActivity() {
     private var webView: WebView? = null
     private var chromeClient: HostedWebChromeClient? = null
     private var overlay: FrameLayout? = null
+    private var drivingLock: HostedWebDrivingLock? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -81,13 +82,27 @@ class CarYouTubeActivity : CarActivity() {
         overlay.addView(root)
         setContentView(overlay)
 
+        // Park kilidi: sürüşte WebView (video dahil) duraklatılır.
+        drivingLock = HostedWebDrivingLock(this, overlay) { webView }
+
         applyVideoFocus(request = true)
 
         Log.d(TAG, "CAR YOUTUBE WEBVIEW READY")
         view.loadUrl(YOUTUBE_URL)
     }
 
+    override fun onStart() {
+        super.onStart()
+        drivingLock?.onStart()
+    }
+
+    override fun onStop() {
+        drivingLock?.onStop()
+        super.onStop()
+    }
+
     override fun onPause() {
+        drivingLock?.onPause()
         applyVideoFocus(request = false)
         webView?.onPause()
         super.onPause()
@@ -96,7 +111,7 @@ class CarYouTubeActivity : CarActivity() {
     override fun onResume() {
         super.onResume()
         applyVideoFocus(request = true)
-        webView?.onResume()
+        drivingLock?.onResume()
     }
 
     override fun onDestroy() {

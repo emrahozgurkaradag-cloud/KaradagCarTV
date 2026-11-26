@@ -10,7 +10,7 @@
     android:appCategory="video"> ile bildirilir. Google'ın parked-apps
     kuralı: video uygulamaları burada <uses name="video"/> TAŞIMAZ.
     "template", "service", "projection" girişleri resmî olmayan
-    sideloadLegacy yapısına aittir (app/src/sideloadLegacy/res/xml).
+    projection yapısına aittir (app/src/projection/res/xml).
 -->
 <automotiveApp>
     <uses name="media" />

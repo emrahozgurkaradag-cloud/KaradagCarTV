@@ -6,6 +6,7 @@ import android.util.Log
 import com.google.android.apps.auto.sdk.CarActivity
 import com.google.android.apps.auto.sdk.CarActivityService
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class CarVideoService : CarActivityService() {
 
     companion object {

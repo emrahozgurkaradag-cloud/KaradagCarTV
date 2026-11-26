@@ -314,7 +314,7 @@ class CarMediaService : MediaLibraryService() {
 
                     /*
                      * YouTube / Google WebView girişleri yalnızca
-                     * desteklenmeyen sideloadLegacy yapısında vardır.
+                     * resmî olmayan projection yapısında vardır.
                      * Medya kategorisinde web/video içeriği Google
                      * kurallarına aykırıdır.
                      */
@@ -732,7 +732,7 @@ class CarMediaService : MediaLibraryService() {
             }
 
             /*
-             * sideloadLegacy: IPTV kanalları MediaSession'da oynatılmaz.
+             * projection: IPTV kanalları MediaSession'da oynatılmaz.
              */
 
             if (

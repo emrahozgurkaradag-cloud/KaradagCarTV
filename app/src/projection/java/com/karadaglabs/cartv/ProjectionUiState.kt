@@ -104,6 +104,25 @@ data class ProjectionUiState(
         )
     }
 
+    /**
+     * Önceki/sonraki kanal (dairesel). Liste boşsa değişmez.
+     * Seçim yoksa ilk (ileri) veya son (geri) kanal seçilir.
+     */
+    fun step(delta: Int): ProjectionUiState {
+        if (channels.isEmpty() || delta == 0) {
+            return this
+        }
+
+        val index = channels.indexOfFirst { it.id == selectedId }
+        val nextIndex = if (index < 0) {
+            if (delta > 0) 0 else channels.lastIndex
+        } else {
+            Math.floorMod(index + delta, channels.size)
+        }
+
+        return select(channels[nextIndex].id)
+    }
+
     fun showList(): ProjectionUiState {
         return copy(
             mode = ProjectionMode.LIST,

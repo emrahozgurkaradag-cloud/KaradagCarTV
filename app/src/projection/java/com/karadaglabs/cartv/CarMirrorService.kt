@@ -13,6 +13,11 @@ import androidx.car.app.Session
 import androidx.car.app.SessionInfo
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
+import androidx.car.app.hardware.CarHardwareManager
+import androidx.car.app.hardware.common.CarValue
+import androidx.car.app.hardware.common.OnCarDataAvailableListener
+import androidx.car.app.hardware.info.Speed
+import androidx.core.content.ContextCompat
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.Template
@@ -63,6 +68,27 @@ private class CarMirrorScreen(
             AppManager::class.java
         )
 
+    /*
+     * Park kilidi: araç hız verisi. Hız gelmezse yansıtma kapalı.
+     */
+    private val speedListener =
+        OnCarDataAvailableListener<Speed> { speed ->
+            val raw = speed.rawSpeedMetersPerSecond
+            val value =
+                if (raw.status == CarValue.STATUS_SUCCESS) raw.value else null
+
+            if (MirrorDrivingGate.updateSpeed(value)) {
+                Log.d(
+                    TAG,
+                    "MIRROR GATE changed allowed=" +
+                        "${MirrorDrivingGate.decision.videoAllowed} speed=$value"
+                )
+                refreshProjection()
+            }
+        }
+
+    private var speedRegistered = false
+
     init {
 
         Log.d(
@@ -70,7 +96,67 @@ private class CarMirrorScreen(
             "CarMirrorScreen created"
         )
 
+        MirrorDrivingGate.reset()
         appManager.setSurfaceCallback(this)
+        registerSpeed()
+
+        lifecycle.addObserver(
+            object : androidx.lifecycle.DefaultLifecycleObserver {
+                override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                    unregisterSpeed()
+                    MirrorDrivingGate.reset()
+                }
+            }
+        )
+    }
+
+    private fun registerSpeed() {
+        if (speedRegistered) {
+            return
+        }
+
+        try {
+            carContext.getCarService(CarHardwareManager::class.java)
+                .carInfo
+                .addSpeedListener(
+                    ContextCompat.getMainExecutor(carContext),
+                    speedListener
+                )
+            speedRegistered = true
+            Log.d(TAG, "MIRROR speed listener registered")
+        } catch (throwable: Throwable) {
+            Log.e(TAG, "MIRROR speed unavailable: mirroring stays blocked", throwable)
+        }
+    }
+
+    private fun unregisterSpeed() {
+        if (!speedRegistered) {
+            return
+        }
+
+        try {
+            carContext.getCarService(CarHardwareManager::class.java)
+                .carInfo
+                .removeSpeedListener(speedListener)
+        } catch (throwable: Throwable) {
+            Log.w(TAG, "removeSpeedListener failed", throwable)
+        }
+        speedRegistered = false
+    }
+
+    private fun refreshProjection() {
+        try {
+            carContext.startService(
+                Intent(
+                    carContext,
+                    MirrorProjectionService::class.java
+                ).apply {
+                    action = MirrorProjectionService.ACTION_REFRESH
+                }
+            )
+        } catch (exception: Exception) {
+            Log.e(TAG, "Unable to refresh projection", exception)
+        }
     }
 
     override fun onGetTemplate(): Template {

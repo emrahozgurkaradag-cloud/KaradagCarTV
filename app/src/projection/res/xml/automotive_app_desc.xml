@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    projection yapısı — Android Auto uygulama tanımı.
+
+    Android Auto 17.x doğrulayıcısı (CAR.VALIDATOR) her tür için burada
+    <uses> bekler ("Uses for <TYPE> not defined"). Fermata Auto'nun
+    auto flavor'ı ile aynı set:
+      media      CarMediaService (Radyo, Canlı TV sesi)
+      service    CarVideoService (aauto.aar CarActivityService)
+      projection CarVideoService CATEGORY_PROJECTION(_OEM) -> araç ekranı
+      template   CarMirrorService (Car App Library, ekran yansıtma)
+    "video" geçerli bir <uses> değeri değildir; kaldırıldı.
+-->
+<automotiveApp xmlns:tools="http://schemas.android.com/tools">
+    <uses name="media" />
+    <uses name="template" />
+    <uses
+        name="service"
+        tools:ignore="InvalidUsesTagAttribute" />
+    <uses
+        name="projection"
+        tools:ignore="InvalidUsesTagAttribute" />
+</automotiveApp>

@@ -162,10 +162,10 @@
 
         <!--
             Android Auto ekran yansıtma (MediaProjection), NAVIGATION
-            kategorisi kötüye kullanımı ve aauto.aar CarActivity yolu
+            kategorisi kötüye kullanımı ve aauto.aar CarActivity yolu (araç ekranında video)
             Google tarafından üçüncü taraf uygulamalara açık değildir.
-            Bunlar yalnızca desteklenmeyen sideloadLegacy yapı türündedir:
-            app/src/sideloadLegacy/AndroidManifest.xml
+            Bunlar yalnızca resmî olmayan projection yapı türündedir:
+            app/src/projection/AndroidManifest.xml
         -->
 
     </application>

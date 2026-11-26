@@ -20,14 +20,14 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Unit tests (play + sideloadLegacy)
-        run: ./gradlew --no-daemon testPlayDebugUnitTest testSideloadLegacyDebugUnitTest
+      - name: Unit tests (play + projection)
+        run: ./gradlew --no-daemon testPlayDebugUnitTest testProjectionDebugUnitTest
 
-      - name: Lint (play)
-        run: ./gradlew --no-daemon lintPlayDebug
+      - name: Lint (play + projection)
+        run: ./gradlew --no-daemon lintPlayDebug lintProjectionDebug
 
       - name: Assemble
-        run: ./gradlew --no-daemon assemblePlayDebug assemblePlayRelease assembleSideloadLegacyDebug
+        run: ./gradlew --no-daemon assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease
 
       - uses: actions/upload-artifact@v4
         with:

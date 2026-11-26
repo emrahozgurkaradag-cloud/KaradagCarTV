@@ -13,11 +13,12 @@ import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
 
+@androidx.annotation.OptIn(UnstableApi::class)
 object HostedNavigation {
 
     private const val TAG = "KaradagHostedNav"
 
-    @OptIn(UnstableApi::class)
+
     fun open(
         from: CarActivity,
         destination: ProjectionDestination
