@@ -30,6 +30,9 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * Medya: androidTest assets (ffmpeg ile üretilmiş H.264 + AAC):
  *   media/tv1.ts (MPEG-TS 320x240), media/hls/index.m3u8 (HLS 426x240).
+ * Test APK bağlamının getApplicationContext() değeri null olabildiği için
+ * medya, uygulamanın önbellek dizinine kopyalanır ve file:// ile açılır;
+ * oynatıcı uygulama bağlamıyla (PlayerFactory) kurulur.
  */
 @UnstableApi
 @RunWith(AndroidJUnit4::class)
@@ -41,19 +44,33 @@ class CarVideoPlayerHolderDeviceTest {
     private lateinit var player: ExoPlayer
     private val firstFrames = AtomicInteger(0)
 
-    private val tsChannel = IptvChannel(1, "TS", "asset:///media/tv1.ts", null, "Test")
-    private val hlsChannel = IptvChannel(2, "HLS", "asset:///media/hls/index.m3u8", null, "Test")
+    private lateinit var tsChannel: IptvChannel
+    private lateinit var hlsChannel: IptvChannel
+    private lateinit var mediaDir: java.io.File
+
+    private fun copyTestMedia() {
+        val assets = instrumentation.context.assets
+        mediaDir = java.io.File(instrumentation.targetContext.cacheDir, "test-media")
+        mediaDir.deleteRecursively()
+        for (path in listOf("media/tv1.ts", "media/hls/index.m3u8", "media/hls/seg0.ts", "media/hls/seg1.ts", "media/hls/seg2.ts")) {
+            val out = java.io.File(mediaDir, path.removePrefix("media/"))
+            out.parentFile!!.mkdirs()
+            assets.open(path).use { input -> out.outputStream().use { input.copyTo(it) } }
+        }
+        tsChannel = IptvChannel(1, "TS", android.net.Uri.fromFile(java.io.File(mediaDir, "tv1.ts")).toString(), null, "Test")
+        hlsChannel = IptvChannel(2, "HLS", android.net.Uri.fromFile(java.io.File(mediaDir, "hls/index.m3u8")).toString(), null, "Test")
+    }
 
     @Before
     fun setUp() {
+        copyTestMedia()
         scenario = ActivityScenario.launch(ComponentActivity::class.java)
         scenario.onActivity { activity ->
             surfaceView = SurfaceView(activity)
             activity.setContentView(surfaceView)
         }
         instrumentation.runOnMainSync {
-            // Test APK bağlamı: asset:/// test APK'sındaki medyayı açar.
-            player = PlayerFactory.create(instrumentation.context)
+            player = PlayerFactory.create(instrumentation.targetContext)
             player.repeatMode = Player.REPEAT_MODE_ALL
             player.volume = 0f
             player.addListener(object : Player.Listener {
@@ -68,11 +85,13 @@ class CarVideoPlayerHolderDeviceTest {
 
     @After
     fun tearDown() {
+        // setUp yarıda kaldıysa asıl hatayı gizlememek için korumalı.
         instrumentation.runOnMainSync {
             CarVideoPlayerHolder.clearPlayer()
-            player.release()
+            if (::player.isInitialized) player.release()
         }
-        scenario.close()
+        if (::scenario.isInitialized) scenario.close()
+        if (::mediaDir.isInitialized) mediaDir.deleteRecursively()
     }
 
     private fun waitUntil(what: String, timeoutMs: Long = 20_000, condition: () -> Boolean) {
@@ -112,6 +131,7 @@ class CarVideoPlayerHolderDeviceTest {
             assertEquals(240, player.videoSize.height)
             assertEquals("live-tv-1", player.currentMediaItem?.mediaId)
             assertEquals("video/mp2t", player.currentMediaItem?.localConfiguration?.mimeType)
+            assertTrue(player.currentMediaItem!!.localConfiguration!!.uri.toString().startsWith("file://"))
         }
     }
 
@@ -177,7 +197,7 @@ class CarVideoPlayerHolderDeviceTest {
 
     @Test
     fun brokenStreamReportsErrorAndSameChannelWithNewUrlRecovers() {
-        val broken = IptvChannel(5, "Broken", "asset:///media/missing.ts", null, null)
+        val broken = IptvChannel(5, "Broken", android.net.Uri.fromFile(java.io.File(mediaDir, "missing.ts")).toString(), null, null)
         startChannel(broken, blocked = false)
         waitUntil("error") { CarVideoPlayerHolder.lastErrorCode != null }
         assertEquals(PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND, CarVideoPlayerHolder.lastErrorCode)
