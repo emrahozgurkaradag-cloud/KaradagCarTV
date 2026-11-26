@@ -6,77 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-class CustomerStatusTest {
-
-    @Test
-    fun activeLicenseOpensMain() {
-        val snapshot = CustomerStatus.parse(
-            httpCode = 200,
-            status = "active",
-            code = "",
-            message = "Lisans aktif",
-            licenseKey = "KDG-REAL-KEY"
-        )
-
-        assertTrue(snapshot.isActive)
-        assertFalse(snapshot.isDeviceNotFound)
-        assertFalse(snapshot.shouldContinueAutoPolling)
-        assertEquals("active", snapshot.displayStatus)
-        assertEquals("KDG-REAL-KEY", snapshot.licenseKey)
-    }
-
-    @Test
-    fun deviceNotFoundDoesNotLockOrLookPending() {
-        val snapshot = CustomerStatus.parse(
-            httpCode = 404,
-            status = "",
-            code = "DEVICE_NOT_FOUND",
-            message = "Cihaz bulunamadı",
-            licenseKey = ""
-        )
-
-        assertFalse(snapshot.isActive)
-        assertTrue(snapshot.isDeviceNotFound)
-        assertFalse(snapshot.shouldContinueAutoPolling)
-        assertEquals(
-            CustomerStatus.DEVICE_NOT_FOUND,
-            snapshot.displayStatus
-        )
-        assertEquals("Cihaz bulunamadı", snapshot.message)
-    }
-
-    @Test
-    fun rejectedStopsPolling() {
-        val snapshot = CustomerStatus.parse(
-            httpCode = 200,
-            status = "rejected",
-            code = "",
-            message = "Başvuru reddedildi",
-            licenseKey = ""
-        )
-
-        assertTrue(snapshot.isTerminalFailure)
-        assertFalse(snapshot.shouldContinueAutoPolling)
-        assertEquals("rejected", snapshot.displayStatus)
-    }
-
-    @Test
-    fun existingApplicationIsAccepted() {
-        assertTrue(
-            CustomerStatus.applicationAccepted(
-                409,
-                CustomerStatus.APPLICATION_EXISTS
-            )
-        )
-        assertTrue(
-            CustomerStatus.applicationAccepted(200, "")
-        )
-        assertFalse(
-            CustomerStatus.applicationAccepted(500, "API_ERROR")
-        )
-    }
-}
-
 class AndroidAutoDiscoveryTest {
 
     @Test
@@ -92,7 +21,7 @@ class AndroidAutoDiscoveryTest {
 
     @Test
     fun manifestDeclaresAndroidAutoDiscoveryChain() {
-        val xml = sourceFile("AndroidManifest.xml").readText()
+        val xml = mergedManifest()
 
         assertTrue(
             xml.contains(
@@ -192,7 +121,7 @@ class AndroidAutoDiscoveryTest {
 
     @Test
     fun carAppServiceAndMinCarApiLevelRemainDiscoverable() {
-        val manifest = sourceFile("AndroidManifest.xml").readText()
+        val manifest = mergedManifest()
 
         assertTrue(
             manifest.contains("""android:name=".CarMirrorService"""")
@@ -270,7 +199,7 @@ class AndroidAutoDiscoveryTest {
             "java/com/karadaglabs/cartv/ProjectionDestination.kt"
         ).readText()
         val holder = sourceFile(
-            "java/com/karadaglabs/cartv/CarMediaService.kt"
+            "java/com/karadaglabs/cartv/CarVideoPlayerHolder.kt"
         ).readText()
 
         assertTrue(activity.contains("SurfaceView"))
@@ -308,16 +237,23 @@ class AndroidAutoDiscoveryTest {
         )
     }
 
+    /** main + sideloadLegacy manifestleri (Gradle birleştirmesine eşdeğer içerik). */
+    private fun mergedManifest(): String {
+        val legacy = sourceFile("AndroidManifest.xml")
+        val main = File(legacy.parentFile.parentFile, "main/AndroidManifest.xml")
+        return main.readText() + legacy.readText()
+    }
+
     private fun sourceFile(relativeFromMain: String): File {
         var dir = File(".").canonicalFile
 
         repeat(8) {
-            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            val appPath = File(dir, LegacySources.flavorPath(dir, "app/src", relativeFromMain))
             if (appPath.isFile) {
                 return appPath
             }
 
-            val modulePath = File(dir, "src/main/$relativeFromMain")
+            val modulePath = File(dir, LegacySources.flavorPath(dir, "src", relativeFromMain))
             if (modulePath.isFile) {
                 return modulePath
             }
@@ -334,12 +270,12 @@ class AndroidAutoDiscoveryTest {
         var dir = File(".").canonicalFile
 
         repeat(8) {
-            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            val appPath = File(dir, LegacySources.flavorPath(dir, "app/src", relativeFromMain))
             if (appPath.isDirectory) {
                 return appPath
             }
 
-            val modulePath = File(dir, "src/main/$relativeFromMain")
+            val modulePath = File(dir, LegacySources.flavorPath(dir, "src", relativeFromMain))
             if (modulePath.isDirectory) {
                 return modulePath
             }

@@ -381,7 +381,7 @@ class ProjectionSourceContractTest {
         var dir = File(".").canonicalFile
 
         repeat(8) {
-            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            val appPath = File(dir, LegacySources.flavorPath(dir, "app/src", relativeFromMain))
             if (appPath.isFile) {
                 return appPath.readText()
             }

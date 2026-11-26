@@ -60,7 +60,7 @@ class HostedProjectionDestinationTest {
         var dir = File(".").canonicalFile
 
         repeat(8) {
-            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            val appPath = File(dir, LegacySources.flavorPath(dir, "app/src", relativeFromMain))
             if (appPath.isFile) {
                 return appPath.readText()
             }
@@ -77,7 +77,7 @@ class HostedProjectionSourceTest {
     @Test
     fun liveTvBindsExoPlayerToHostedSurfaceView() {
         val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
-        val holder = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+        val holder = source("java/com/karadaglabs/cartv/CarVideoPlayerHolder.kt")
 
         assertTrue(video.contains("CAR VIDEO ACTIVITY AÇILDI"))
         assertTrue(video.contains("CAR VIDEO SURFACE CREATED"))
@@ -158,7 +158,7 @@ class HostedProjectionSourceTest {
         val video = source("java/com/karadaglabs/cartv/CarVideoActivity.kt")
         val youtube = source("java/com/karadaglabs/cartv/CarYouTubeActivity.kt")
         val google = source("java/com/karadaglabs/cartv/CarGoogleActivity.kt")
-        val holder = source("java/com/karadaglabs/cartv/CarMediaService.kt")
+        val holder = source("java/com/karadaglabs/cartv/CarVideoPlayerHolder.kt")
 
         assertTrue(video.contains("onDestroy()"))
         assertTrue(video.contains("CAR VIDEO SURFACE DESTROYED"))
@@ -185,7 +185,11 @@ class HostedProjectionSourceTest {
         assertFalse(media.contains("YouTube telefonda açılır"))
         val addStart = media.indexOf("override fun onAddMediaItems")
         val addBlock = media.substring(addStart, media.indexOf("createCategoryItem", addStart))
-        assertFalse(addBlock.contains("createLiveTvMediaItem"))
+        // Canlı TV yalnızca play yapısında (projectsVideo=false) ses
+        // öğesi olarak çözülür; legacy yapıda MediaSession'a girmez.
+        if (addBlock.contains("createLiveTvMediaItem")) {
+            assertTrue(addBlock.contains("!CarPlayerBridge.projectsVideo"))
+        }
     }
 
     @Test
@@ -203,7 +207,7 @@ class HostedProjectionSourceTest {
         var dir = File(".").canonicalFile
 
         repeat(8) {
-            val appPath = File(dir, "app/src/main/$relativeFromMain")
+            val appPath = File(dir, LegacySources.flavorPath(dir, "app/src", relativeFromMain))
             if (appPath.isFile) {
                 return appPath.readText()
             }

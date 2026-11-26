@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    sideloadLegacy — DESTEKLENMEYEN deneysel yapı türü.
+
+    Bu manifest yalnızca ./gradlew assembleSideloadLegacyDebug ile
+    birleştirilir. Buradaki yollar (aauto.aar CarActivity, MediaProjection
+    ekran yansıtma, NAVIGATION kategorisinde video yüzeyi) Google'ın
+    Android Auto üçüncü taraf uygulama kategorilerinde yoktur:
+      * Google Play'e gönderilemez (car-app-quality PC-1, NF kriterleri),
+      * gerçek araçta yalnızca Android Auto geliştirici ayarlarında
+        "Bilinmeyen kaynaklar" açıkken ve host sürümüne bağlı olarak
+        görünebilir; garanti edilmez.
+    Play'e uygun varsayılan yapı: app/src/main + app/src/play.
+-->
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+
+    <uses-permission
+        android:name="androidx.car.app.ACCESS_SURFACE" />
+
+    <uses-permission
+        android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+
+    <queries>
+        <package android:name="com.google.android.projection.gearhead" />
+        <package android:name="com.google.android.gms" />
+        <intent>
+            <action android:name="androidx.car.app.CarAppService" />
+        </intent>
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="Karadag Car TV (Legacy)"
+        tools:replace="android:label">
+
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
+        <activity
+            android:name=".MediaProjectionPermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.KaradagCarTV" />
+
+        <service
+            android:name=".CarMirrorService"
+            android:exported="true"
+            android:label="Karadag Car TV">
+
+            <intent-filter>
+
+                <action
+                    android:name="androidx.car.app.CarAppService" />
+
+                <category
+                    android:name="androidx.car.app.category.NAVIGATION" />
+
+            </intent-filter>
+
+        </service>
+
+        <service
+            android:name=".CarVideoService"
+            android:exported="true"
+            android:label="Karadag Car TV">
+
+            <intent-filter>
+
+                <action
+                    android:name="android.intent.action.MAIN" />
+
+                <category
+                    android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
+
+                <category
+                    android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM" />
+
+            </intent-filter>
+
+        </service>
+
+        <service
+            android:name=".MirrorProjectionService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+    </application>
+
+</manifest>

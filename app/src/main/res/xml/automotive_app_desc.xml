@@ -1,22 +1,17 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<automotiveApp xmlns:tools="http://schemas.android.com/tools">
-    <!--
-        media: CarMediaService — resmi Android Auto medya menüsü
-        (Canlı TV, YouTube, Radyo, Google doğrudan kökte).
-        Sürüşte yalnızca ses; video host park/OEM projection
-        destekliyorsa CarVideoActivity SurfaceView yolundan gider.
-        template: CarMirrorService (izin yalnızca Mirror yüzeyinde).
-        service + projection: CarVideoService (aauto.aar OEM).
-        video: park halinde host video yeteneği bildirimi.
-        Kategori kısıtları bypass edilmez.
-    -->
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Auto uygulama tanımı (play / Google Play yapısı).
+
+    media: CarMediaService (Media3 MediaLibraryService) — Canlı Radyo ve
+    Canlı TV kanallarının SESİ, sürüşte ve parkta Android Auto'nun
+    resmî medya arayüzünde.
+
+    Park hâlinde video, bu dosyayla DEĞİL, <application
+    android:appCategory="video"> ile bildirilir. Google'ın parked-apps
+    kuralı: video uygulamaları burada <uses name="video"/> TAŞIMAZ.
+    "template", "service", "projection" girişleri resmî olmayan
+    sideloadLegacy yapısına aittir (app/src/sideloadLegacy/res/xml).
+-->
+<automotiveApp>
     <uses name="media" />
-    <uses name="template" />
-    <uses
-        name="service"
-        tools:ignore="InvalidUsesTagAttribute" />
-    <uses
-        name="projection"
-        tools:ignore="InvalidUsesTagAttribute" />
-    <uses name="video" />
 </automotiveApp>

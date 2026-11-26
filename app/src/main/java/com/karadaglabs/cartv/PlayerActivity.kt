@@ -1,6 +1,7 @@
 package com.karadaglabs.cartv
 
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -50,6 +51,13 @@ class PlayerActivity : ComponentActivity() {
     private var mediaType = ""
 
     private var isReleased = false
+
+    /*
+     * Park hâlinde video: sürüşe geçildiğinde sistem aktiviteyi
+     * örter (onPause) — video durdurulur, sürüşte yeniden başlamaz.
+     */
+    private val parkedPolicy =
+        ParkedPlaybackPolicy()
     private var isInitializing = false
 
     private val handler =
@@ -79,8 +87,25 @@ class PlayerActivity : ComponentActivity() {
     ) {
         super.onCreate(savedInstanceState)
 
-        requestedOrientation =
-            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        /*
+         * Sabit yön yalnızca cihaz her iki yönü de destekliyorsa
+         * (telefon). Araç ekranları sabit yönlüdür; orada zorlamak
+         * letterbox'a yol açar (car-app-quality DO-1).
+         */
+        if (
+            packageManager.hasSystemFeature(
+                PackageManager.FEATURE_SCREEN_LANDSCAPE
+            ) &&
+            packageManager.hasSystemFeature(
+                PackageManager.FEATURE_SCREEN_PORTRAIT
+            ) &&
+            !packageManager.hasSystemFeature(
+                PackageManager.FEATURE_AUTOMOTIVE
+            )
+        ) {
+            requestedOrientation =
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
 
         window.addFlags(
             WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
@@ -613,7 +638,7 @@ class PlayerActivity : ComponentActivity() {
                                         hideError()
 
                                         exoPlayer.playWhenReady =
-                                            true
+                                            parkedPolicy.mayAutoPlay()
 
                                         updatePlayPauseIcon()
                                     }
@@ -623,7 +648,10 @@ class PlayerActivity : ComponentActivity() {
                                         isInitializing =
                                             false
 
-                                        if (isVideo) {
+                                        if (
+                                            isVideo &&
+                                            parkedPolicy.mayAutoPlay()
+                                        ) {
 
                                             exoPlayer.seekTo(
                                                 0
@@ -680,7 +708,7 @@ class PlayerActivity : ComponentActivity() {
                     exoPlayer.prepare()
 
                     exoPlayer.playWhenReady =
-                        true
+                        parkedPolicy.mayAutoPlay()
                 }
     }
 
@@ -814,7 +842,26 @@ class PlayerActivity : ComponentActivity() {
 
         super.onStart()
 
+        /*
+         * onStop oynatıcıyı bırakır; geri dönüldüğünde (ör. araç
+         * yeniden park edildiğinde) yayını yeniden hazırla.
+         */
         if (
+            player == null &&
+            isReleased &&
+            streamUrl.isNotBlank()
+        ) {
+
+            initializePlayer()
+        }
+    }
+
+    override fun onResume() {
+
+        super.onResume()
+
+        if (
+            parkedPolicy.onVisible() &&
             player != null &&
             !isReleased
         ) {
@@ -822,6 +869,21 @@ class PlayerActivity : ComponentActivity() {
             player?.playWhenReady =
                 true
         }
+    }
+
+    override fun onPause() {
+
+        val wasPlaying =
+            player?.isPlaying == true ||
+                player?.playWhenReady == true
+
+        if (parkedPolicy.onHidden(wasPlaying)) {
+
+            player?.playWhenReady =
+                false
+        }
+
+        super.onPause()
     }
 
     override fun onStop() {

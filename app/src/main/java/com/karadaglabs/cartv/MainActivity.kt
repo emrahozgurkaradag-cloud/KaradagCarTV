@@ -72,7 +72,6 @@ private class ApiException(
 @androidx.annotation.OptIn(
     markerClass = [androidx.media3.common.util.UnstableApi::class]
 )
-@UnstableApi
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -585,6 +584,11 @@ class MainActivity : ComponentActivity() {
 
             }.getOrDefault(0)
 
+        val webAllowed =
+            CarScreen.allowsWebFeatures(
+                CarScreen.isCarScreen(context)
+            )
+
         val menu =
             buildList {
 
@@ -604,14 +608,14 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (features.youtube) {
+                if (features.youtube && webAllowed) {
                     add(
                         "▶ YouTube" to
                                 "YouTube"
                     )
                 }
 
-                if (features.googleSearch) {
+                if (features.googleSearch && webAllowed) {
                     add(
                         "🔎 Google Arama" to
                                 "Web"

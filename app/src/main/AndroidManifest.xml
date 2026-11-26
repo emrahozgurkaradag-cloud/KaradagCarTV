@@ -13,39 +13,37 @@
         android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-
-    <uses-permission
-        android:name="androidx.car.app.ACCESS_SURFACE" />
-
-    <uses-permission
-        android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
-
-    <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-permission
         android:name="android.permission.WAKE_LOCK" />
 
     <!--
-        Android 11+ package visibility: uygulama Android Auto host
-        paketini görebilir. Host'un bu uygulamayı keşfetmesi exported
-        servisler + automotive_app_desc üzerinden olur.
+        Google Play (Android Auto / Android Automotive OS) dağıtımı:
+        Telefon zorunlu donanımı yoktur; aynı APK, Google built-in
+        (Android Automotive OS) araçlarda da kurulabilir. Bu özellikler
+        "required=false" olmalıdır (car-app-quality DO-1).
     -->
-    <queries>
-        <package android:name="com.google.android.projection.gearhead" />
-        <package android:name="com.google.android.gms" />
-        <intent>
-            <action android:name="androidx.car.app.CarAppService" />
-        </intent>
-        <intent>
-            <action android:name="android.media.browse.MediaBrowserService" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.MAIN" />
-            <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
-        </intent>
-    </queries>
+    <uses-feature
+        android:name="android.hardware.type.automotive"
+        android:required="false" />
+
+    <uses-feature
+        android:name="android.hardware.wifi"
+        android:required="false" />
+
+    <uses-feature
+        android:name="android.hardware.screen.portrait"
+        android:required="false" />
+
+    <uses-feature
+        android:name="android.hardware.screen.landscape"
+        android:required="false" />
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
 
     <application
         android:allowBackup="true"
@@ -56,6 +54,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.KaradagCarTV"
+        android:appCategory="video"
         android:hardwareAccelerated="true"
         android:usesCleartextTraffic="true">
 
@@ -64,18 +63,17 @@
             android:resource="@xml/automotive_app_desc" />
 
         <!--
-            Android Auto (androidx.car.app / Car App Library) host,
-            CarAppService.onBind() sırasında bu değeri manifest'te
-            bulamazsa "Min API level not declared in manifest"
-            hatasıyla bağlanmayı reddediyor ve CarMirrorService
-            (Mirror / MediaProjection ekranı) hiç açılmıyordu.
-            Kullanılan tüm Car App Library API'leri (NavigationTemplate,
-            ActionStrip, SurfaceCallback) seviye 1'de mevcut olduğu için
-            en geniş uyumluluk için 1 olarak bırakıldı.
+            Google'ın park hâlinde video kategorisi (Android Automotive
+            OS'ta genel, Android Auto'da beta / erken erişim).
+            android:appCategory="video" yukarıda <application> üzerinde.
+            Video uygulamaları "distractionOptimized" meta-data'sı
+            TAŞIMAZ; sürüşe geçildiğinde sistem aktiviteyi örter ve
+            onPause/onStop çağırır, PlayerActivity videoyu durdurur.
+            Uyumluluk modunda (display compatibility) çalışmaya izin ver:
         -->
         <meta-data
-            android:name="androidx.car.app.minCarApiLevel"
-            android:value="1" />
+            android:name="android.software.car.display_compatibility"
+            android:value="true" />
 
         <meta-data
             android:name="com.google.android.gms.car.notification.SmallIcon"
@@ -89,7 +87,7 @@
             android:name=".RegistrationActivity"
             android:exported="true"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:label="Karadag Car TV"
             android:theme="@style/Theme.KaradagCarTV"
             android:windowSoftInputMode="adjustResize">
@@ -113,7 +111,7 @@
             android:name=".MainActivity"
             android:exported="false"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:label="Karadag Car TV"
             android:theme="@style/Theme.KaradagCarTV"
             android:windowSoftInputMode="adjustResize" />
@@ -121,33 +119,22 @@
         <activity
             android:name=".PlayerActivity"
             android:exported="false"
-            android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".YouTubeActivity"
             android:exported="false"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".IptvActivity"
             android:exported="false"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|density"
             android:windowSoftInputMode="adjustResize" />
-
-        <!-- ====================================================== -->
-        <!-- MEDIAPROJECTION İZİN EKRANI                           -->
-        <!-- ====================================================== -->
-
-        <activity
-            android:name=".MediaProjectionPermissionActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:theme="@style/Theme.KaradagCarTV" />
 
         <!-- ====================================================== -->
         <!-- ANDROID AUTO MEDIA SERVICE                             -->
@@ -173,59 +160,13 @@
 
         </service>
 
-        <!-- ====================================================== -->
-        <!-- ANDROIDX CAR APP SERVICE                               -->
-        <!-- ====================================================== -->
-
-        <service
-            android:name=".CarMirrorService"
-            android:exported="true"
-            android:label="Karadag Car TV">
-
-            <intent-filter>
-
-                <action
-                    android:name="androidx.car.app.CarAppService" />
-
-                <category
-                    android:name="androidx.car.app.category.NAVIGATION" />
-
-            </intent-filter>
-
-        </service>
-
-        <!-- ====================================================== -->
-        <!-- FERMATA TİPİ CAR ACTIVITY SERVICE                     -->
-        <!-- ====================================================== -->
-
-        <service
-            android:name=".CarVideoService"
-            android:exported="true"
-            android:label="Karadag Car TV">
-
-            <intent-filter>
-
-                <action
-                    android:name="android.intent.action.MAIN" />
-
-                <category
-                    android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
-
-                <category
-                    android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM" />
-
-            </intent-filter>
-
-        </service>
-
-        <!-- ====================================================== -->
-        <!-- MEDIAPROJECTION SERVİSİ                                -->
-        <!-- ====================================================== -->
-
-        <service
-            android:name=".MirrorProjectionService"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+        <!--
+            Android Auto ekran yansıtma (MediaProjection), NAVIGATION
+            kategorisi kötüye kullanımı ve aauto.aar CarActivity yolu
+            Google tarafından üçüncü taraf uygulamalara açık değildir.
+            Bunlar yalnızca desteklenmeyen sideloadLegacy yapı türündedir:
+            app/src/sideloadLegacy/AndroidManifest.xml
+        -->
 
     </application>
 
