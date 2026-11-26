@@ -111,7 +111,7 @@ Uygulamanın Android Auto başlatıcısında **görünmesi** ile araç penceresi
 | `INTERNET` | ikisi | IPTV/API | — |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | ikisi | `CarMediaService` arka plan oynatma (Media3) | — |
 | `POST_NOTIFICATIONS` | ikisi | Medya bildirimi (API 33+) | — |
-| `com.google.android.gms.permission.CAR_SPEED` | projection | Hız sensörü; ayrıca Car App Library `addSpeedListener` | [Doğrulandı: bytecode] gms `CarSensorManager.registerListener` `@RequiresPermission(anyOf={ACCESS_FINE_LOCATION, gms CAR_SPEED, android.car CAR_SPEED, …MILEAGE, …FUEL}, conditional=true)`. Koruma seviyesi belgelenmemiş: verilmemişse çalışma anında istenir (`CarPlayerBridge.requestCarPermissions`). Emülatörde tanımlı olup olmadığı CI'da `device-checks.sh` ile raporlanır. |
+| `com.google.android.gms.permission.CAR_SPEED` | projection | Hız sensörü; ayrıca Car App Library `addSpeedListener` | [Doğrulandı: bytecode] gms `CarSensorManager.registerListener` `@RequiresPermission(anyOf={ACCESS_FINE_LOCATION, gms CAR_SPEED, android.car CAR_SPEED, …MILEAGE, …FUEL}, conditional=true)`. [Doğrulandı: emülatör, Google Play hizmetleri] API 29 ve 34'te `sourcePackage=com.google.android.gms`, `prot=dangerous` → çalışma anında izin gerekir; `CarPlayerBridge.requestCarPermissions` (MainActivity) ister. |
 | `FOREGROUND_SERVICE_MEDIA_PROJECTION` | projection | Yansıtma | Android 14+: ön plana yalnızca onaydan sonra (`ACTION_START`) geçilir. |
 | `androidx.car.app.ACCESS_SURFACE`, `NAVIGATION_TEMPLATES` | projection | `CarMirrorService` yüzeyi | — |
 
@@ -148,7 +148,7 @@ Sürüş durumu, vites ve el freni için SDK'da izin listelenmemiştir [Doğrula
 ## 8. Bilinen kısıtlamalar
 
 * Projection yolu Google'ın resmî API'si değildir. Play incelemesinden geçmesi ve Android Auto güncellemelerinde çalışmaya devam etmesi garanti değildir.
-* Android Auto DHU testi CI'da yapılamaz. DHU, telefonda Android Auto uygulamasının (gearhead) "head unit server" modunu gerektirir. gearhead emülatör imajlarında yoktur ve Google hesabıyla Play Store'dan elle kurulmalıdır; `aauto.aar` da sınıflarını oradan yükler. `device-checks.sh` gearhead'in bulunup bulunmadığını raporlar.
+* Android Auto DHU testi CI'da yapılmadı. DHU, telefondaki Android Auto uygulamasının (gearhead) geliştirici ayarlarından elle açılan "head unit server" moduna ve `adb forward tcp:5277` ile masaüstü DHU ikili dosyasına (grafik arayüzlü) bağlanır. [Doğrulandı: CI] `google_apis` emülatör imajlarında (API 29/34) `com.google.android.projection.gearhead` paketi bulunuyor; sürümü `device-checks.sh` ile raporlanır. Ancak geliştirici modu ve head unit server arayüzden açılır, başsız CI'da otomatikleştirilmedi. Bu yüzden bir Android Auto oturumu kurulmadı ve `CarVideoActivity` bir host içinde açılmadı.
 * Bazı araçlar parkta da sürüş kısıtı bildiriyorsa görüntü hiç açılmaz (bilinçli güvenli taraf).
 * DASH desteklenmez. DRM'li yayınlar test edilmedi.
 * Release APK'ları imza secret'ları tanımlanmadıkça imzasızdır ve Play'e yüklenemez.
@@ -166,6 +166,8 @@ Sürüş durumu, vites ve el freni için SDK'da izin listelenmemiştir [Doğrula
 9. `CAR_SPEED` izninin gerçek cihazda verilmesi veya çalışma anında istenmesi.
 
 ## 10. Test altyapısı ve release imzası
+
+**Son CI sonucu:** çalışma 45818671152 (`ed0a44f`), üç iş başarılı. Birim testleri: play 54/54, projection 114/114. Lint: 0 hata (play 68, projection 83 uyarı). Cihaz testleri API 29 ve API 34'te: projection 14/14, play 2/2. Emülatörde iki paket yan yana kuruldu ve açıldı, çökme yok. Release APK'ları imzasız (secret tanımlı değil).
 
 **Yerel ve CI** (`.github/workflows/android.yml`; push, pull request ve manuel tetikleme):
 

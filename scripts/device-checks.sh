@@ -43,7 +43,10 @@ adb shell dumpsys package permission com.google.android.gms.permission.CAR_SPEED
 
 echo "== Android Auto uygulaması (gearhead) cihazda mı"
 if adb shell pm path com.google.android.projection.gearhead | grep -q package:; then
-  echo "gearhead KURULU"
+  echo "gearhead KURULU:"
+  adb shell dumpsys package com.google.android.projection.gearhead | tr -d '\r' | \
+    grep -E "versionName|versionCode|enabled=|installerPackageName|codePath" | head -8
+  echo "(Paketin varlığı bir Android Auto oturumu veya DHU bağlantısı olduğu anlamına gelmez.)"
 else
   echo "gearhead KURULU DEĞİL: aauto.aar CarActivity sınıflarını çalışma anında gearhead'den yükler; bu cihazda Android Auto oturumu ve DHU testi yapılamaz."
 fi
