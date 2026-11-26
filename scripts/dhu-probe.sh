@@ -78,6 +78,20 @@ if [ -n "$found" ]; then
   for k in $(seq 1 10); do adb shell input tap "$1" "$2"; sleep 0.3; done
   sleep 2; shot 05-after-version-taps
   tap 06-devdialog "^(OK|Allow|Tamam|İzin ver)$" && shot 06-devdialog
+  # Geliştirici ayarları -> "Unknown sources" (Play dışı kurulum; AA 4.x/5.x)
+  if tap 07a-overflow "More options|Diğer seçenekler" && tap 07b-devsettings "^Developer settings$|Geliştirici ayarları"; then
+    shot 07b-devsettings
+    us=""
+    for i in 1 2 3 4 5 6 7 8; do
+      dump "07c-scan-$i"
+      if us="$(python3 "$UI" "$OUT/ui-07c-scan-$i.xml" "^Unknown sources$|Bilinmeyen kaynaklar")"; then break; fi
+      us=""; adb shell input swipe $((SW/2)) $((SH*85/100)) $((SW/2)) $((SH*15/100)) 400; sleep 1
+    done
+    if [ -n "$us" ]; then set -- $us; adb shell input tap "$1" "$2"; log "Unknown sources dokunuldu ($1,$2)"; sleep 2; shot 07d-unknown-sources
+      tap 07e-confirm "^(OK|Allow|Tamam)$" && shot 07e-confirm
+    else log "Unknown sources bulunamadı"; dump 07c-last; grep -oE 'text="[^"]{2,60}"' "$OUT/ui-07c-last.xml" | head -40; fi
+    adb shell input keyevent KEYCODE_BACK; sleep 2
+  fi
   tap 07-overflow "More options|Diğer seçenekler" && shot 07-overflow
   if tap 08-hus "Start head unit server|Ana birim sunucusunu başlat|head unit server"; then shot 08-hus
   else dump 08-menu; grep -oE 'text="[^"]{2,60}"' "$OUT/ui-08-menu.xml" | head -20; fi
@@ -102,7 +116,7 @@ adb shell "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -i ':149D'" | hea
 adb forward tcp:5277 tcp:5277
 if [ -x "$DHU" ]; then
   log "== DHU (headless, SDL dummy) 90 sn"
-  ( sleep 20; echo "help"; sleep 20; echo "screenshot $PWD/$OUT/dhu-screen-1.png"; sleep 30; echo "screenshot $PWD/$OUT/dhu-screen-2.png"; sleep 15; echo "quit" ) | \
+  ( sleep 15; echo "help"; sleep 25; echo "screenshot $PWD/$OUT/dhu-screen-1.png"; sleep 40; echo "screenshot $PWD/$OUT/dhu-screen-2.png"; sleep 15; echo "quit" ) | \
     SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy timeout 100 "$DHU" --headless -a 127.0.0.1:5277 \
       -c "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/extras/google/auto/config/default_sensors.ini" > "$OUT/dhu.txt" 2>&1
   grep -v "^ALSA" "$OUT/dhu.txt" | head -120
