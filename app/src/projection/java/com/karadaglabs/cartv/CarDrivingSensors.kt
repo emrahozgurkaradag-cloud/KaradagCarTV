@@ -116,7 +116,19 @@ class CarDrivingSensors(
 
             Log.d(TAG, "CAR SENSORS supported=$supportedSensors drivingStatusSupported=$drivingStatusSupported")
 
+            val speedPermitted =
+                androidx.core.content.ContextCompat.checkSelfPermission(
+                    activity,
+                    CarPlayerBridge.CAR_SPEED_PERMISSION
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
             for (type in WATCHED) {
+                // CAR_SPEED (prot=dangerous) verilmemişse hıza kayıt olunmaz:
+                // hız zorunlu sensör sayılmaz, karar sürüş durumuna dayanır.
+                if (type == DrivingSafetyGate.SENSOR_TYPE_CAR_SPEED && !speedPermitted) {
+                    Log.w(TAG, "CAR SENSOR speed skipped: CAR_SPEED permission not granted")
+                    continue
+                }
                 try {
                     val ok = sensorManager.registerListener(listener, type, SENSOR_RATE_UI)
                     if (ok) {

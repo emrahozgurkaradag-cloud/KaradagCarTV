@@ -66,6 +66,10 @@ class CarVideoPlayerHolderDeviceTest {
         copyTestMedia()
         scenario = ActivityScenario.launch(ComponentActivity::class.java)
         scenario.onActivity { activity ->
+            // Emülatör ekranı testler arasında kararıp yüzeyi düşürmesin.
+            activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            activity.setTurnScreenOn(true)
+            activity.setShowWhenLocked(true)
             surfaceView = SurfaceView(activity)
             activity.setContentView(surfaceView)
         }
@@ -174,10 +178,31 @@ class CarVideoPlayerHolderDeviceTest {
         onMain { surfaceView.visibility = View.GONE }
         waitUntil("surface destroyed") { surfaceView.holder.surface?.isValid != true }
         onMain { assertTrue("audio continues without surface", player.playWhenReady) }
-        onMain { surfaceView.visibility = View.VISIBLE }
+        onMain {
+            surfaceView.visibility = View.VISIBLE
+            surfaceView.requestLayout()
+        }
         waitUntil("surface recreated") { surfaceView.holder.surface?.isValid == true }
         waitUntil("frame on new surface") { firstFrames.get() > before }
         waitUntil("playing after surface recreate") { player.isPlaying }
+    }
+
+    @Test
+    fun replacedSurfaceViewReceivesVideo() {
+        // Araç penceresi yeniden oluşturulunca yeni bir SurfaceView gelir.
+        startChannel(tsChannel, blocked = false)
+        waitUntil("first frame") { firstFrames.get() > 0 }
+        val before = firstFrames.get()
+        lateinit var replacement: SurfaceView
+        scenario.onActivity { activity ->
+            replacement = SurfaceView(activity)
+            activity.setContentView(replacement)
+        }
+        waitUntil("replacement surface valid") { replacement.holder.surface?.isValid == true }
+        onMain { CarVideoPlayerHolder.setCarSurfaceView(replacement) }
+        waitUntil("frame on replacement surface") { firstFrames.get() > before }
+        waitUntil("playing on replacement") { player.isPlaying }
+        onMain { assertTrue(videoSelected() && audioSelected()) }
     }
 
     @Test

@@ -59,6 +59,9 @@ class CarVideoControlsTest {
         assertTrue(holder.contains("LiveRetryPolicy.decide"))
         assertTrue(holder.contains("StreamFormat.mimeTypeFor"))
         assertTrue(activity.contains("MediaController.Builder"))
+        val sensors = source("java/com/karadaglabs/cartv/CarDrivingSensors.kt")
+        assertTrue(sensors.contains("CarPlayerBridge.CAR_SPEED_PERMISSION"))
+        assertTrue(sensors.contains("speed skipped: CAR_SPEED permission not granted"))
         assertFalse(activity.contains("startService(Intent(this, CarMediaService"))
         // Araç bağlantısı koparsa oynatma durur.
         assertTrue(activity.contains("\"car_disconnected\""))

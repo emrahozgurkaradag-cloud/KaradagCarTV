@@ -31,9 +31,14 @@ jobs:
             25
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Varsayılan: yalnızca main önbelleğe yazar. main'de bu iş akışı
+          # hiç çalışmadığından her iş sıfırdan indiriyordu (Foojay eklenti
+          # hatası). Bu geliştirme dalı da önbelleğe yazabilsin.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/android-auto-official-video' }}
 
       - name: Download dependencies
-        run: ./gradlew --no-daemon :app:dependencies --configuration projectionReleaseRuntimeClasspath > /dev/null
+        run: scripts/gradle-retry.sh --no-daemon :app:dependencies --configuration projectionReleaseRuntimeClasspath --quiet
 
       # Release imzası: yalnızca GitHub Actions Secrets.
       #   KARADAG_RELEASE_KEYSTORE_BASE64   (keystore dosyasının base64 hâli)
@@ -62,13 +67,13 @@ jobs:
           fi
 
       - name: Unit tests (play + projection)
-        run: ./gradlew --no-daemon testPlayDebugUnitTest testProjectionDebugUnitTest
+        run: scripts/gradle-retry.sh --no-daemon testPlayDebugUnitTest testProjectionDebugUnitTest
 
       - name: Lint / static analysis (play + projection)
-        run: ./gradlew --no-daemon lintPlayDebug lintProjectionDebug
+        run: scripts/gradle-retry.sh --no-daemon lintPlayDebug lintProjectionDebug
 
       - name: Assemble all APKs
-        run: ./gradlew --no-daemon assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease
+        run: scripts/gradle-retry.sh --no-daemon assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease
 
       - name: Verify APKs (packages, versionCode, conflicts, signing)
         run: scripts/verify-apks.sh
@@ -114,6 +119,11 @@ jobs:
             25
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Varsayılan: yalnızca main önbelleğe yazar. main'de bu iş akışı
+          # hiç çalışmadığından her iş sıfırdan indiriyordu (Foojay eklenti
+          # hatası). Bu geliştirme dalı da önbelleğe yazabilsin.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/android-auto-official-video' }}
 
       - name: Enable KVM
         run: |
@@ -122,7 +132,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Build debug and test APKs
-        run: ./gradlew --no-daemon assemblePlayDebug assembleProjectionDebug assemblePlayDebugAndroidTest assembleProjectionDebugAndroidTest
+        run: scripts/gradle-retry.sh --no-daemon assemblePlayDebug assembleProjectionDebug assemblePlayDebugAndroidTest assembleProjectionDebugAndroidTest
 
       - name: Instrumented tests + device checks
         uses: reactivecircus/android-emulator-runner@v2
@@ -133,7 +143,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim
           script: |
-            ./gradlew --no-daemon connectedPlayDebugAndroidTest connectedProjectionDebugAndroidTest
+            scripts/gradle-retry.sh --no-daemon connectedPlayDebugAndroidTest connectedProjectionDebugAndroidTest
             scripts/device-checks.sh
 
       - uses: actions/upload-artifact@v4
