@@ -84,6 +84,29 @@ class CarVideoPlayerHolderDeviceTest {
             })
             CarVideoPlayerHolder.setPlayer(player)
         }
+        ensureSurface()
+    }
+
+    /**
+     * Emülatör (swiftshader) bazen ilk SurfaceView yüzeyini oluşturmaz
+     * (CI 45856272351, API 34). Yüzey gelmezse SurfaceView yeniden
+     * oluşturulur — araç penceresinin yeniden oluşmasıyla aynı yol.
+     * En çok 3 deneme; yine gelmezse test başarısız olur.
+     */
+    private fun ensureSurface() {
+        repeat(3) { attempt ->
+            try {
+                waitUntil("surface valid (attempt ${attempt + 1})", timeoutMs = 8_000) {
+                    surfaceView.holder.surface?.isValid == true
+                }
+                return
+            } catch (e: AssertionError) {
+                scenario.onActivity { activity ->
+                    surfaceView = SurfaceView(activity)
+                    activity.setContentView(surfaceView)
+                }
+            }
+        }
         waitUntil("surface valid") { surfaceView.holder.surface?.isValid == true }
     }
 
