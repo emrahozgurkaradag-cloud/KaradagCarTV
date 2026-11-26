@@ -85,4 +85,22 @@ for flavor in play projection; do
   fi
 done
 
+echo "== Release AAB (Google Play yeni uygulamalar için AAB ister)"
+for flavor in play projection; do
+  aab="$(ls app/build/outputs/bundle/${flavor}Release/*.aab 2>/dev/null | head -1)"
+  if [ -z "$aab" ]; then
+    echo "::warning::$flavor release AAB yok (bundle${flavor^}Release çalıştırılmadı?)"
+    continue
+  fi
+  if jarsigner -verify -certs "$aab" >/tmp/aab.txt 2>&1 && grep -q "jar verified" /tmp/aab.txt; then
+    if grep -q "CN=Android Debug" /tmp/aab.txt; then
+      err "$flavor AAB DEBUG anahtarıyla imzalı"
+    else
+      note "$flavor AAB imzalı (upload key): $(basename "$aab")"
+    fi
+  else
+    echo "::warning::$flavor AAB İMZASIZ ($(basename "$aab")). Play Console'a yüklemek için upload key ile imzalanmalı."
+  fi
+done
+
 exit $fail

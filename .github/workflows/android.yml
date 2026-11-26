@@ -72,8 +72,8 @@ jobs:
       - name: Lint / static analysis (play + projection)
         run: scripts/gradle-retry.sh --no-daemon lintPlayDebug lintProjectionDebug
 
-      - name: Assemble all APKs
-        run: scripts/gradle-retry.sh --no-daemon assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease
+      - name: Assemble all APKs and release bundles (AAB, Play requires AAB)
+        run: scripts/gradle-retry.sh --no-daemon assemblePlayDebug assemblePlayRelease assembleProjectionDebug assembleProjectionRelease bundlePlayRelease bundleProjectionRelease
 
       - name: Verify APKs (packages, versionCode, conflicts, signing)
         run: scripts/verify-apks.sh
@@ -87,6 +87,13 @@ jobs:
         with:
           name: apks
           path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-bundles
+          path: app/build/outputs/bundle/**/*.aab
           if-no-files-found: warn
 
       - uses: actions/upload-artifact@v4
