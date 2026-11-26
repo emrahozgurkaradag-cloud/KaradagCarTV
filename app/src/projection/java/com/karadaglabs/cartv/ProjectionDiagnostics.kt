@@ -56,6 +56,18 @@ object ProjectionDiagnostics {
             surfaceHeight = view.height
         )
         last = info
+        ProjectionDiag.event(
+            "DISPLAY",
+            "when" to event,
+            "displayId" to info.displayId,
+            "name" to info.name,
+            "size" to "${info.width}x${info.height}",
+            "dpi" to info.densityDpi,
+            "flags" to "0x${Integer.toHexString(info.flags)}",
+            "presentation" to info.isPresentationDisplay,
+            "phoneDisplay" to info.isDefaultDisplay,
+            "surfaceView" to "${info.surfaceWidth}x${info.surfaceHeight}"
+        )
         Log.i(
             TAG,
             "$event: displayId=${info.displayId} name='${info.name}' " +

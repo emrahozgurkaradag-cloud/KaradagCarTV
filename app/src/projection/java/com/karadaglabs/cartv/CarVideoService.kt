@@ -63,6 +63,8 @@ class CarVideoService : CarActivityService() {
 
     override fun onCreate() {
         Log.d(TAG, "CAR VIDEO SERVICE ON CREATE")
+        ProjectionDiag.init(this)
+        ProjectionDiag.event("SERVICE_CREATE", "service" to "CarVideoService")
 
         hostReady = try {
             super.onCreate()
@@ -71,8 +73,10 @@ class CarVideoService : CarActivityService() {
         } catch (throwable: Throwable) {
             val root = generateSequence(throwable) { it.cause }.last()
             Log.e(TAG, "CAR VIDEO SERVICE HOST LOAD FAILED: ${root.javaClass.name}: ${root.message}", throwable)
+            ProjectionDiag.error("HOST_LOAD", throwable, "ok" to false)
             false
         }
+        if (hostReady) ProjectionDiag.event("HOST_LOAD", "ok" to true, "proxy" to "DynamicApiFactory.newCarActivityServiceProxy")
 
         lastHostLoad = HostLoadResult(
             ok = hostReady,
@@ -84,6 +88,8 @@ class CarVideoService : CarActivityService() {
     override fun onBind(intent: Intent?): IBinder? {
         bindCount++
         Log.d(TAG, "CAR VIDEO SERVICE ON BIND action=${intent?.action} categories=${intent?.categories}")
+        ProjectionDiag.event("SERVICE_BIND", "action" to intent?.action, "categories" to intent?.categories,
+            "hostReady" to hostReady, "bindCount" to bindCount)
 
         if (!hostReady) {
             Log.e(TAG, "CAR VIDEO SERVICE BIND REFUSED: Android Auto proxy not loaded")
@@ -93,6 +99,7 @@ class CarVideoService : CarActivityService() {
         return try {
             val binder = super.onBind(intent)
             Log.d(TAG, "CAR VIDEO SERVICE HOST BIND ${if (binder == null) "FAILED binder=null" else "OK"}")
+            ProjectionDiag.event("BINDER", "ok" to (binder != null), "class" to binder?.javaClass?.name)
             binder
         } catch (throwable: Throwable) {
             Log.e(TAG, "CAR VIDEO SERVICE HOST BIND FAILED", throwable)
@@ -102,11 +109,13 @@ class CarVideoService : CarActivityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         Log.d(TAG, "CAR VIDEO SERVICE ON UNBIND")
+        ProjectionDiag.event("SERVICE_UNBIND")
         return if (hostReady) super.onUnbind(intent) else false
     }
 
     override fun onDestroy() {
         Log.d(TAG, "CAR VIDEO SERVICE ON DESTROY")
+        ProjectionDiag.event("SERVICE_DESTROY")
         if (hostReady) {
             try {
                 super.onDestroy()

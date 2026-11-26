@@ -77,6 +77,7 @@ object CarVideoPlayerHolder {
 
     private fun handlePlayerError(error: PlaybackException) {
         lastErrorCode = error.errorCode
+        ProjectionDiag.event("PLAYBACK_ERROR", "code" to error.errorCodeName, "message" to error.message)
         val exoPlayer = player ?: return
 
         when (val action = LiveRetryPolicy.decide(error.errorCode, retryAttempts)) {
@@ -117,6 +118,14 @@ object CarVideoPlayerHolder {
             override fun onVideoSizeChanged(
                 videoSize: VideoSize
             ) {
+                ProjectionDiag.event(
+                    "VIDEO_FORMAT",
+                    "size" to "${videoSize.width}x${videoSize.height}",
+                    "mime" to player?.videoFormat?.sampleMimeType,
+                    "codecs" to player?.videoFormat?.codecs,
+                    "frameRate" to player?.videoFormat?.frameRate,
+                    "item" to player?.currentMediaItem?.mediaId
+                )
 
                 Log.d(
                     TAG,
@@ -132,6 +141,16 @@ object CarVideoPlayerHolder {
             override fun onPlaybackStateChanged(
                 playbackState: Int
             ) {
+                ProjectionDiag.event(
+                    "PLAYBACK",
+                    "state" to when (playbackState) {
+                        Player.STATE_IDLE -> "IDLE"; Player.STATE_BUFFERING -> "BUFFERING"
+                        Player.STATE_READY -> "READY"; Player.STATE_ENDED -> "ENDED"; else -> playbackState
+                    },
+                    "playWhenReady" to player?.playWhenReady,
+                    "videoBlocked" to videoBlocked,
+                    "item" to player?.currentMediaItem?.mediaId
+                )
 
                 if (playbackState == Player.STATE_READY) {
                     retryAttempts = 0
@@ -335,6 +354,7 @@ object CarVideoPlayerHolder {
                 unhookCarSurfaceCallback()
 
                 player?.clearVideoSurface()
+                ProjectionDiag.event("PLAYER_SURFACE_CLEARED")
 
                 carSurfaceView = null
             }
@@ -516,6 +536,12 @@ object CarVideoPlayerHolder {
         if (surface != null && surface.isValid) {
 
             exoPlayer.setVideoSurfaceHolder(holder)
+            ProjectionDiag.event(
+                "PLAYER_SURFACE_BOUND",
+                "view" to "${surfaceView.width}x${surfaceView.height}",
+                "display" to surfaceView.display?.displayId,
+                "api" to "ExoPlayer.setVideoSurfaceHolder"
+            )
 
             Log.d(
                 TAG,

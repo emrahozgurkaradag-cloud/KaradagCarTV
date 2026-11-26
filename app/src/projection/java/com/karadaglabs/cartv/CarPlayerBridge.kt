@@ -44,7 +44,16 @@ object CarPlayerBridge {
     const val CAR_SPEED_PERMISSION = "com.google.android.gms.permission.CAR_SPEED"
     private const val REQUEST_CODE = 4107
 
+    val hasCarDiagnostics: Boolean = true
+
+    fun carDiagnosticsText(context: android.content.Context): String {
+        ProjectionDiag.init(context)
+        ProjectionDiag.logAndroidAuto(context)
+        return ProjectionDiag.readAll(context)
+    }
+
     fun requestCarPermissions(activity: Activity) {
+        ProjectionDiag.init(activity)
         if (
             ContextCompat.checkSelfPermission(activity, CAR_SPEED_PERMISSION) !=
             PackageManager.PERMISSION_GRANTED

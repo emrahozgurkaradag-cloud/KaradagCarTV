@@ -627,6 +627,14 @@ class MainActivity : ComponentActivity() {
                                 "Web"
                     )
                 }
+
+                // projection: gerçek araç denemesinin kaydı (adb gerekmez).
+                if (CarPlayerBridge.hasCarDiagnostics) {
+                    add(
+                        "🛠 Araç teşhis kaydı" to
+                                "Paylaş"
+                    )
+                }
             }
 
         Column(
@@ -766,6 +774,23 @@ class MainActivity : ComponentActivity() {
                                             Intent(
                                                 context,
                                                 YouTubeActivity::class.java
+                                            )
+                                        )
+                                    }
+
+                                    "🛠 Araç teşhis kaydı" -> {
+
+                                        val text =
+                                            CarPlayerBridge.carDiagnosticsText(context)
+                                                .ifBlank { "Henüz kayıt yok." }
+
+                                        context.startActivity(
+                                            Intent.createChooser(
+                                                Intent(Intent.ACTION_SEND)
+                                                    .setType("text/plain")
+                                                    .putExtra(Intent.EXTRA_SUBJECT, "KaradagCarTV araç teşhis kaydı")
+                                                    .putExtra(Intent.EXTRA_TEXT, text),
+                                                "Teşhis kaydını paylaş"
                                             )
                                         )
                                     }

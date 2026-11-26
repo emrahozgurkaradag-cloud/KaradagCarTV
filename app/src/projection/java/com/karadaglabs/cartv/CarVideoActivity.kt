@@ -80,6 +80,9 @@ class CarVideoActivity : CarActivity() {
         super.onCreate(savedInstanceState)
 
         Log.d(TAG, "CAR VIDEO ACTIVITY AÇILDI")
+        ProjectionDiag.init(this)
+        ProjectionDiag.event("ACTIVITY_CREATE", "activity" to "CarVideoActivity")
+        logHostWindow()
 
         destination = ProjectionDestination.fromExtra(
             intent?.getStringExtra(ProjectionDestination.EXTRA)
@@ -161,11 +164,13 @@ class CarVideoActivity : CarActivity() {
 
     override fun onStart() {
         super.onStart()
+        ProjectionDiag.event("ACTIVITY_START")
         drivingSensors?.start()
         bindIfPlaying()
     }
 
     override fun onStop() {
+        ProjectionDiag.event("ACTIVITY_STOP", "note" to "host window hidden or car disconnected")
         /*
          * Bağlantı kesildi / pencere gizlendi: sensör yok sayılır,
          * görüntü kilitlenir, oynatma durur (telefonda kendi kendine
@@ -180,11 +185,13 @@ class CarVideoActivity : CarActivity() {
 
     override fun onResume() {
         super.onResume()
+        ProjectionDiag.event("ACTIVITY_RESUME")
         applyVideoFocus(request = true)
         bindIfPlaying()
     }
 
     override fun onPause() {
+        ProjectionDiag.event("ACTIVITY_PAUSE")
         applyVideoFocus(request = false)
         super.onPause()
     }
@@ -226,6 +233,7 @@ class CarVideoActivity : CarActivity() {
     }
 
     override fun onDestroy() {
+        ProjectionDiag.event("ACTIVITY_DESTROY")
         destroyed = true
         disconnectMediaService()
         mainHandler.removeCallbacks(hideControlsRunnable)
@@ -472,6 +480,13 @@ class CarVideoActivity : CarActivity() {
             return
         }
         Log.d(TAG, "PARK GATE videoAllowed=${decision.videoAllowed} reason=${decision.reason}")
+        ProjectionDiag.event(
+            "PARK_GATE",
+            "videoAllowed" to decision.videoAllowed,
+            "reason" to decision.reason,
+            "sensors" to drivingSensors?.supportedSensors,
+            "carConnected" to drivingSensors?.carConnected
+        )
 
         /*
          * Araç bağlantısı koptuysa (sensör yöneticisi CarNotConnected):
@@ -482,8 +497,33 @@ class CarVideoActivity : CarActivity() {
             previous.reason !in setOf("not_started", "stopped", "car_disconnected")
         ) {
             userPaused = true
+            ProjectionDiag.event("CAR_DISCONNECTED", "action" to "playback paused")
         }
         applyState()
+    }
+
+    /**
+     * Pencere host'tan mı geliyor? aauto CarActivity.getWindow() yok;
+     * gms.car.c.c() = CarActivityHost.getWindow(). Host nesnesinin sınıfı
+     * (ör. com.google.android.gms.car.internal.CarActivityHostImpl) ve
+     * pencerenin sınıfı kaydedilir.
+     */
+    private fun logHostWindow() {
+        val host = try {
+            val field = com.google.android.gms.car.c::class.java.getDeclaredField("a")
+            field.isAccessible = true
+            field.get(this)
+        } catch (t: Throwable) {
+            null
+        }
+        val window = try { c() } catch (t: Throwable) { null }
+        ProjectionDiag.event(
+            "WINDOW",
+            "hostClass" to host?.javaClass?.name,
+            "windowClass" to window?.javaClass?.name,
+            "decorDisplay" to window?.decorView?.display?.displayId,
+            "windowContext" to window?.context?.javaClass?.name
+        )
     }
 
     private fun onVideoTapped() {
@@ -770,6 +810,7 @@ class CarVideoActivity : CarActivity() {
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
             Log.d(TAG, "CAR VIDEO SURFACE DESTROYED")
+            ProjectionDiag.event("SURFACE_DESTROYED")
             state = state.copy(surfaceReady = false)
             surfaceView?.let { view ->
                 CarVideoPlayerHolder.clearCarSurfaceView(view)

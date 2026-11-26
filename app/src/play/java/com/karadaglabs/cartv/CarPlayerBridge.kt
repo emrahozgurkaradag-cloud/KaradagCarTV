@@ -23,4 +23,9 @@ object CarPlayerBridge {
 
     /** play: araç sensör izni gerekmez. */
     fun requestCarPermissions(activity: Activity) = Unit
+
+    /** play: projection teşhis kaydı yok. */
+    val hasCarDiagnostics: Boolean = false
+
+    fun carDiagnosticsText(context: android.content.Context): String = ""
 }
