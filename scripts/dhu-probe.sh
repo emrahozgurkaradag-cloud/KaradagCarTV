@@ -57,6 +57,8 @@ tap() { # tap <step> <regex>
   set -- "$1" "$2" $r; adb shell input tap "$3" "$4"; log "tap '$2' -> $5 $6 $7 ($3,$4)"; sleep 2; return 0
 }
 adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
+read SW SH < <(adb shell wm size | tr -d '\r' | grep -oE '[0-9]+x[0-9]+' | tail -1 | tr 'x' ' ')
+log "ekran ${SW}x${SH}"
 adb shell am start -n $GH/.companion.settings.DefaultSettingsActivity >/dev/null 2>&1; sleep 6; shot 01-settings
 # İlk kurulum / izin / kabul ekranları (birkaç tur)
 for i in 1 2 3 4 5; do
@@ -66,10 +68,10 @@ done
 dump 03-settings; grep -oE 'text="[^"]{2,60}"' "$OUT/ui-03-settings.xml" | head -30
 # Sürüm satırını bul (kaydırarak) ve 10 kez dokun
 found=""
-for i in 1 2 3 4 5 6; do
+for i in 1 2 3 4 5 6 7 8 9 10; do
   dump "04-scan-$i"
   if r="$(python3 "$UI" "$OUT/ui-04-scan-$i.xml" "^Version|^Sürüm|^Version [0-9]")"; then found="$r"; break; fi
-  adb shell input swipe 500 1500 500 400 300; sleep 1
+  adb shell input swipe $((SW/2)) $((SH*85/100)) $((SW/2)) $((SH*15/100)) 400; sleep 1
 done
 if [ -n "$found" ]; then
   set -- $found; log "Sürüm satırı: $3 $4 ($1,$2)"
