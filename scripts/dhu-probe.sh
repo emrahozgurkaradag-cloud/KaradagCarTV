@@ -194,6 +194,19 @@ else
   log "DHU yok"
 fi
 
+log "== Oturum sonrası tercih anahtarları (FRX / güncellik / kurulum)"
+for pkg in $GH com.google.android.gms; do
+  for f in $(adb shell ls /data/data/$pkg/shared_prefs 2>/dev/null | tr -d '\r' | grep -iE "car|gearhead|frx|setup|projection|common|default|phenotype" ); do
+    safe="$(echo "$pkg-$f" | tr ':/' '__')"
+    adb shell cat "/data/data/$pkg/shared_prefs/$f" 2>/dev/null | tr -d '\r' > "$OUT/after-$safe"
+  done
+done
+grep -ihoE '<[a-z]+ name="[^"]*(frx|setup|up_?to_?date|uptodate|cakewalk|preinstall|update|allowed|car_)[^"]*"[^>]*>?[^<]{0,40}' "$OUT"/after-* 2>/dev/null | sort -u | head -60
+log "== GMS araç ayar ekranı (CarServiceSettingsActivity2)"
+adb shell am start -n com.google.android.gms/.car.CarServiceSettingsActivity2 >/dev/null 2>&1; sleep 4
+shot gms-car-settings; dump gms-car-settings
+grep -oE 'text="[^"]{2,70}"' "$OUT/ui-gms-car-settings.xml" | head -30
+
 log "== logcat (gearhead / Karadag / projection)"
 adb logcat -d -v time > "$OUT/logcat.txt"
 grep -iE "KaradagCar|KaradagProjection|CarVideoService" "$OUT/logcat.txt" | head -60
