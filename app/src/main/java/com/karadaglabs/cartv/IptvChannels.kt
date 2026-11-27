@@ -33,6 +33,9 @@ object IptvChannels {
             item.optString("logo_url", "")
         )
         val category = item.optString("category", "").trim()
+        val isFeatured = parseBool(item.opt("is_featured") ?: item.opt("isFeatured"))
+        val sortOrder = (item.opt("sort_order") ?: item.opt("sortOrder"))
+            ?.toString()?.trim()?.toIntOrNull() ?: Int.MAX_VALUE
 
         if (id < 0 || name.isBlank() || streamUrl.isBlank()) {
             return null
@@ -43,7 +46,9 @@ object IptvChannels {
             name = name,
             streamUrl = streamUrl,
             logoUrl = logoUrl.takeIf { it.isNotBlank() },
-            category = category.takeIf { it.isNotBlank() }
+            category = category.takeIf { it.isNotBlank() },
+            isFeatured = isFeatured,
+            sortOrder = sortOrder
         )
     }
 
@@ -58,11 +63,21 @@ object IptvChannels {
                     put("stream_url", channel.streamUrl)
                     put("logo_url", channel.logoUrl ?: "")
                     put("category", channel.category ?: "")
+                    put("is_featured", channel.isFeatured)
+                    if (channel.sortOrder != Int.MAX_VALUE) put("sort_order", channel.sortOrder)
                 }
             )
         }
 
         return array
+    }
+
+    /** API `true`/`1`/`"1"`/`"true"` döndürebilir (MySQL tinyint). */
+    fun parseBool(value: Any?): Boolean = when (value) {
+        is Boolean -> value
+        is Number -> value.toInt() != 0
+        is String -> value.trim().lowercase() in setOf("1", "true", "yes")
+        else -> false
     }
 
     fun firstNonBlank(vararg values: String): String {

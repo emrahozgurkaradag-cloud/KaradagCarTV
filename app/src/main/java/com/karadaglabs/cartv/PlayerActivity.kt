@@ -146,6 +146,12 @@ class PlayerActivity : ComponentActivity() {
                 R.id.playPauseButton
             )
 
+        // Turuncu düğme üzerinde antrasit simge (XML tint ComponentActivity'de uygulanmaz).
+        playPauseButton.imageTintList =
+            android.content.res.ColorStateList.valueOf(
+                getColor(R.color.ok_anthracite)
+            )
+
         forwardButton =
             findViewById(
                 R.id.forwardButton
@@ -425,7 +431,7 @@ class PlayerActivity : ComponentActivity() {
         ) {
 
             playPauseButton.setImageResource(
-                android.R.drawable.ic_media_pause
+                R.drawable.ic_ok_pause
             )
 
             playPauseButton.contentDescription =
@@ -434,7 +440,7 @@ class PlayerActivity : ComponentActivity() {
         } else {
 
             playPauseButton.setImageResource(
-                android.R.drawable.ic_media_play
+                R.drawable.ic_ok_play
             )
 
             playPauseButton.contentDescription =
@@ -792,9 +798,27 @@ class PlayerActivity : ComponentActivity() {
                 "$prefix\n\nSes/video çözümleme hatası."
             }
 
+            PlaybackException
+                .ERROR_CODE_BEHIND_LIVE_WINDOW -> {
+
+                "$prefix\n\nCanlı yayının gerisinde kalındı. Yeniden deneyin."
+            }
+
+            PlaybackException
+                .ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+            PlaybackException
+                .ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+            PlaybackException
+                .ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+            PlaybackException
+                .ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> {
+
+                "$prefix\n\nYayın biçimi okunamadı (kaynak bozuk veya desteklenmiyor)."
+            }
+
             else -> {
 
-                "$prefix\n\n${error.errorCodeName}"
+                "$prefix\n\nYayın şu anda açılamıyor; biraz sonra yeniden deneyin.\n(${error.errorCodeName})"
             }
         }
     }

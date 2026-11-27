@@ -5,9 +5,10 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,27 +17,49 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.karadaglabs.cartv.ui.OkBanner
+import com.karadaglabs.cartv.ui.OkChannelCard
+import com.karadaglabs.cartv.ui.OkChannelPoster
+import com.karadaglabs.cartv.ui.OkChip
+import com.karadaglabs.cartv.ui.OkFeatureTile
+import com.karadaglabs.cartv.ui.OkIconButton
+import com.karadaglabs.cartv.ui.OkLogoMark
+import com.karadaglabs.cartv.ui.OkMetrics
+import com.karadaglabs.cartv.ui.OkPrimaryButton
+import com.karadaglabs.cartv.ui.OkSearchField
+import com.karadaglabs.cartv.ui.OkSectionTitle
+import com.karadaglabs.cartv.ui.OkStateMessage
+import com.karadaglabs.cartv.ui.OkTopBar
+import com.karadaglabs.cartv.ui.OkWordmark
+import com.karadaglabs.cartv.ui.rememberOkMetrics
 import com.karadaglabs.cartv.ui.theme.KaradagCarTVTheme
+import com.karadaglabs.cartv.ui.theme.OkColors
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -44,7 +67,6 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.media3.common.util.UnstableApi
 
 private data class CarContent(
     val id: Int,
@@ -69,10 +91,20 @@ private class ApiException(
     override val message: String
 ) : Exception(message)
 
+private enum class HomePage { HOME, RADIO, SETTINGS }
+
 @androidx.annotation.OptIn(
     markerClass = [androidx.media3.common.util.UnstableApi::class]
 )
 class MainActivity : ComponentActivity() {
+
+    private companion object {
+        const val KEY_FEATURES = "license_features_cache"
+        const val KEY_CUSTOMER = "license_customer_name"
+        const val KEY_DEVICE = "license_device_name"
+    }
+
+    private var resumeCount by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,24 +126,45 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             KaradagCarTVTheme {
-                CarTvApp()
+                Box(Modifier.fillMaxSize().background(OkColors.Anthracite)) {
+                    CarTvApp()
+                }
             }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        resumeCount++
+    }
+
+    /**
+     * Ana ekran önbellekten ANINDA çizilir (lisans özellikleri, içerikler,
+     * kanallar); lisans doğrulama + içerik + IPTV arka planda yenilenir.
+     * Lisans hatası kodlarında kayıt ekranına dönülür (lisans denetimi aynen).
+     */
     @Composable
     private fun CarTvApp() {
         val context = LocalContext.current
+        val prefs = remember { AppSession.prefs(context) }
 
-        var loading by remember { mutableStateOf(true) }
+        val cachedFeatures = remember {
+            prefs.getString(KEY_FEATURES, null)?.let { raw ->
+                runCatching { featuresFromJson(JSONObject(raw)) }.getOrNull()
+            }
+        }
+
         var refreshing by remember { mutableStateOf(false) }
+        var licenseChecked by remember { mutableStateOf(cachedFeatures != null) }
         var errorMessage by remember { mutableStateOf("") }
-        var customerName by remember { mutableStateOf("") }
-        var deviceName by remember { mutableStateOf("") }
-        var contents by remember { mutableStateOf(emptyList<CarContent>()) }
-        var features by remember { mutableStateOf(LicenseFeatures()) }
-        var selectedType by remember { mutableStateOf<String?>(null) }
-        var lastUpdate by remember { mutableStateOf("") }
+        var offline by remember { mutableStateOf(false) }
+        var customerName by remember { mutableStateOf(prefs.getString(KEY_CUSTOMER, "").orEmpty()) }
+        var deviceName by remember { mutableStateOf(prefs.getString(KEY_DEVICE, "").orEmpty()) }
+        var contents by remember { mutableStateOf(loadContentsCache(context)) }
+        var features by remember { mutableStateOf(cachedFeatures ?: LicenseFeatures()) }
+        var channels by remember { mutableStateOf(IptvRepository.loadCached(context)) }
+        var page by remember { mutableStateOf(HomePage.HOME) }
+        var lastUpdate by remember { mutableStateOf(prefs.getString("last_update", "").orEmpty()) }
 
         fun refresh() {
             if (refreshing) return
@@ -133,9 +186,8 @@ class MainActivity : ComponentActivity() {
                     val customer = licenseResponse.optJSONObject("customer")
                     val device = licenseResponse.optJSONObject("device")
 
-                    val loadedFeatures = featuresFromJson(
-                        license?.optJSONObject("features")
-                    )
+                    val featuresJson = license?.optJSONObject("features")
+                    val loadedFeatures = featuresFromJson(featuresJson)
 
                     val contentResponse = postJson(
                         "/api/content",
@@ -155,20 +207,29 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    val name = customer?.optString("name").orEmpty()
+                    val device2 = device?.optString("name").orEmpty()
+                    prefs.edit()
+                        .putString(KEY_FEATURES, (featuresJson ?: JSONObject()).toString())
+                        .putString(KEY_CUSTOMER, name)
+                        .putString(KEY_DEVICE, device2)
+                        .apply()
+
                     runOnUiThread {
-                        customerName = customer?.optString("name").orEmpty()
-                        deviceName = device?.optString("name").orEmpty()
+                        customerName = name
+                        deviceName = device2
                         features = loadedFeatures
+                        licenseChecked = true
                         contents = loadedContents
+                        channels = IptvRepository.loadCached(context)
                         lastUpdate = saveContentsCache(context, loadedContents)
-                        loading = false
+                        offline = false
                         refreshing = false
                     }
 
                 } catch (exception: ApiException) {
 
                     runOnUiThread {
-                        loading = false
                         refreshing = false
 
                         if (
@@ -180,6 +241,7 @@ class MainActivity : ComponentActivity() {
                             )
                         ) {
                             AppSession.clearLicense(context)
+                            prefs.edit().remove(KEY_FEATURES).apply()
                             startActivity(
                                 Intent(
                                     this,
@@ -189,25 +251,15 @@ class MainActivity : ComponentActivity() {
                             finish()
                         } else {
                             errorMessage = exception.message
-
-                            if (contents.isEmpty()) {
-                                contents = loadContentsCache(context)
-                            }
                         }
                     }
 
                 } catch (exception: Exception) {
 
                     runOnUiThread {
-                        loading = false
                         refreshing = false
-
-                        errorMessage = exception.message
-                            ?: "Sunucuya bağlanırken hata oluştu."
-
-                        if (contents.isEmpty()) {
-                            contents = loadContentsCache(context)
-                        }
+                        offline = NetworkErrors.isOffline(exception)
+                        errorMessage = NetworkErrors.describe(exception)
                     }
                 }
             }.start()
@@ -217,40 +269,36 @@ class MainActivity : ComponentActivity() {
             refresh()
         }
 
-        when {
-            loading && contents.isEmpty() -> {
-                LoadingScreen()
-            }
+        when (page) {
+            HomePage.RADIO -> RadioScreen(
+                contents = contents.filter { it.type == "radio" },
+                onBack = { page = HomePage.HOME }
+            )
 
-            selectedType != null -> {
-                ContentListScreen(
-                    title = "Canlı Radyo",
-                    contents = contents.filter {
-                        it.type == "radio"
-                    },
-                    onBack = {
-                        selectedType = null
-                    }
-                )
-            }
+            HomePage.SETTINGS -> SettingsScreen(
+                customerName = customerName,
+                deviceName = deviceName,
+                lastUpdate = lastUpdate,
+                channelCount = channels.size,
+                refreshing = refreshing,
+                onRefresh = { refresh() },
+                onBack = { page = HomePage.HOME }
+            )
 
-            else -> {
-                HomeScreen(
-                    customerName = customerName,
-                    deviceName = deviceName,
-                    contents = contents,
-                    features = features,
-                    refreshing = refreshing,
-                    lastUpdate = lastUpdate,
-                    errorMessage = errorMessage,
-                    onRefresh = {
-                        refresh()
-                    },
-                    onCategoryClick = {
-                        selectedType = it
-                    }
-                )
-            }
+            HomePage.HOME -> HomeScreen(
+                customerName = customerName,
+                deviceName = deviceName,
+                contents = contents,
+                channels = channels,
+                features = features,
+                licenseChecked = licenseChecked,
+                refreshing = refreshing,
+                errorMessage = errorMessage,
+                offline = offline,
+                onRefresh = { refresh() },
+                onRadio = { page = HomePage.RADIO },
+                onSettings = { page = HomePage.SETTINGS }
+            )
         }
     }
 
@@ -519,317 +567,270 @@ class MainActivity : ComponentActivity() {
             Locale("tr", "TR")
         ).format(Date())
 
-    @Composable
-    private fun LoadingScreen() {
-
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(32.dp),
-
-            horizontalAlignment =
-                Alignment.CenterHorizontally,
-
-            verticalArrangement =
-                Arrangement.Center
-        ) {
-
-            Text(
-                "KARADAG CAR TV",
-                style =
-                    MaterialTheme.typography.headlineLarge
-            )
-
-            Spacer(
-                Modifier.height(24.dp)
-            )
-
-            CircularProgressIndicator()
-
-            Spacer(
-                Modifier.height(16.dp)
-            )
-
-            Text(
-                "Lisans ve içerikler kontrol ediliyor..."
-            )
-        }
+    private fun openIptv(filter: String? = null, query: String? = null) {
+        startActivity(
+            Intent(this, IptvActivity::class.java).apply {
+                filter?.let { putExtra(IptvActivity.EXTRA_FILTER, it) }
+                query?.let { putExtra(IptvActivity.EXTRA_QUERY, it) }
+            }
+        )
     }
 
+    private fun playChannel(channel: IptvChannel) {
+        ChannelLibraryStore(this).markWatched(channel.id)
+        IptvRepository.saveLastSelectedChannelId(this, channel.id)
+        startActivity(
+            Intent(this, PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_STREAM_URL, channel.streamUrl)
+                putExtra(PlayerActivity.EXTRA_TITLE, channel.name)
+                putExtra(PlayerActivity.EXTRA_MEDIA_TYPE, "iptv")
+            }
+        )
+    }
+
+    private fun openGoogle(query: String?) {
+        val url = if (query.isNullOrBlank()) {
+            "https://www.google.com/"
+        } else {
+            "https://www.google.com/search?q=" + Uri.encode(query)
+        }
+        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }
+
+    private fun shareDiagnostics() {
+        val text = CarPlayerBridge.carDiagnosticsText(this).ifBlank { "Henüz kayıt yok." }
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_SUBJECT, "KaradagCarTV araç teşhis kaydı")
+                    .putExtra(Intent.EXTRA_TEXT, text),
+                "Teşhis kaydını paylaş"
+            )
+        )
+    }
+
+    /**
+     * Medya merkezi ana ekranı. Canlı TV, YouTube, Radyo ve Google her zaman
+     * görünür; lisansta olmayan veya araç ekranında izin verilmeyen özellik
+     * kilitli kutucuk olarak, nedeniyle gösterilir (gizlenmez).
+     */
     @Composable
     private fun HomeScreen(
         customerName: String,
         deviceName: String,
         contents: List<CarContent>,
+        channels: List<IptvChannel>,
         features: LicenseFeatures,
+        licenseChecked: Boolean,
         refreshing: Boolean,
-        lastUpdate: String,
         errorMessage: String,
+        offline: Boolean,
         onRefresh: () -> Unit,
-        onCategoryClick: (String) -> Unit
+        onRadio: () -> Unit,
+        onSettings: () -> Unit
     ) {
+        val context = LocalContext.current
+        val metrics = rememberOkMetrics()
+        val store = remember { ChannelLibraryStore(context) }
+        var query by remember { mutableStateOf("") }
+        var recents by remember { mutableStateOf(store.recents()) }
+        var favorites by remember { mutableStateOf(store.favorites()) }
 
-        val context =
-            LocalContext.current
+        LaunchedEffect(resumeCount) {
+            recents = store.recents()
+            favorites = store.favorites()
+        }
 
-        val iptvCount =
-            runCatching {
+        val webAllowed = CarScreen.allowsWebFeatures(CarScreen.isCarScreen(context))
+        val radioCount = contents.count { it.type == "radio" }
+        val checking = !licenseChecked
 
-                val raw =
-                    AppSession.prefs(context)
-                        .getString(
-                            "iptv_channels",
-                            null
-                        )
+        fun lockReason(licensed: Boolean, carBlocked: Boolean = false): String = when {
+            checking -> "Lisans kontrol ediliyor…"
+            !licensed -> "Lisansınızda yok"
+            carBlocked -> "Araç ekranında kapalı"
+            else -> ""
+        }
 
-                if (raw.isNullOrBlank()) {
-                    0
-                } else {
-                    JSONArray(raw).length()
-                }
+        val tiles = listOf(
+            HomeTile(R.drawable.ic_ok_tv, "Canlı TV",
+                if (features.iptv) "${channels.size} kanal" else lockReason(false),
+                enabled = features.iptv, accent = true) { openIptv() },
+            HomeTile(R.drawable.ic_ok_video, "YouTube",
+                if (features.youtube && webAllowed) "Videolar" else lockReason(features.youtube, !webAllowed),
+                enabled = features.youtube && webAllowed) {
+                startActivity(Intent(this, YouTubeActivity::class.java))
+            },
+            HomeTile(R.drawable.ic_ok_radio, "Radyo",
+                if (features.radio) "$radioCount istasyon" else lockReason(false),
+                enabled = features.radio, onClick = onRadio),
+            HomeTile(R.drawable.ic_ok_web, "Google",
+                if (features.googleSearch && webAllowed) "Web'de ara" else lockReason(features.googleSearch, !webAllowed),
+                enabled = features.googleSearch && webAllowed) { openGoogle(null) }
+        )
 
-            }.getOrDefault(0)
+        val sorted = remember(channels) { ChannelLibrary.sorted(channels) }
+        val featured = remember(channels) { ChannelLibrary.featured(channels) }
+        val recentChannels = ChannelLibrary.resolve(recents, channels)
+        val favoriteChannels = ChannelLibrary.resolve(favorites, channels)
+        val categories = remember(channels) { ChannelCategories.counts(channels) }
+        val results = if (query.isBlank() || !features.iptv) emptyList() else ChannelLibrary.search(sorted, query)
 
-        val webAllowed =
-            CarScreen.allowsWebFeatures(
-                CarScreen.isCarScreen(context)
-            )
-
-        val menu =
-            buildList {
-
-                if (features.iptv) {
-                    add(
-                        "📺 Canlı TV" to
-                                "${iptvCount} kanal"
-                    )
-                }
-
-                if (features.radio) {
-                    add(
-                        "📻 Canlı Radyo" to
-                                "${contents.count {
-                                    it.type == "radio"
-                                }} içerik"
-                    )
-                }
-
-                if (features.youtube && webAllowed) {
-                    add(
-                        "▶ YouTube" to
-                                "YouTube"
-                    )
-                }
-
-                if (features.googleSearch && webAllowed) {
-                    add(
-                        "🔎 Google Arama" to
-                                "Web"
-                    )
-                }
-
-                // projection: gerçek araç denemesinin kaydı (adb gerekmez).
-                if (CarPlayerBridge.hasCarDiagnostics) {
-                    add(
-                        "🛠 Araç teşhis kaydı" to
-                                "Paylaş"
-                    )
-                }
+        Column(Modifier.fillMaxSize()) {
+            OkTopBar(
+                metrics = metrics,
+                subtitle = listOf(customerName, deviceName).filter { it.isNotBlank() }.joinToString(" · ")
+                    .ifBlank { "Araç içi medya merkezi" }
+            ) {
+                OkIconButton(R.drawable.ic_ok_refresh, "Yenile", metrics, onRefresh, busy = refreshing)
+                OkIconButton(R.drawable.ic_ok_settings, "Ayarlar", metrics, onSettings)
             }
 
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-        ) {
-
-            Text(
-                "KARADAG CAR TV",
-                style =
-                    MaterialTheme.typography.headlineLarge
-            )
-
-            Spacer(
-                Modifier.height(4.dp)
-            )
-
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.SpaceBetween
+            LazyColumn(
+                Modifier.fillMaxSize().testTag("home_list"),
+                contentPadding = PaddingValues(start = metrics.gutter, end = metrics.gutter, bottom = metrics.gutter)
             ) {
+                item {
+                    OkSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = if (features.iptv) "Kanal, kategori ara" else "Ara",
+                        metrics = metrics,
+                        modifier = Modifier.fillMaxWidth().testTag("home_search")
+                    )
+                }
 
-                Text(customerName)
-
-                Text(deviceName)
-            }
-
-            Spacer(
-                Modifier.height(12.dp)
-            )
-
-            Row(
-                Modifier.fillMaxWidth(),
-
-                horizontalArrangement =
-                    Arrangement.SpaceBetween,
-
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
-                Text(
-                    if (lastUpdate.isBlank()) {
-                        "Henüz güncellenmedi"
-                    } else {
-                        "Son güncelleme: $lastUpdate"
-                    },
-
-                    style =
-                        MaterialTheme.typography.bodySmall
-                )
-
-                Button(
-                    enabled = !refreshing,
-                    onClick = onRefresh
-                ) {
-
-                    if (refreshing) {
-
-                        CircularProgressIndicator(
-                            Modifier.height(18.dp)
+                if (errorMessage.isNotBlank()) {
+                    item {
+                        Spacer(Modifier.height(10.dp))
+                        OkBanner(
+                            if (offline) R.drawable.ic_ok_offline else R.drawable.ic_ok_alert,
+                            if (offline) "Çevrimdışı: kayıtlı içerik gösteriliyor. $errorMessage" else errorMessage,
+                            metrics
                         )
+                    }
+                }
 
+                if (query.isNotBlank()) {
+                    item { OkSectionTitle("Arama sonuçları", metrics, "${results.size} kanal") }
+                    if (results.isEmpty()) {
+                        item {
+                            OkStateMessage(
+                                R.drawable.ic_ok_search,
+                                "Kanal bulunamadı",
+                                "\"$query\" için kanal yok." +
+                                    if (features.googleSearch && webAllowed) " Google'da arayabilirsiniz." else "",
+                                metrics,
+                                actionLabel = if (features.googleSearch && webAllowed) "Google'da ara" else null,
+                                onAction = { openGoogle(query) }
+                            )
+                        }
                     } else {
+                        items(results.take(8), key = { "r${it.id}" }) { channel ->
+                            OkChannelCard(
+                                channel = channel,
+                                categoryLabel = channel.categories.firstOrNull()?.let(ChannelCategories::displayName),
+                                favorite = channel.id in favorites,
+                                metrics = metrics,
+                                onOpen = { playChannel(channel) },
+                                onToggleFavorite = { favorites = store.toggleFavorite(channel.id) },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                            )
+                        }
+                        if (results.size > 8) {
+                            item {
+                                OkPrimaryButton("Tüm sonuçlar (${results.size})", metrics) { openIptv(query = query) }
+                            }
+                        }
+                    }
+                    return@LazyColumn
+                }
 
-                        Text("🔄 Güncelle")
+                item {
+                    Spacer(Modifier.height(14.dp))
+                    FeatureTiles(tiles, metrics)
+                }
+
+                if (features.iptv && recentChannels.isNotEmpty()) {
+                    item { OkSectionTitle("Son izlenenler", metrics) }
+                    item { PosterRow(recentChannels, metrics, "Devam et") }
+                }
+
+                if (features.iptv && featured.isNotEmpty()) {
+                    item {
+                        OkSectionTitle(
+                            "Öne çıkanlar",
+                            metrics,
+                            if (channels.any { it.isFeatured }) null else "Sunucu sırası"
+                        )
+                    }
+                    item { PosterRow(featured, metrics, null) }
+                }
+
+                if (features.iptv && categories.isNotEmpty()) {
+                    item { OkSectionTitle("Kategoriler", metrics, "${categories.size} kategori") }
+                    item {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.testTag("home_categories")) {
+                            item {
+                                OkChip("Favoriler", false, metrics, { openIptv(IptvActivity.FILTER_FAVORITES) },
+                                    favoriteChannels.size, R.drawable.ic_ok_star)
+                            }
+                            items(categories, key = { it.first }) { (category, count) ->
+                                OkChip(ChannelCategories.displayName(category), false, metrics, { openIptv(category) }, count)
+                            }
+                        }
+                    }
+                }
+
+                if (features.iptv && favoriteChannels.isNotEmpty()) {
+                    item { OkSectionTitle("Favoriler", metrics, "${favoriteChannels.size}") }
+                    item { PosterRow(favoriteChannels, metrics, "★") }
+                }
+
+                if (features.iptv && channels.isEmpty() && licenseChecked) {
+                    item {
+                        OkStateMessage(
+                            if (offline) R.drawable.ic_ok_offline else R.drawable.ic_ok_tv,
+                            if (refreshing) "Kanallar yükleniyor…" else "Kanal listesi boş",
+                            "Kanal listesi sunucudan alınınca burada görünür.",
+                            metrics,
+                            actionLabel = if (refreshing) null else "Yenile",
+                            onAction = onRefresh
+                        )
                     }
                 }
             }
+        }
+    }
 
-            if (errorMessage.isNotBlank()) {
+    private class HomeTile(
+        val icon: Int,
+        val title: String,
+        val subtitle: String,
+        val enabled: Boolean,
+        val accent: Boolean = false,
+        val onClick: () -> Unit
+    )
 
-                Spacer(
-                    Modifier.height(8.dp)
-                )
-
-                Text(
-                    errorMessage,
-                    color =
-                        MaterialTheme.colorScheme.error
-                )
-            }
-
-            Spacer(
-                Modifier.height(20.dp)
-            )
-
-            LazyVerticalGrid(
-                columns =
-                    GridCells.Adaptive(230.dp),
-
-                modifier =
-                    Modifier.fillMaxSize(),
-
-                contentPadding =
-                    PaddingValues(
-                        bottom = 20.dp
-                    ),
-
-                horizontalArrangement =
-                    Arrangement.spacedBy(14.dp),
-
-                verticalArrangement =
-                    Arrangement.spacedBy(14.dp)
-            ) {
-
-                items(menu) { item ->
-
-                    Card(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-
-                                when (item.first)
-                                {
-                                        "📺 Canlı TV" -> {
-                                            context.startActivity(
-                                                Intent(
-                                                    context,
-                                                    IptvActivity::class.java
-                                                )
-                                            )
-                                        }
-
-                                    "📻 Canlı Radyo" -> {
-
-                                        onCategoryClick(
-                                            "radio"
-                                        )
-                                    }
-
-                                    "▶ YouTube" -> {
-
-                                        context.startActivity(
-                                            Intent(
-                                                context,
-                                                YouTubeActivity::class.java
-                                            )
-                                        )
-                                    }
-
-                                    "🛠 Araç teşhis kaydı" -> {
-
-                                        val text =
-                                            CarPlayerBridge.carDiagnosticsText(context)
-                                                .ifBlank { "Henüz kayıt yok." }
-
-                                        context.startActivity(
-                                            Intent.createChooser(
-                                                Intent(Intent.ACTION_SEND)
-                                                    .setType("text/plain")
-                                                    .putExtra(Intent.EXTRA_SUBJECT, "KaradagCarTV araç teşhis kaydı")
-                                                    .putExtra(Intent.EXTRA_TEXT, text),
-                                                "Teşhis kaydını paylaş"
-                                            )
-                                        )
-                                    }
-
-                                    "🔎 Google Arama" -> {
-
-                                        context.startActivity(
-                                            Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse(
-                                                    "https://www.google.com/"
-                                                )
-                                            )
-                                        )
-                                    }
-                                }
-                            }
-                    ) {
-
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp)
-                        ) {
-
-                            Text(
-                                item.first,
-                                style =
-                                    MaterialTheme
-                                        .typography
-                                        .titleLarge
-                            )
-
-                            Spacer(
-                                Modifier.height(6.dp)
-                            )
-
-                            Text(
-                                item.second
+    /** Geniş (yatay / araç) ekranda tek satır 4 kutucuk, dar ekranda 2x2. */
+    @Composable
+    private fun FeatureTiles(tiles: List<HomeTile>, metrics: OkMetrics) {
+        BoxWithConstraints(Modifier.fillMaxWidth().testTag("home_tiles")) {
+            val perRow = if (maxWidth >= 560.dp) 4 else 2
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                tiles.chunked(perRow).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        row.forEach { tile ->
+                            OkFeatureTile(
+                                icon = tile.icon,
+                                title = tile.title,
+                                subtitle = tile.subtitle,
+                                metrics = metrics,
+                                enabled = tile.enabled,
+                                accent = tile.accent,
+                                onClick = tile.onClick,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -839,133 +840,180 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun ContentListScreen(
-        title: String,
-        contents: List<CarContent>,
-        onBack: () -> Unit
-    ) {
-
-        val context =
-            LocalContext.current
-
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(20.dp)
-        ) {
-
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
-                Button(
-                    onClick = onBack
-                ) {
-                    Text("← Geri")
-                }
-
-                Spacer(
-                    Modifier.weight(1f)
-                )
-
-                Text(
-                    title,
-                    style =
-                        MaterialTheme
-                            .typography
-                            .headlineMedium
-                )
+    private fun PosterRow(channels: List<IptvChannel>, metrics: OkMetrics, badge: String?) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(channels, key = { it.id }) { channel ->
+                OkChannelPoster(
+                    channel,
+                    metrics,
+                    badge ?: channel.categories.firstOrNull()?.let(ChannelCategories::displayName)
+                ) { playChannel(channel) }
             }
+        }
+    }
 
-            Spacer(
-                Modifier.height(16.dp)
-            )
+    @Composable
+    private fun RadioScreen(contents: List<CarContent>, onBack: () -> Unit) {
+        val metrics = rememberOkMetrics()
+        androidx.activity.compose.BackHandler(onBack = onBack)
+
+        Column(Modifier.fillMaxSize()) {
+            OkTopBar(metrics, subtitle = "Radyo · ${contents.size} istasyon", onBack = onBack)
 
             if (contents.isEmpty()) {
-
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-
-                    Text(
-                        "Bu kategoride içerik bulunamadı."
-                    )
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    OkStateMessage(R.drawable.ic_ok_radio, "Radyo istasyonu yok",
+                        "Lisansınıza tanımlı radyo içeriği bulunamadı.", metrics)
                 }
+                return@Column
+            }
 
-            } else {
-
-                LazyColumn(
-                    Modifier.fillMaxSize(),
-
-                    verticalArrangement =
-                        Arrangement.spacedBy(12.dp)
-                ) {
-
-                    items(contents) { content ->
-
-                        Card(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-
-                                    context.startActivity(
-                                        Intent(
-                                            context,
-                                            PlayerActivity::class.java
-                                        ).apply {
-
-                                            putExtra(
-                                                PlayerActivity.EXTRA_STREAM_URL,
-                                                content.streamUrl
-                                            )
-
-                                            putExtra(
-                                                PlayerActivity.EXTRA_TITLE,
-                                                content.title
-                                            )
-
-                                            putExtra(
-                                                PlayerActivity.EXTRA_MEDIA_TYPE,
-                                                content.type
-                                            )
-                                        }
-                                    )
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(contents, key = { it.id }) { content ->
+                    Surface(
+                        onClick = {
+                            startActivity(
+                                Intent(this@MainActivity, PlayerActivity::class.java).apply {
+                                    putExtra(PlayerActivity.EXTRA_STREAM_URL, content.streamUrl)
+                                    putExtra(PlayerActivity.EXTRA_TITLE, content.title)
+                                    putExtra(PlayerActivity.EXTRA_MEDIA_TYPE, content.type)
                                 }
-                        ) {
-
-                            Column(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp)
+                            )
+                        },
+                        shape = RoundedCornerShape(18.dp),
+                        color = OkColors.Surface,
+                        border = BorderStroke(1.dp, OkColors.Outline),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier.size(metrics.logo).background(OkColors.OrangeSoft, RoundedCornerShape(14.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
-
-                                Text(
-                                    content.title,
-                                    style =
-                                        MaterialTheme
-                                            .typography
-                                            .titleLarge
-                                )
-
-                                content.description?.let {
-
-                                    if (it.isNotBlank()) {
-
-                                        Spacer(
-                                            Modifier.height(6.dp)
-                                        )
-
-                                        Text(it)
-                                    }
+                                Icon(painterResource(R.drawable.ic_ok_radio), null, tint = OkColors.Orange, modifier = Modifier.size(28.dp))
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(content.title, color = OkColors.Ink, fontSize = metrics.body,
+                                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                content.description?.takeIf { it.isNotBlank() }?.let {
+                                    Text(it, color = OkColors.InkMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
+                            Icon(painterResource(R.drawable.ic_ok_play), null, tint = OkColors.Orange, modifier = Modifier.size(28.dp))
                         }
                     }
                 }
+            }
+        }
+    }
+
+    @Composable
+    private fun SettingsScreen(
+        customerName: String,
+        deviceName: String,
+        lastUpdate: String,
+        channelCount: Int,
+        refreshing: Boolean,
+        onRefresh: () -> Unit,
+        onBack: () -> Unit
+    ) {
+        val metrics = rememberOkMetrics()
+        val context = LocalContext.current
+        androidx.activity.compose.BackHandler(onBack = onBack)
+        var libraryCleared by remember { mutableStateOf(false) }
+
+        Column(Modifier.fillMaxSize()) {
+            OkTopBar(metrics, subtitle = "Ayarlar", onBack = onBack)
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = metrics.gutter, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OkLogoMark(72.dp)
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            OkWordmark(24.sp)
+                            Text(
+                                "Sürüm " + runCatching {
+                                    context.packageManager.getPackageInfo(context.packageName, 0).versionName
+                                }.getOrNull().orEmpty(),
+                                color = OkColors.InkMuted, fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+                item { SettingRow("Müşteri", customerName.ifBlank { "—" }, metrics) }
+                item { SettingRow("Cihaz", deviceName.ifBlank { "—" }, metrics) }
+                item { SettingRow("Cihaz kimliği", AppSession.deviceUuid(context), metrics) }
+                item { SettingRow("Kanal sayısı", "$channelCount", metrics) }
+                item { SettingRow("Son güncelleme", lastUpdate.ifBlank { "—" }, metrics) }
+                item {
+                    SettingAction(
+                        if (refreshing) "Lisans ve içerik yenileniyor…" else "Lisansı ve içeriği yenile",
+                        R.drawable.ic_ok_refresh, metrics, onRefresh
+                    )
+                }
+                item {
+                    SettingAction(
+                        if (libraryCleared) "Favoriler ve son izlenenler temizlendi" else "Favorileri ve son izlenenleri temizle",
+                        R.drawable.ic_ok_history, metrics
+                    ) {
+                        AppSession.prefs(context).edit()
+                            .remove(ChannelLibraryStore.KEY_FAVORITES)
+                            .remove(ChannelLibraryStore.KEY_RECENTS)
+                            .apply()
+                        libraryCleared = true
+                    }
+                }
+                // projection: gerçek araç denemesinin kaydı (adb gerekmez).
+                if (CarPlayerBridge.hasCarDiagnostics) {
+                    item { SettingAction("Araç teşhis kaydını paylaş", R.drawable.ic_ok_alert, metrics) { shareDiagnostics() } }
+                }
+                item {
+                    Text(
+                        "Park güvenliği: araç ekranında video yalnızca araç park hâlindeyken gösterilir; bu kilit kapatılamaz.",
+                        color = OkColors.InkMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun SettingRow(label: String, value: String, metrics: OkMetrics) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(OkColors.Surface, RoundedCornerShape(16.dp))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, color = OkColors.InkMuted, fontSize = metrics.body, modifier = Modifier.weight(1f))
+            Text(value, color = OkColors.Ink, fontSize = metrics.body, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+
+    @Composable
+    private fun SettingAction(text: String, icon: Int, metrics: OkMetrics, onClick: () -> Unit) {
+        Surface(
+            onClick = onClick,
+            shape = RoundedCornerShape(16.dp),
+            color = OkColors.Surface,
+            border = BorderStroke(1.dp, OkColors.Outline),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(icon), null, tint = OkColors.Orange, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(14.dp))
+                Text(text, color = OkColors.Ink, fontSize = metrics.body, fontWeight = FontWeight.SemiBold)
             }
         }
     }
