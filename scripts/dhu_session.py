@@ -248,7 +248,11 @@ def session(tag, first):
         d.send("keycode media_next")
     surface = wait_log(r"CAR VIDEO SURFACE CREATED", 30)
     bound = wait_log(r"CAR VIDEO SURFACE BOUND", 20)
-    frame = wait_log(r"CAR VIDEO FIRST FRAME", 40)
+    # İlk bağlantıda canlı TS kaynağı geç READY olabiliyor (s1: ~90 sn);
+    # bekleme süresi uzun, kanıt için zamanlama loglanır.
+    t0 = time.time()
+    frame = wait_log(r"CAR VIDEO FIRST FRAME", 120)
+    log(f"[{tag}] ilk kare bekleme: {time.time() - t0:.0f} sn")
     time.sleep(6)
     img = d.shot("playing")
     sat = saturated_fraction(img)
@@ -270,12 +274,17 @@ def session(tag, first):
     note(f"[{tag}] sürüş kısıtında görüntü kilitlendi", locked and sat2 < 0.1, f"oran={sat2:.2f}")
     d.send("restrict none")
     unlocked = wait_log(r"VIDEO GATE allowed=true", 20)
-    time.sleep(5)
-    img3 = d.shot("unrestricted")
-    sat3 = saturated_fraction(img3)
+    t0 = time.time(); img3, sat3 = None, 0.0
+    while time.time() - t0 < 30:  # yeniden tamponlama sürebilir
+        time.sleep(3)
+        img3 = d.shot("unrestricted"); sat3 = saturated_fraction(img3)
+        if sat3 > 0.25:
+            break
+    log(f"[{tag}] park sonrası görüntü bekleme: {time.time() - t0:.0f} sn")
     note(f"[{tag}] park edilince görüntü geri geldi", unlocked and sat3 > 0.25, f"oran={sat3:.2f}")
 
     # Bağlantı kesme: DHU kapanır, uygulama çökmemeli.
+    open(f"{OUT}/logcat-{tag}-end.txt", "w").write(logcat())
     d.quit()
     time.sleep(8)
     lc = logcat()
