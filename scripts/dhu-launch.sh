@@ -87,7 +87,7 @@ adb shell mkdir -p /data/data/$PKG/shared_prefs
 adb push "$OUT/prefs.xml" /data/data/$PKG/shared_prefs/karadag_car_tv_cache.xml >/dev/null
 adb shell chown -R "$uid:$uid" /data/data/$PKG/shared_prefs; adb shell chmod 660 /data/data/$PKG/shared_prefs/karadag_car_tv_cache.xml
 adb shell restorecon -R /data/data/$PKG/shared_prefs
-log "test kanalı yazıldı: $STREAM (emülatörden erişim: $(adb shell "toybox nc -z -w 3 10.0.2.2 8088 && echo açık || echo kapalı" | tr -d '\r'))"
+log "test kanalı yazıldı: $STREAM (emülatörden HTTP: $(adb shell "echo -e 'HEAD /test.ts HTTP/1.0\\r\\n\\r\\n' | toybox nc -w 5 10.0.2.2 8088 2>&1 | head -1" | tr -d '\r'))"
 
 # --- 3. Android Auto: geliştirici modu, bilinmeyen kaynaklar, HU sunucusu --
 adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
