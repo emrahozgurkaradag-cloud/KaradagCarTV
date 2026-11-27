@@ -54,8 +54,17 @@ new="$("$APKSIGNER" verify --print-certs "$base" 2>/dev/null | grep -m1 'SHA-256
 ver="$(aapt2 dump badging "$base" 2>/dev/null | grep -oE "versionName='[^']+'" | head -1)"
 [ -z "$ver" ] && ver="$("$(ls -d "$SDK"/build-tools/*/aapt2 | sort -V | tail -1)" dump badging "$base" 2>/dev/null | grep -oE "versionName='[^']+'" | head -1)"
 log "indirilen Android Auto: $ver imza SHA-256: $new"
-if [ -n "$new" ] && [ "$new" = "$ref" ]; then
-  log "imza doğrulandı: indirilen APK Google'ın gearhead imzasıyla aynı"
+AAPT2="$(ls -d "$SDK"/build-tools/*/aapt2 | sort -V | tail -1)"
+log "indirilen paket SDK: $("$AAPT2" dump badging "$base" 2>/dev/null | grep -oE "(sdkVersion|targetSdkVersion):'[0-9]+'" | tr '\n' ' ')"
+"$APKSIGNER" verify --print-certs --verbose "$base" > "$OUT/aa-signers.txt" 2>&1
+"$APKSIGNER" lineage --in "$base" --print-certs > "$OUT/aa-lineage.txt" 2>&1
+log "imza şemaları: $(grep -E 'Verified using v[0-9.]+ scheme' "$OUT/aa-signers.txt" | tr '\n' ' ')"
+log "rotasyon geçmişi (lineage): $(grep -E 'SHA-256' "$OUT/aa-lineage.txt" | awk '{print $NF}' | tr '\n' ' ')"
+# SDK'nın (aauto.aar gms.car.i) güvendiği sertifikalar: Google gearhead
+# release fdb00c43… ve AOSP test anahtarı 1975b2f1… (emülatör taslakları).
+# Kabul: indirilen imza ya da rotasyon geçmişi, cihazdaki paketin imzasını içermeli.
+if [ -n "$new" ] && { [ "$new" = "$ref" ] || grep -qi "$ref" "$OUT/aa-lineage.txt" "$OUT/aa-signers.txt"; }; then
+  log "imza doğrulandı: indirilen APK cihazdaki gearhead imzasıyla aynı veya rotasyon geçmişinde"
   printf '%s\n' "${sel[@]}" | sed 's/^/  kurulacak: /'
   adb install-multiple -r -g -i com.android.vending "${sel[@]}" 2>&1 | tail -3
 else
