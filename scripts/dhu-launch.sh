@@ -98,6 +98,18 @@ if [ -n "$new" ] && { [ "$new" = "$GOOGLE_GEARHEAD" ] || grep -qi "$GOOGLE_GEARH
           b="$(basename "$a")"; [ "$a" = "$base" ] && b="AndroidAutoStubPrebuilt.apk"
           adb push "$a" "$sysdir/$b" >/dev/null && adb shell chmod 644 "$sysdir/$b"
         done
+        # Sistem uygulamasında split içindeki yerel kitaplıklar yüklenmez
+        # (UnsatisfiedLinkError libresampling_jni.so): lib/arm64 altına çıkar.
+        abisplit="$(printf '%s\n' "${sel[@]}" | grep -E 'config\.arm64_v8a\.apk$' | head -1)"
+        if [ -n "$abisplit" ]; then
+          rm -rf "$OUT/aa-lib"; mkdir -p "$OUT/aa-lib"
+          unzip -q -o "$abisplit" 'lib/arm64-v8a/*' -d "$OUT/aa-lib" 2>/dev/null
+          adb shell mkdir -p "$sysdir/lib/arm64"
+          for so in "$OUT"/aa-lib/lib/arm64-v8a/*.so; do adb push "$so" "$sysdir/lib/arm64/" >/dev/null; done
+          adb shell "chmod 755 '$sysdir/lib' '$sysdir/lib/arm64'; chmod 644 '$sysdir'/lib/arm64/*"
+          log "yerel kitaplıklar: $(ls "$OUT"/aa-lib/lib/arm64-v8a/ | tr '\n' ' ')"
+          rm -rf "$OUT/aa-lib"
+        fi
         adb shell chmod 755 "$sysdir"; adb shell restorecon -R "$sysdir" 2>/dev/null
         pfile="$OUT/privapp-permissions-gearhead-dhu.xml"
         { echo '<?xml version="1.0" encoding="utf-8"?>'; echo '<permissions>'
