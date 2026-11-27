@@ -17,3 +17,4 @@ captures/
 local.properties
 *.jks
 *.keystore
+__pycache__/
