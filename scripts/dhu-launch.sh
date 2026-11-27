@@ -83,19 +83,49 @@ if [ -n "$new" ] && { [ "$new" = "$GOOGLE_GEARHEAD" ] || grep -qi "$GOOGLE_GEARH
     for attempt in 1 2; do
       log "mount: $(adb shell "mount | grep -E ' /(product|system) '" | tr -d '\r' | tr '\n' ';' | cut -c1-300)"
       log "rm: $(adb shell "rm -rf '$sysdir' && echo silindi || echo HATA" 2>&1 | tr -d '\r'); kalan: $(adb shell "ls '$sysdir' 2>&1" | tr -d '\r' | head -1)"
+      # Gerçek telefonlardaki gibi AA'yı ayrıcalıklı sistem uygulaması olarak
+      # yerleştir: SYSTEM_AUTOMOTIVE_PROJECTION rolü (CDM izni
+      # REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION) yalnız sistem
+      # uygulamasına verilir; kullanıcı kurulumunda :car süreci CDM'de çöker.
+      if adb shell "mkdir -p '$sysdir'" 2>/dev/null && [ -z "$(adb shell "ls '$sysdir' 2>/dev/null" | tr -d '\r')" ]; then
+        for a in "${sel[@]}"; do
+          b="$(basename "$a")"; [ "$a" = "$base" ] && b="AndroidAutoStubPrebuilt.apk"
+          adb push "$a" "$sysdir/$b" >/dev/null && adb shell chmod 644 "$sysdir/$b"
+        done
+        adb shell chmod 755 "$sysdir"; adb shell restorecon -R "$sysdir" 2>/dev/null
+        pfile="$OUT/privapp-permissions-gearhead-dhu.xml"
+        { echo '<?xml version="1.0" encoding="utf-8"?>'; echo '<permissions>'
+          echo "  <privapp-permissions package=\"$GH\">"
+          "$AAPT2" dump permissions "$base" | grep -oE "uses-permission: name='[^']+'" | sed -E "s/.*name='([^']+)'/    <permission name=\"\1\"\/>/" | sort -u
+          echo '  </privapp-permissions>'; echo '</permissions>'; } > "$pfile"
+        adb push "$pfile" /product/etc/permissions/privapp-permissions-gearhead-dhu.xml >/dev/null && \
+          adb shell chmod 644 /product/etc/permissions/privapp-permissions-gearhead-dhu.xml
+        log "AA 18 sistem dizinine yerleştirildi: $(adb shell "ls '$sysdir'" | tr -d '\r' | tr '\n' ' '); izin listesi: $(grep -c '<permission ' "$pfile")"
+        sysinstalled=1
+      fi
       adb shell rm -rf /data/system/package_cache/* 2>/dev/null
       adb reboot; adb wait-for-device
       until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 3; done
       adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
       adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
       left="$(adb shell pm path $GH | tr -d '\r')"
-      log "sistem paketi sonrası ($attempt): '$left'"
+      log "sistem paketi sonrası ($attempt): '$left' $(adb shell dumpsys package $GH | tr -d '\r' | grep -m1 versionName | xargs)"
       [ -z "$left" ] && break
+      [ "${sysinstalled:-0}" = 1 ] && adb shell dumpsys package $GH | tr -d '\r' | grep -q "versionName=18\|versionName=1[0-9]\." && break
       log "remount (yeniden): $(adb remount 2>&1 | tail -1)"
     done
   fi
-  printf '%s\n' "${sel[@]}" | sed 's/^/  kurulacak: /'
-  adb install-multiple -r -g -i com.android.vending "${sel[@]}" 2>&1 | tail -3
+  if adb shell dumpsys package $GH | tr -d '\r' | grep -q "versionName=$(echo "$ver" | sed -E "s/versionName='([^']+)'/\1/")"; then
+    log "AA sistem uygulaması olarak kurulu; rol: $(adb shell cmd role get-role-holders android.app.role.SYSTEM_AUTOMOTIVE_PROJECTION 2>&1 | tr -d '\r')"
+    # install -g yerine: çalışma zamanı izinlerini ver (verilemeyenler sessizce atlanır)
+    for pm_ in $("$AAPT2" dump permissions "$base" | grep -oE "uses-permission: name='[^']+'" | sed -E "s/.*name='([^']+)'/\1/"); do
+      adb shell pm grant $GH "$pm_" >/dev/null 2>&1 || true
+    done
+    log "ayrıcalıklı izin: $(adb shell dumpsys package $GH | tr -d '\r' | grep -m1 'REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION' | xargs)"
+  else
+    printf '%s\n' "${sel[@]}" | sed 's/^/  kurulacak: /'
+    adb install-multiple -r -g -i com.android.vending "${sel[@]}" 2>&1 | tail -3
+  fi
 else
   log "UYARI: imza eşleşmedi veya okunamadı ($new != $ref); kurulum YAPILMADI"
 fi
