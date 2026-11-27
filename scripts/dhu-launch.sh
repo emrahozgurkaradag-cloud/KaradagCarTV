@@ -157,11 +157,11 @@ adb shell pm enable "$GH/com.google.android.apps.auto.carservice.gmscorecompat.F
 # AA ilk kurulum (FRX) telefonda kullanıcıdan özel erişimler ister; ilki
 # bildirim erişimi ("Android Auto needs you to turn on notification access").
 # Emülatörde kullanıcı yerine test düzeneği verir. Yalnız AA'nın izinleri.
-adb shell cmd notification allow_listener "$GH/com.google.android.gearhead.notifications.SharedNotificationListenerManager\$ListenerService" 2>&1 | tr -d '\r' | sed 's/^/[dhu-launch] notification listener: /'
+adb shell "cmd notification allow_listener '$GH/com.google.android.gearhead.notifications.SharedNotificationListenerManager\$ListenerService'" 2>&1 | tr -d '\r' | sed 's/^/[dhu-launch] notification listener: /'
 adb shell cmd notification allow_dnd $GH >/dev/null 2>&1 || true
 adb shell appops set $GH SYSTEM_ALERT_WINDOW allow >/dev/null 2>&1 || true
 adb shell dumpsys deviceidle whitelist +$GH >/dev/null 2>&1 || true
-log "bildirim dinleyicileri: $(adb shell cmd notification list_listeners 2>/dev/null | tr -d '\r' | grep -c gearhead) gearhead"
+log "izinli bildirim dinleyicisi: $(adb shell settings get secure enabled_notification_listeners | tr -d '\r' | tr ':' '\n' | grep gearhead)"
 adb shell cmd package resolve-activity --components -a com.google.android.gms.carsetup.START_DUPLEX 2>&1 | tr -d '\r' | head -3 | sed 's/^/[dhu-launch] START_DUPLEX çözümü: /'
 
 # --- 2. KaradagCarTV projection (Play yükleyicisi olarak işaretli: test) --
