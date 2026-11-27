@@ -170,6 +170,7 @@ def session(tag, first):
     note(f"[{tag}] DHU-telefon oturumu kuruldu", connected)
 
     opened = False
+    grid_col = 1
     for i in range(1, 25):
         if not d.alive():
             break
@@ -190,9 +191,19 @@ def session(tag, first):
         # AA ana ekranı (görev çubuğu) görünüyorsa: sol alttaki uygulama
         # ızgarası düğmesi; ızgarada "Karadag Car TV" etiketi OCR ile bulunur.
         if d.find(img, r"^Exit$") and d.find(img, r"^(Calendar|Settings|Phone)$"):
-            # Uygulama ızgarası açık ama "ÖK TV" görünmüyor: aşağı kaydır (sol ok).
-            log("uygulama ızgarası: aşağı kaydırılıyor")
-            d.tap(w * 54 // 1000, h * 76 // 100); time.sleep(3); continue
+            # Izgara alfabetik: "ÖK TV" ve "ÖK Yansıtma" 3. satırda, ekranın
+            # altında yarı görünür (etiket okunmuyor). 2. satır etiketlerinden
+            # sütun konumu alınır; ilk ÖK simgesi (TV) 2. sütunda. Yansıtma
+            # açılırsa (CarMirrorScreen) bir sonraki sütun denenir.
+            cols = sorted(x for t, x, y in d.ocr(img) if re.fullmatch(r"Messages|Phone|Podcasts|Settings", t))
+            row2 = [y for t, x, y in d.ocr(img) if t == "Phone"]
+            if cols and row2:
+                if re.search(r"CarMirrorScreen created", logcat()):
+                    grid_col = min(grid_col + 1, len(cols) - 1)
+                    sh("adb logcat -c")
+                x = cols[min(grid_col, len(cols) - 1)]; y = row2[0] + 83
+                log(f"ızgara 3. satır ÖK simgesi (sütun {grid_col}) -> dokunma {x},{y}")
+                d.tap(x, y); time.sleep(6); continue
         if d.find(img, r"^(Maps|Music|YouTube|Tap|location|Assistant|Settings|Phone|Calendar|News)$"):
             log("AA ana ekranı: uygulama ızgarası açılıyor")
             d.tap(w * 55 // 1000, h * 917 // 1000); time.sleep(5); continue
