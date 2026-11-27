@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bildirim / araç bildirim küçük ikonu (tek renk, 24dp). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M24,59 a19,19 0 1,0 38,0 a19,19 0 1,0 -38,0"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="10"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M30,28 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z M46,28 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 Z"
+        android:fillColor="#FFFFFFFF" />
+    <path
+        android:pathData="M66,38 L66,80 M67,59 L86,38 M71,55 L87,80"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="10"
+        android:strokeLineCap="round" />
+</vector>

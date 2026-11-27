@@ -15,7 +15,7 @@
         app:show_buffering="when_playing"
         app:use_controller="false" />
 
-    <!-- Üst bilgi -->
+    <!-- Üst bilgi: geri, ÖK, kanal adı, CANLI -->
     <LinearLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
@@ -26,19 +26,26 @@
         android:paddingStart="16dp"
         android:paddingTop="12dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="12dp"
-        android:background="#99000000"
+        android:paddingBottom="28dp"
+        android:background="@drawable/bg_ok_scrim_top"
         android:visibility="gone">
 
         <ImageButton
             android:id="@+id/backButton"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:background="@android:color/transparent"
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:background="@drawable/bg_ok_round"
             android:contentDescription="Geri"
-            android:padding="8dp"
-            android:src="@android:drawable/ic_media_previous"
-            app:tint="#FFFFFF" />
+            android:padding="16dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_ok_back" />
+
+        <ImageView
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="12dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_ok_monogram" />
 
         <TextView
             android:id="@+id/titleText"
@@ -46,12 +53,25 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="10dp"
-            android:text="Karadag Car TV"
-            android:textColor="#FFFFFF"
-            android:textSize="19sp"
+            android:text="KaradagCarTV"
+            android:textColor="@color/ok_ink"
+            android:textSize="20sp"
             android:textStyle="bold"
             android:singleLine="true"
             android:ellipsize="end" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_ok_live_badge"
+            android:paddingStart="10dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:text="CANLI"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 
@@ -64,44 +84,47 @@
         android:gravity="center"
         android:orientation="horizontal"
         android:paddingStart="20dp"
-        android:paddingTop="12dp"
+        android:paddingTop="32dp"
         android:paddingEnd="20dp"
         android:paddingBottom="20dp"
-        android:background="#99000000"
+        android:background="@drawable/bg_ok_scrim_bottom"
         android:visibility="gone">
 
         <ImageButton
             android:id="@+id/rewindButton"
-            android:layout_width="58dp"
-            android:layout_height="58dp"
-            android:background="@android:color/transparent"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_ok_round"
             android:contentDescription="10 saniye geri"
-            android:src="@android:drawable/ic_media_rew"
-            app:tint="#FFFFFF" />
+            android:padding="18dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_ok_rewind" />
 
         <ImageButton
             android:id="@+id/playPauseButton"
-            android:layout_width="70dp"
-            android:layout_height="70dp"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:background="@android:color/transparent"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
+            android:background="@drawable/bg_ok_button"
             android:contentDescription="Oynat veya duraklat"
-            android:src="@android:drawable/ic_media_pause"
-            app:tint="#FFFFFF" />
+            android:padding="22dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_ok_pause" />
 
         <ImageButton
             android:id="@+id/forwardButton"
-            android:layout_width="58dp"
-            android:layout_height="58dp"
-            android:background="@android:color/transparent"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:background="@drawable/bg_ok_round"
             android:contentDescription="10 saniye ileri"
-            android:src="@android:drawable/ic_media_ff"
-            app:tint="#FFFFFF" />
+            android:padding="18dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_ok_forward" />
 
     </LinearLayout>
 
-    <!-- Hata -->
+    <!-- Oynatma hatası -->
     <LinearLayout
         android:id="@+id/errorContainer"
         android:layout_width="match_parent"
@@ -109,23 +132,39 @@
         android:gravity="center"
         android:orientation="vertical"
         android:padding="32dp"
-        android:background="#CC000000"
+        android:background="#EB1B1E23"
         android:visibility="gone">
+
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_ok_alert_orange" />
 
         <TextView
             android:id="@+id/errorText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
             android:gravity="center"
-            android:textColor="#FFFFFF"
+            android:maxWidth="560dp"
+            android:textColor="@color/ok_ink"
             android:textSize="20sp" />
 
         <Button
             android:id="@+id/retryButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Tekrar Dene" />
+            android:layout_marginTop="24dp"
+            android:minHeight="60dp"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:background="@drawable/bg_ok_button"
+            android:text="Tekrar Dene"
+            android:textAllCaps="false"
+            android:textColor="@color/ok_anthracite"
+            android:textSize="18sp"
+            android:textStyle="bold" />
 
     </LinearLayout>
 

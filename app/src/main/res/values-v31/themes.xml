@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Android 12+ sistem açılış ekranı: antrasit zemin + ÖK amblemi. -->
+    <style name="Theme.KaradagCarTV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ok_anthracite</item>
+        <item name="android:windowSplashScreenBackground">@color/ok_anthracite</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/ok_anthracite_light</item>
+        <item name="android:colorPrimary">@color/ok_orange</item>
+        <item name="android:colorAccent">@color/ok_orange</item>
+        <item name="android:statusBarColor">@color/ok_anthracite</item>
+        <item name="android:navigationBarColor">@color/ok_anthracite</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

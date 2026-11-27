@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.KaradagCarTV" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- Koyu ÖK teması; açılışta beyaz/boş ekran yerine marka arka planı. -->
+    <style name="Theme.KaradagCarTV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_brand</item>
+        <item name="android:colorPrimary">@color/ok_orange</item>
+        <item name="android:colorAccent">@color/ok_orange</item>
+        <item name="android:statusBarColor">@color/ok_anthracite</item>
+        <item name="android:navigationBarColor">@color/ok_anthracite</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
 </resources>

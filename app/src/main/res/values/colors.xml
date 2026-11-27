@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <!-- ÖK marka renkleri -->
+    <color name="ok_orange">#FFFF7A1A</color>
+    <color name="ok_orange_dim">#FFB8550F</color>
+    <color name="ok_anthracite">#FF1B1E23</color>
+    <color name="ok_anthracite_light">#FF23272E</color>
+    <color name="ok_surface">#FF2A2F37</color>
+    <color name="ok_ink">#FFF4F1EC</color>
+    <color name="ok_ink_muted">#FFA9AEB6</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 </resources>

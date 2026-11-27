@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ÖK monogramı — KaradagCarTV marka imzası.
+    Ö: turuncu halka + iki nokta. K: dikey gövde halkanın sağ kenarıyla
+    birleşir (paylaşılan çizgi), iki çapraz kol halkadan dışarı açılır.
+    Tamamen geometrik; 108 birimlik ızgara (adaptif ikon ile aynı).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ö halkası -->
+    <path
+        android:pathData="M28,59 a17,17 0 1,0 34,0 a17,17 0 1,0 -34,0"
+        android:strokeColor="@color/ok_orange"
+        android:strokeWidth="7.5"
+        android:fillColor="#00000000" />
+    <!-- Ö noktaları -->
+    <path
+        android:pathData="M34.2,32.5 a3.8,3.8 0 1,0 7.6,0 a3.8,3.8 0 1,0 -7.6,0 Z M48.2,32.5 a3.8,3.8 0 1,0 7.6,0 a3.8,3.8 0 1,0 -7.6,0 Z"
+        android:fillColor="@color/ok_orange" />
+    <!-- K gövdesi: halkanın sağ kenarıyla birleşik -->
+    <path
+        android:pathData="M65.5,40 L65.5,78"
+        android:strokeColor="@color/ok_ink"
+        android:strokeWidth="7.5"
+        android:strokeLineCap="round" />
+    <!-- K kolları -->
+    <path
+        android:pathData="M66,59 L81,41 M69.5,55 L82,77"
+        android:strokeColor="@color/ok_ink"
+        android:strokeWidth="7.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

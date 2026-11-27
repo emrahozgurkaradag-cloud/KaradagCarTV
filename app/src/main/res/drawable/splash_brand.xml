@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Açılış (API 29-30) pencere arka planı: antrasit + ortada ÖK. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/ok_anthracite" />
+    <item
+        android:width="160dp"
+        android:height="160dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_ok_monogram" />
+</layer-list>
