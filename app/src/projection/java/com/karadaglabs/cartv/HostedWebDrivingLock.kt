@@ -1,6 +1,5 @@
 package com.karadaglabs.cartv
 
-import android.graphics.Color
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -28,10 +27,20 @@ class HostedWebDrivingLock(
     }
 
     private val message = TextView(activity).apply {
-        setTextColor(Color.WHITE)
+        setTextColor(CarUiKit.INK)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+        typeface = android.graphics.Typeface.DEFAULT_BOLD
         gravity = Gravity.CENTER
-        setBackgroundColor(Color.BLACK)
+        setBackgroundColor(CarUiKit.ANTHRACITE)
+        setPadding(CarUiKit.dp(activity, 24), 0, CarUiKit.dp(activity, 24), 0)
+        setCompoundDrawablesRelative(
+            null,
+            CarUiKit.icon(activity, R.drawable.ic_ok_lock, CarUiKit.ORANGE)?.apply {
+                setBounds(0, 0, CarUiKit.dp(activity, 56), CarUiKit.dp(activity, 56))
+            },
+            null, null
+        )
+        compoundDrawablePadding = CarUiKit.dp(activity, 16)
         text = "Araç hareket hâlinde veya park durumu doğrulanamadı.\n" +
             "Bu ekran park edildiğinde açılır."
         layoutParams = FrameLayout.LayoutParams(

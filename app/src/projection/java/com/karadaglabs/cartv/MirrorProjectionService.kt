@@ -490,7 +490,7 @@ class MirrorProjectionService : Service() {
                     "Araç ekranı yansıtması aktif"
                 )
                 .setSmallIcon(
-                    android.R.drawable.ic_media_play
+                    R.drawable.ic_ok_notification
                 )
                 .setOngoing(true)
                 .build()
@@ -502,7 +502,7 @@ class MirrorProjectionService : Service() {
                     "Araç ekranı yansıtması aktif"
                 )
                 .setSmallIcon(
-                    android.R.drawable.ic_media_play
+                    R.drawable.ic_ok_notification
                 )
                 .setOngoing(true)
                 .build()

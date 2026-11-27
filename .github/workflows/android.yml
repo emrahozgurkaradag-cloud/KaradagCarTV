@@ -160,4 +160,14 @@ jobs:
           path: |
             app/build/reports/androidTests/
             app/build/outputs/androidTest-results/
+            app/build/outputs/connected_android_test_additional_output/
           if-no-files-found: ignore
+
+      # UiScreenshotDeviceTest: telefon ekranları (gerçek aktiviteler, ağ
+      # kapalı) + araç yerleşimi head-unit boyutlarında (ekran dışı çizim).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-screenshots-api${{ matrix.api-level }}
+          path: app/build/outputs/connected_android_test_additional_output/**/screenshots/*.png
+          if-no-files-found: warn

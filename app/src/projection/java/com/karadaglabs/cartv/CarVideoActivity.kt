@@ -1,13 +1,10 @@
 package com.karadaglabs.cartv
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -15,16 +12,11 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
-import android.widget.BaseAdapter
 import android.widget.FrameLayout
-import android.widget.GridView
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
 import com.google.android.apps.auto.sdk.CarActivity
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * Hosted CarActivity window. IPTV channel UI is Android Views.
@@ -37,7 +29,6 @@ class CarVideoActivity : CarActivity() {
 
     companion object {
         private const val TAG = "KaradagCarVideo"
-        private val logoCache = object : LruCache<String, Bitmap>(24) {}
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -46,9 +37,7 @@ class CarVideoActivity : CarActivity() {
     private var listContainer: View? = null
     private var menuContainer: View? = null
     private var rootColumn: LinearLayout? = null
-    private var statusView: TextView? = null
-    private var gridView: GridView? = null
-    private var adapter: ChannelAdapter? = null
+    private var browser: CarChannelBrowser? = null
 
     private var destination = ProjectionDestination.LIVE_TV
     private var selectedRadioId: String? = null
@@ -70,6 +59,8 @@ class CarVideoActivity : CarActivity() {
     private var playPauseButton: TextView? = null
     private var nowPlayingView: TextView? = null
     private var parkedOverlay: TextView? = null
+
+    private val library by lazy { ChannelLibraryStore(this) }
 
     private val hideControlsRunnable = Runnable {
         controlsVisible = false
@@ -98,7 +89,7 @@ class CarVideoActivity : CarActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            setBackgroundColor(Color.BLACK)
+            setBackgroundColor(CarUiKit.ANTHRACITE)
             keepScreenOn = true
         }
 
@@ -409,8 +400,7 @@ class CarVideoActivity : CarActivity() {
             return
         }
 
-        statusView?.text = state.statusText
-        adapter?.update(state.channels, state.selectedId)
+        browser?.showChannels(state.channels, state.selectedId, state.statusText)
 
         val playing = state.mode == ProjectionMode.PLAYING &&
             state.hostAvailable &&
@@ -454,7 +444,13 @@ class CarVideoActivity : CarActivity() {
         CarVideoPlayerHolder.setPlayWhenReady(shouldPlay)
 
         nowPlayingView?.text = selected?.name.orEmpty()
-        playPauseButton?.text = if (userPaused) "▶  Oynat" else "⏸  Duraklat"
+        playPauseButton?.let { button ->
+            button.text = if (userPaused) "Oynat" else "Duraklat"
+            button.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                CarUiKit.icon(this, if (userPaused) R.drawable.ic_ok_play else R.drawable.ic_ok_pause, CarUiKit.ANTHRACITE),
+                null, null, null
+            )
+        }
         applyControlsVisibility()
     }
 
@@ -568,19 +564,35 @@ class CarVideoActivity : CarActivity() {
         scheduleHideControls()
     }
 
-    private fun controlButton(label: String, onClick: () -> Unit): TextView {
-        val density = resources.displayMetrics.density
-        fun dp(value: Int): Int = (value * density).toInt()
+    private fun controlButton(
+        label: String?,
+        iconRes: Int,
+        description: String,
+        primary: Boolean = false,
+        onClick: () -> Unit
+    ): TextView {
+        fun dp(value: Int): Int = CarUiKit.dp(this, value)
+        val fg = if (primary) CarUiKit.ANTHRACITE else CarUiKit.INK
 
         return TextView(this).apply {
-            text = label
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            text = label.orEmpty()
+            contentDescription = description
+            setTextColor(fg)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            minHeight = dp(64)
-            minWidth = dp(64)
+            minHeight = dp(68)
+            minWidth = dp(68)
             setPadding(dp(18), dp(8), dp(18), dp(8))
-            setBackgroundColor(Color.argb(170, 40, 40, 40))
+            setCompoundDrawablesRelativeWithIntrinsicBounds(CarUiKit.icon(this@CarVideoActivity, iconRes, fg), null, null, null)
+            compoundDrawablePadding = if (label.isNullOrEmpty()) 0 else dp(8)
+            background = CarUiKit.pressable(
+                CarUiKit.rounded(
+                    if (primary) CarUiKit.ORANGE else Color.argb(200, 42, 47, 55),
+                    34, this@CarVideoActivity
+                ),
+                this@CarVideoActivity
+            )
             isClickable = true
             isFocusable = true
             setOnClickListener { onClick() }
@@ -588,20 +600,22 @@ class CarVideoActivity : CarActivity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                setMargins(dp(12), 0, dp(12), 0)
+                setMargins(dp(8), 0, dp(8), 0)
             }
         }
     }
 
     private fun buildControlsBar(): LinearLayout {
-        val density = resources.displayMetrics.density
-        fun dp(value: Int): Int = (value * density).toInt()
+        fun dp(value: Int): Int = CarUiKit.dp(this, value)
 
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.argb(140, 0, 0, 0))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(Color.argb(235, 27, 30, 35), Color.argb(0, 27, 30, 35))
+            )
+            setPadding(dp(16), dp(28), dp(16), dp(12))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -611,9 +625,15 @@ class CarVideoActivity : CarActivity() {
         }
 
         nowPlayingView = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTextColor(CarUiKit.INK)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
             maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setCompoundDrawablesRelativeWithIntrinsicBounds(
+                CarUiKit.icon(this@CarVideoActivity, R.drawable.ic_ok_live, CarUiKit.LIVE_RED), null, null, null
+            )
+            compoundDrawablePadding = dp(6)
             layoutParams = LinearLayout.LayoutParams(
                 0,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -622,26 +642,35 @@ class CarVideoActivity : CarActivity() {
         }
 
         bar.addView(nowPlayingView)
-        bar.addView(controlButton("⏮") { stepChannel(-1) })
-        val play = controlButton("⏸  Duraklat") { togglePlayPause() }
+        bar.addView(controlButton(null, R.drawable.ic_ok_prev, "Önceki kanal") { stepChannel(-1) })
+        val play = controlButton("Duraklat", R.drawable.ic_ok_pause, "Oynat veya duraklat", primary = true) { togglePlayPause() }
         playPauseButton = play
         bar.addView(play)
-        bar.addView(controlButton("⏭") { stepChannel(1) })
-        bar.addView(controlButton("☰ Kanallar") { showChannelList() })
-        bar.addView(controlButton("⛶") { toggleFullscreen() })
+        bar.addView(controlButton(null, R.drawable.ic_ok_next, "Sonraki kanal") { stepChannel(1) })
+        bar.addView(controlButton("Kanallar", R.drawable.ic_ok_grid, "Kanal listesi") { showChannelList() })
+        bar.addView(controlButton(null, R.drawable.ic_ok_fullscreen, "Tam ekran") { toggleFullscreen() })
 
         return bar
     }
 
     private fun buildParkedOverlay(): TextView {
-        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int = CarUiKit.dp(this, value)
 
         return TextView(this).apply {
-            setTextColor(Color.WHITE)
+            setTextColor(CarUiKit.INK)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setBackgroundColor(Color.BLACK)
-            setPadding((24 * density).toInt(), 0, (24 * density).toInt(), 0)
+            setBackgroundColor(CarUiKit.ANTHRACITE)
+            setCompoundDrawablesRelative(
+                null,
+                CarUiKit.icon(this@CarVideoActivity, R.drawable.ic_ok_lock, CarUiKit.ORANGE)?.apply {
+                    setBounds(0, 0, dp(56), dp(56))
+                },
+                null, null
+            )
+            compoundDrawablePadding = dp(16)
+            setPadding(dp(24), 0, dp(24), 0)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -670,13 +699,7 @@ class CarVideoActivity : CarActivity() {
             CarVideoPlayerHolder.setPlayWhenReady(true)
         }
 
-        statusView?.text = if (selected == null) {
-            "${radios.size} radyo"
-        } else {
-            "Oynatılıyor: ${selected.name}"
-        }
-
-        adapter?.update(
+        browser?.showRadio(
             radios.mapIndexed { index, radio ->
                 IptvChannel(
                     id = index,
@@ -686,7 +709,12 @@ class CarVideoActivity : CarActivity() {
                     category = "Radyo"
                 )
             },
-            radios.indexOfFirst { it.id == selectedRadioId }.takeIf { it >= 0 }
+            radios.indexOfFirst { it.id == selectedRadioId }.takeIf { it >= 0 },
+            if (selected == null) {
+                "${radios.size} radyo"
+            } else {
+                "Oynatılıyor: ${selected.name}"
+            }
         )
     }
 
@@ -723,6 +751,7 @@ class CarVideoActivity : CarActivity() {
         }
 
         state = state.select(channel.id)
+        library.markWatched(channel.id)
         userPaused = false
         controlsVisible = true
         persistSelection()
@@ -746,47 +775,14 @@ class CarVideoActivity : CarActivity() {
     }
 
     private fun buildListUi(): LinearLayout {
-        val density = resources.displayMetrics.density
-
-        fun dp(value: Int): Int = (value * density).toInt()
-
-        val container = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setBackgroundColor(Color.BLACK)
-            setPadding(dp(16), dp(8), dp(16), dp(12))
-        }
-
-        statusView = TextView(this).apply {
-            setTextColor(Color.LTGRAY)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setPadding(0, dp(4), 0, dp(8))
-        }
-
-        adapter = ChannelAdapter(
-            density = density,
-            onClick = { onChannelClicked(it) }
+        val channelBrowser = CarChannelBrowser(
+            context = this,
+            library = library,
+            onChannelClick = { onChannelClicked(it) },
+            onFavoritesChanged = { Log.d(TAG, "CAR FAVORITES ${library.favorites().size}") }
         )
-
-        gridView = GridView(this).apply {
-            numColumns = 2
-            horizontalSpacing = dp(10)
-            verticalSpacing = dp(10)
-            this.adapter = this@CarVideoActivity.adapter
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1f
-            )
-        }
-
-        container.addView(statusView)
-        container.addView(gridView)
-
-        return container
+        browser = channelBrowser
+        return channelBrowser.view
     }
 
     private val surfaceCallback = object : SurfaceHolder.Callback {
@@ -821,158 +817,5 @@ class CarVideoActivity : CarActivity() {
     private fun configureSurfaceZOrder(view: SurfaceView) {
         // Varsayılan sıra: kontroller ve park uyarısı videonun üstünde.
         CarSurfaceLayering.configureVideoSurface(view)
-    }
-
-    private inner class ChannelAdapter(
-        private val density: Float,
-        private val onClick: (IptvChannel) -> Unit
-    ) : BaseAdapter() {
-
-        private var channels: List<IptvChannel> = emptyList()
-        private var selectedId: Int? = null
-
-        fun update(
-            next: List<IptvChannel>,
-            selected: Int?
-        ) {
-            channels = next
-            selectedId = selected
-            notifyDataSetChanged()
-        }
-
-        override fun getCount(): Int = channels.size
-
-        override fun getItem(position: Int): IptvChannel = channels[position]
-
-        override fun getItemId(position: Int): Long = channels[position].id.toLong()
-
-        override fun getView(
-            position: Int,
-            convertView: View?,
-            parent: ViewGroup
-        ): View {
-            val channel = channels[position]
-            val row = convertView as? LinearLayout ?: buildRow()
-            val logo = row.getChildAt(0) as ImageView
-            val text = row.getChildAt(1) as TextView
-
-            text.text = channel.name
-            row.isSelected = channel.id == selectedId
-            row.isClickable = true
-            row.isFocusable = true
-            row.setBackgroundColor(
-                if (channel.id == selectedId) {
-                    Color.rgb(24, 80, 110)
-                } else {
-                    Color.rgb(28, 28, 28)
-                }
-            )
-            row.setOnFocusChangeListener { _, hasFocus ->
-                if (hasFocus && channel.id != selectedId) {
-                    row.setBackgroundColor(Color.rgb(40, 60, 80))
-                } else {
-                    row.setBackgroundColor(
-                        if (channel.id == selectedId) {
-                            Color.rgb(24, 80, 110)
-                        } else {
-                            Color.rgb(28, 28, 28)
-                        }
-                    )
-                }
-            }
-
-            bindLogo(logo, channel.logoUrl)
-            row.setOnClickListener { onClick(channel) }
-            return row
-        }
-
-        private fun buildRow(): LinearLayout {
-            val dp = { value: Int -> (value * density).toInt() }
-
-            return LinearLayout(this@CarVideoActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(10), dp(10), dp(10), dp(10))
-
-                addView(
-                    ImageView(this@CarVideoActivity).apply {
-                        layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
-                        scaleType = ImageView.ScaleType.FIT_CENTER
-                    }
-                )
-
-                addView(
-                    TextView(this@CarVideoActivity).apply {
-                        layoutParams = LinearLayout.LayoutParams(
-                            0,
-                            ViewGroup.LayoutParams.WRAP_CONTENT,
-                            1f
-                        ).apply {
-                            leftMargin = dp(10)
-                        }
-                        setTextColor(Color.WHITE)
-                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                        maxLines = 2
-                    }
-                )
-            }
-        }
-    }
-
-    private fun bindLogo(
-        imageView: ImageView,
-        logoUrl: String?
-    ) {
-        imageView.setImageBitmap(null)
-        imageView.tag = logoUrl
-
-        if (logoUrl.isNullOrBlank()) {
-            return
-        }
-
-        logoCache.get(logoUrl)?.let { cached ->
-            imageView.setImageBitmap(cached)
-            return
-        }
-
-        Thread {
-            val bitmap = loadLogo(logoUrl) ?: return@Thread
-
-            mainHandler.post {
-                if (imageView.tag == logoUrl) {
-                    imageView.setImageBitmap(bitmap)
-                }
-            }
-        }.start()
-    }
-
-    private fun loadLogo(urlString: String): Bitmap? {
-        return try {
-            val cached = logoCache.get(urlString)
-            if (cached != null) {
-                return cached
-            }
-
-            val connection = URL(urlString).openConnection() as HttpURLConnection
-            connection.connectTimeout = 4000
-            connection.readTimeout = 4000
-            connection.setRequestProperty("User-Agent", "KaradagCarTV/1.0")
-            connection.doInput = true
-            connection.connect()
-
-            val bitmap = connection.inputStream.use {
-                BitmapFactory.decodeStream(it)
-            }
-
-            connection.disconnect()
-
-            if (bitmap != null) {
-                logoCache.put(urlString, bitmap)
-            }
-
-            bitmap
-        } catch (_: Exception) {
-            null
-        }
     }
 }

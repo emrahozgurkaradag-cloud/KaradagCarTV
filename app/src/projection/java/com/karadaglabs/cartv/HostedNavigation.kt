@@ -1,13 +1,11 @@
 package com.karadaglabs.cartv
 
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.media3.common.util.UnstableApi
@@ -69,61 +67,87 @@ object HostedNavigation {
         }
     }
 
+    private fun iconFor(destination: ProjectionDestination): Int = when (destination) {
+        ProjectionDestination.LIVE_TV -> R.drawable.ic_ok_tv
+        ProjectionDestination.RADIO -> R.drawable.ic_ok_radio
+        ProjectionDestination.YOUTUBE -> R.drawable.ic_ok_video
+        ProjectionDestination.GOOGLE -> R.drawable.ic_ok_web
+    }
+
+    /**
+     * Araç ekranı üst bölümü: ÖK + KaradagCarTV ve dört ana bölüm (Canlı TV,
+     * Radyo, YouTube, Google) doğrudan, büyük dokunma hedefleriyle; alt menü
+     * veya hamburger yok. Seçili bölüm turuncu.
+     */
     fun menuBar(
-        activity: CarActivity,
+        activity: android.content.Context,
         current: ProjectionDestination,
         onSelect: (ProjectionDestination) -> Unit
     ): LinearLayout {
-        val density = activity.resources.displayMetrics.density
-        val dp = { value: Int -> (value * density).toInt() }
+        val dp = { value: Int -> CarUiKit.dp(activity, value) }
+        val compact = CarUiKit.compact(activity)
 
-        val column = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            setBackgroundColor(Color.rgb(16, 16, 16))
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-        }
-
-        val brand = TextView(activity).apply {
-            text = "Karadag Car TV"
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, dp(4))
-        }
-
-        val row = LinearLayout(activity).apply {
+        val bar = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
+            setBackgroundColor(CarUiKit.ANTHRACITE)
+            setPadding(dp(16), dp(if (compact) 6 else 10), dp(16), dp(if (compact) 6 else 10))
         }
+
+        val brand = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            contentDescription = "Karadag Car TV"
+            addView(CarUiKit.logo(activity, if (compact) 44 else 52))
+            addView(
+                CarUiKit.wordmark(activity, if (compact) 18f else 21f).apply {
+                    setPadding(dp(10), 0, dp(16), 0)
+                }
+            )
+        }
+        bar.addView(brand)
 
         ProjectionDestination.entries.forEach { destination ->
             val selected = destination == current
-            val button = Button(activity).apply {
+            val fg = if (selected) CarUiKit.ANTHRACITE else CarUiKit.INK
+            val tile = TextView(activity).apply {
                 text = destination.label
+                contentDescription = destination.label
                 isSelected = selected
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                setOnClickListener { onSelect(destination) }
-                val params = LinearLayout.LayoutParams(
-                    0,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    1f
+                gravity = Gravity.CENTER
+                maxLines = 1
+                typeface = Typeface.DEFAULT_BOLD
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, if (compact) 15f else 17f)
+                setTextColor(fg)
+                minHeight = dp(if (compact) 60 else 72)
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                setCompoundDrawablesRelativeWithIntrinsicBounds(
+                    CarUiKit.icon(activity, iconFor(destination), if (selected) CarUiKit.ANTHRACITE else CarUiKit.ORANGE),
+                    null, null, null
                 )
-                params.rightMargin = dp(4)
-                layoutParams = params
+                compoundDrawablePadding = dp(8)
+                background = CarUiKit.pressable(
+                    CarUiKit.rounded(
+                        if (selected) CarUiKit.ORANGE else CarUiKit.SURFACE,
+                        18, activity,
+                        if (selected) CarUiKit.ORANGE else CarUiKit.OUTLINE
+                    ),
+                    activity
+                )
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { onSelect(destination) }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    marginStart = dp(8)
+                }
             }
-            row.addView(button)
+            bar.addView(tile)
         }
 
-        column.addView(brand)
-        column.addView(row)
-        return column
+        return bar
     }
 }

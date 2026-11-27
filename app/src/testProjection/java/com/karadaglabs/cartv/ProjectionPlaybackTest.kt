@@ -368,7 +368,16 @@ class ProjectionSourceContractTest {
             "java/com/karadaglabs/cartv/CarVideoActivity.kt"
         )
 
-        assertTrue(video.contains("GridView"))
+        // Kanal ızgarası CarChannelBrowser'a taşındı (ekran görüntüsü testi
+        // aynı görünümü head-unit boyutlarında çizebilsin); o da View tabanlı.
+        val browser = source(
+            "java/com/karadaglabs/cartv/CarChannelBrowser.kt"
+        )
+        assertTrue(video.contains("CarChannelBrowser("))
+        assertTrue(browser.contains("GridView"))
+        listOf("PlayerView", "TextureView", "setContent {", "IptvActivity", "androidx.compose").forEach {
+            assertFalse(it, browser.contains(it))
+        }
         assertTrue(video.contains("SurfaceView"))
         // Video yüzeyi varsayılan z-sırasında: kontroller üstte (CarSurfaceLayeringDeviceTest).
         assertTrue(video.contains("CarSurfaceLayering.configureVideoSurface"))
