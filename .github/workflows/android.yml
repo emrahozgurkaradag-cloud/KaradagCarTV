@@ -6,6 +6,11 @@ on:
     branches:
       - main
       - android-auto-official-video
+    paths-ignore:
+      - 'docs/**'
+      - 'scripts/dhu-launch.sh'
+      - 'scripts/dhu_session.py'
+      - '.github/workflows/android-auto-dhu-launch.yml'
   workflow_dispatch:
 
 permissions:
