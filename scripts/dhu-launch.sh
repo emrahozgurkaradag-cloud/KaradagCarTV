@@ -80,13 +80,19 @@ if [ -n "$new" ] && { [ "$new" = "$GOOGLE_GEARHEAD" ] || grep -qi "$GOOGLE_GEARH
         adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
       else break; fi
     done
-    adb shell rm -rf "$sysdir"
-    adb shell rm -rf /data/system/package_cache/* 2>/dev/null
-    adb reboot; adb wait-for-device
-    until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 3; done
-    adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
-    adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
-    log "sistem paketi sonrası: '$(adb shell pm path $GH | tr -d '\r')'"
+    for attempt in 1 2; do
+      log "mount: $(adb shell "mount | grep -E ' /(product|system) '" | tr -d '\r' | tr '\n' ';' | cut -c1-300)"
+      log "rm: $(adb shell "rm -rf '$sysdir' && echo silindi || echo HATA" 2>&1 | tr -d '\r'); kalan: $(adb shell "ls '$sysdir' 2>&1" | tr -d '\r' | head -1)"
+      adb shell rm -rf /data/system/package_cache/* 2>/dev/null
+      adb reboot; adb wait-for-device
+      until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 3; done
+      adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
+      adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
+      left="$(adb shell pm path $GH | tr -d '\r')"
+      log "sistem paketi sonrası ($attempt): '$left'"
+      [ -z "$left" ] && break
+      log "remount (yeniden): $(adb remount 2>&1 | tail -1)"
+    done
   fi
   printf '%s\n' "${sel[@]}" | sed 's/^/  kurulacak: /'
   adb install-multiple -r -g -i com.android.vending "${sel[@]}" 2>&1 | tail -3
