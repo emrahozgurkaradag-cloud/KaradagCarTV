@@ -31,7 +31,7 @@ jobs:
         # anahtarıyla imzalı. Yazılabilir sistem imajında kaldırılır, yerine
         # Google imzalı güncel Android Auto kurulur (imza denetimiyle).
         # API 34: ARM çevirisi var (AA 18 yalnızca arm64 yerel kitaplık taşıyor).
-        api-level: [30, 34]
+        api-level: [34]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

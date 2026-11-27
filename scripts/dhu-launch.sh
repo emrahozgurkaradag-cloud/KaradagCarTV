@@ -104,6 +104,22 @@ log "kurulu gearhead: $after"
 echo "gearhead_before=$before" > "$OUT/versions.txt"; echo "gearhead_after=$after" >> "$OUT/versions.txt"
 adb shell dumpsys package com.google.android.gms | tr -d '\r' | grep -m1 versionName | sed 's/^ */gms_/' >> "$OUT/versions.txt"
 
+# Teşhis: bağlantıda AA'nın başlattığı kendi FirstActivityImpl bileşeni
+# hangi APK'da tanımlı, cihazda etkin mi?
+for f in "$W"/*.apk; do
+  "$AAPT2" dump xmltree --file AndroidManifest.xml "$f" > "$OUT/manifest-$(basename "$f" .apk).txt" 2>/dev/null || true
+  n=$(grep -c "FirstActivityImpl" "$OUT/manifest-$(basename "$f" .apk).txt" 2>/dev/null || echo 0)
+  log "manifest $(basename "$f"): FirstActivityImpl geçişi=$n; split=$(grep -m1 -oE 'split="[^"]*"' "$OUT/manifest-$(basename "$f" .apk).txt")"
+done
+log "xapk split listesi: $(find "$W" -name manifest.json -exec grep -oE '"(id|file)": *"[^"]+"' {} \; | tr '\n' ' ')"
+grep -n -B2 -A14 'FirstActivityImpl"' "$OUT"/manifest-*.txt 2>/dev/null | head -60 > "$OUT/first-activity-decl.txt" || true
+grep -hoE 'android:(isFeatureSplit|requiredSplitTypes|splitTypes|requiredSplit)[^ ]*' "$OUT"/manifest-*.txt | sort -u | sed 's/^/[dhu-launch] split özniteliği: /'
+adb shell dumpsys package $GH | tr -d '\r' > "$OUT/gearhead-dumpsys.txt"
+log "cihazdaki split'ler: $(grep -E 'splits=|codePath=' "$OUT/gearhead-dumpsys.txt" | head -3 | xargs)"
+log "devre dışı bileşen sayısı: $(sed -n '/disabledComponents:/,/enabledComponents:/p' "$OUT/gearhead-dumpsys.txt" | grep -c '\.')"
+grep -n "FirstActivityImpl" "$OUT/gearhead-dumpsys.txt" | head -5 | sed 's/^/[dhu-launch] dumpsys: /'
+adb shell cmd package resolve-activity --components -a com.google.android.gms.carsetup.START_DUPLEX 2>&1 | tr -d '\r' | head -3 | sed 's/^/[dhu-launch] START_DUPLEX çözümü: /'
+
 # --- 2. KaradagCarTV projection (Play yükleyicisi olarak işaretli: test) --
 APK="$(ls app/build/outputs/apk/projection/debug/*.apk | head -1)"
 adb install -r -g -i com.android.vending "$APK" | tail -1
