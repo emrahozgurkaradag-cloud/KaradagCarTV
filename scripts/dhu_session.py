@@ -181,7 +181,7 @@ def session(tag, first):
         if re.search(r"CAR VIDEO ACTIVITY", logcat()):
             opened = True
             break
-        hit = d.find(img, r"^Karadag|KaradagCarTV|CarTV")
+        hit = d.find(img, r"^TV$")  # ızgarada "ÖK TV" = CarVideoService (video)
         if hit:
             log(f"araç ekranında '{hit[0]}' bulundu -> dokunma")
             d.tap(hit[1], hit[2]); time.sleep(6)

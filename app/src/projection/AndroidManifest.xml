@@ -64,7 +64,7 @@
         <service
             android:name=".CarMirrorService"
             android:exported="true"
-            android:label="Karadag Car TV">
+            android:label="@string/car_launcher_mirror">
 
             <intent-filter>
 
@@ -81,7 +81,7 @@
         <service
             android:name=".CarVideoService"
             android:exported="true"
-            android:label="Karadag Car TV">
+            android:label="@string/car_launcher_video">
 
             <intent-filter>
 

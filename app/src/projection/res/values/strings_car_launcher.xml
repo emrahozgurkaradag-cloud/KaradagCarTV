@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android Auto uygulama ızgarası ~9 karakterden sonra kısaltır; iki
+         giriş ("Karadag ...") ayırt edilemiyordu. Kısa ve farklı etiketler. -->
+    <string name="car_launcher_video">ÖK TV</string>
+    <string name="car_launcher_mirror">ÖK Yansıtma</string>
+</resources>

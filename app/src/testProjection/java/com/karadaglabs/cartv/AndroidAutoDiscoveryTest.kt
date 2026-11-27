@@ -240,6 +240,26 @@ class AndroidAutoDiscoveryTest {
         )
     }
 
+    @Test
+    fun carLauncherEntriesHaveDistinctShortLabels() {
+        // AA ızgarası uzun etiketleri "Karadag ..." diye kısaltır; video ve
+        // yansıtma girişleri ayırt edilebilir olmalı (DHU: AA 18.1 ızgarası).
+        val legacy = sourceFile("AndroidManifest.xml")
+        val manifest = legacy.readText()
+        fun labelRef(service: String): String =
+            Regex("""android:name="\.$service"\s+android:exported="true"\s+android:label="@string/(\w+)"""")
+                .find(manifest)?.groupValues?.get(1)
+                ?: throw AssertionError("$service etiketi string kaynağı değil")
+        val strings = File(legacy.parentFile, "res/values/strings_car_launcher.xml").readText()
+        fun value(name: String): String =
+            Regex("""<string name="$name">([^<]+)</string>""").find(strings)!!.groupValues[1]
+        val video = value(labelRef("CarVideoService"))
+        val mirror = value(labelRef("CarMirrorService"))
+        assertTrue(video != mirror)
+        assertTrue("video etiketi kısaltılmamalı: $video", video.length <= 9)
+        assertTrue(mirror.take(8) != video.take(8))
+    }
+
     /** main + projection manifestleri (Gradle birleştirmesine eşdeğer içerik). */
     private fun mergedManifest(): String {
         val legacy = sourceFile("AndroidManifest.xml")
