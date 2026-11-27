@@ -63,8 +63,31 @@ log "rotasyon geçmişi (lineage): $(grep -E 'SHA-256' "$OUT/aa-lineage.txt" | a
 # SDK'nın (aauto.aar gms.car.i) güvendiği sertifikalar: Google gearhead
 # release fdb00c43… ve AOSP test anahtarı 1975b2f1… (emülatör taslakları).
 # Kabul: indirilen imza ya da rotasyon geçmişi, cihazdaki paketin imzasını içermeli.
-if [ -n "$new" ] && { [ "$new" = "$ref" ] || grep -qi "$ref" "$OUT/aa-lineage.txt" "$OUT/aa-signers.txt"; }; then
-  log "imza doğrulandı: indirilen APK cihazdaki gearhead imzasıyla aynı veya rotasyon geçmişinde"
+GOOGLE_GEARHEAD=fdb00c43dbde8b51cb312aa81d3b5fa17713adb94b28f598d77f8eb89daceedf
+if [ -n "$new" ] && { [ "$new" = "$GOOGLE_GEARHEAD" ] || grep -qi "$GOOGLE_GEARHEAD" "$OUT/aa-lineage.txt"; }; then
+  log "imza doğrulandı: Google gearhead release sertifikası (fdb00c43…) indirilen paketin imzası veya rotasyon geçmişinde"
+  if [ "$ref" != "$new" ] && ! grep -qi "$ref" "$OUT/aa-lineage.txt"; then
+    # Emülatör imajındaki taslak AOSP test anahtarıyla imzalı: Google imzalı
+    # sürüm güncelleme olarak kurulamaz. Yazılabilir sistem imajından kaldırılır.
+    sysdir="$(adb shell pm path $GH | tr -d '\r' | sed 's/^package://' | head -1 | xargs dirname)"
+    log "test anahtarlı sistem paketi kaldırılıyor: $sysdir"
+    adb shell pm uninstall $GH >/dev/null 2>&1
+    for k in 1 2; do
+      r="$(adb remount 2>&1)"; log "remount: $(echo "$r" | tail -1)"
+      if echo "$r" | grep -qiE "reboot|verity"; then
+        adb disable-verity >/dev/null 2>&1; adb reboot; adb wait-for-device
+        until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 3; done
+        adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
+      else break; fi
+    done
+    adb shell rm -rf "$sysdir"
+    adb shell rm -rf /data/system/package_cache/* 2>/dev/null
+    adb reboot; adb wait-for-device
+    until [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 3; done
+    adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
+    adb shell input keyevent KEYCODE_WAKEUP; adb shell wm dismiss-keyguard 2>/dev/null
+    log "sistem paketi sonrası: '$(adb shell pm path $GH | tr -d '\r')'"
+  fi
   printf '%s\n' "${sel[@]}" | sed 's/^/  kurulacak: /'
   adb install-multiple -r -g -i com.android.vending "${sel[@]}" 2>&1 | tail -3
 else
