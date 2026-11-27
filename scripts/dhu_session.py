@@ -176,6 +176,8 @@ def session(tag, first):
         # Telefon tarafı kurulum / izin ekranları
         phone_tap_text(r"(Get started|Accept|Continue|Next|Got it|OK|Allow|Allow all the time|While using the app|Agree|I agree|Done|Turn on|Not now|Skip)")
         img = d.shot(f"{i:02d}")
+        if i <= 4 or i % 6 == 0:  # telefon tarafının kanıtı (ilk adımlar)
+            sh(f"adb exec-out screencap -p > '{OUT}/phone-{tag}-{i:02d}.png'; cp /tmp/ui.xml '{OUT}/phone-{tag}-{i:02d}.xml' 2>/dev/null")
         if re.search(r"CAR VIDEO ACTIVITY", logcat()):
             opened = True
             break
