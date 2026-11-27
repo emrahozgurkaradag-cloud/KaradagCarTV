@@ -227,8 +227,11 @@ for i in $(seq 1 10); do
 done
 if [ -n "$found" ]; then
   set -- $found; log "sürüm satırı: $3 $4"
-  for k in $(seq 1 10); do adb shell input tap "$1" "$2"; sleep 0.3; done; sleep 2
-  tap 04-devdialog "^(OK|Allow)$"; shot 04-dev
+  for round in 1 2 3; do  # 10 dokunuş bazen geliştirici iletişim kutusunu açmaz
+    for k in $(seq 1 10); do adb shell input tap "$1" "$2"; sleep 0.4; done; sleep 2
+    tap 04-devdialog "^(OK|Allow)$" && break
+    log "geliştirici modu iletişim kutusu yok (deneme $round)"
+  done; shot 04-dev
   open_settings
   if tap 05-overflow "More options" && tap 05-dev "^Developer settings$"; then
     us=""
