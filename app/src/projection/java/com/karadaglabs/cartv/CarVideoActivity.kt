@@ -446,7 +446,7 @@ class CarVideoActivity : CarActivity() {
         nowPlayingView?.text = selected?.name.orEmpty()
         playPauseButton?.let { button ->
             button.text = if (userPaused) "Oynat" else "Duraklat"
-            button.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            button.setCompoundDrawablesWithIntrinsicBounds(
                 CarUiKit.icon(this, if (userPaused) R.drawable.ic_ok_play else R.drawable.ic_ok_pause, CarUiKit.ANTHRACITE),
                 null, null, null
             )
@@ -584,7 +584,7 @@ class CarVideoActivity : CarActivity() {
             minHeight = dp(68)
             minWidth = dp(68)
             setPadding(dp(18), dp(8), dp(18), dp(8))
-            setCompoundDrawablesRelativeWithIntrinsicBounds(CarUiKit.icon(this@CarVideoActivity, iconRes, fg), null, null, null)
+            setCompoundDrawablesWithIntrinsicBounds(CarUiKit.icon(this@CarVideoActivity, iconRes, fg), null, null, null)
             compoundDrawablePadding = if (label.isNullOrEmpty()) 0 else dp(8)
             background = CarUiKit.pressable(
                 CarUiKit.rounded(
@@ -630,7 +630,7 @@ class CarVideoActivity : CarActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setCompoundDrawablesRelativeWithIntrinsicBounds(
+            setCompoundDrawablesWithIntrinsicBounds(
                 CarUiKit.icon(this@CarVideoActivity, R.drawable.ic_ok_live, CarUiKit.LIVE_RED), null, null, null
             )
             compoundDrawablePadding = dp(6)
@@ -662,7 +662,7 @@ class CarVideoActivity : CarActivity() {
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setBackgroundColor(CarUiKit.ANTHRACITE)
-            setCompoundDrawablesRelative(
+            setCompoundDrawables(
                 null,
                 CarUiKit.icon(this@CarVideoActivity, R.drawable.ic_ok_lock, CarUiKit.ORANGE)?.apply {
                     setBounds(0, 0, dp(56), dp(56))

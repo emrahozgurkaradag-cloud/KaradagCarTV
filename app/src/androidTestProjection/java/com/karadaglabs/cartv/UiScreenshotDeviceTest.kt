@@ -96,6 +96,11 @@ class UiScreenshotDeviceTest {
             // İzin bu emülatörde tanımlı değil: istek iletişim kutusu açılmaz.
         }
         setNetwork(false)
+        // CI emülatörü 320x640; ekran görüntüleri için gerçekçi telefon
+        // çözünürlüğü (1080x2400, 420dpi). tearDown'da geri alınır.
+        shell("wm size 1080x2400")
+        shell("wm density 420")
+        SystemClock.sleep(1_500)
 
         val channels = sampleChannels()
         val contents = JSONArray().apply {
@@ -137,6 +142,8 @@ class UiScreenshotDeviceTest {
                 }
             }
         }.commit()
+        shell("wm size reset")
+        shell("wm density reset")
         setNetwork(true)
     }
 
@@ -182,24 +189,62 @@ class UiScreenshotDeviceTest {
             screen("04-phone-live-tv-favorites")
         }
 
-        // Oynatıcı: test varlığı (tv1.ts) yerel dosyadan, mevcut Media3 yolu.
-        val media = File(context.cacheDir, "screenshot-media/tv1.ts")
-        media.parentFile!!.mkdirs()
-        instrumentation.context.assets.open("media/tv1.ts").use { input ->
-            media.outputStream().use { input.copyTo(it) }
-        }
-        val player = Intent(context, PlayerActivity::class.java)
-            .putExtra(PlayerActivity.EXTRA_STREAM_URL, android.net.Uri.fromFile(media).toString())
-            .putExtra(PlayerActivity.EXTRA_TITLE, "Haber Merkez")
-            .putExtra(PlayerActivity.EXTRA_MEDIA_TYPE, "iptv")
-        ActivityScenario.launch<PlayerActivity>(player).use { scenario ->
-            SystemClock.sleep(4_000)
-            scenario.onActivity { activity ->
-                // Kullanıcının ekrana dokunmasıyla açılan kontroller.
-                activity.findViewById<View>(R.id.topBar).visibility = View.VISIBLE
-                activity.findViewById<View>(R.id.controlBar).visibility = View.VISIBLE
+        // Oynatıcı: test varlığı (tv1.ts) cihaz içi 127.0.0.1 HTTP sunucusundan
+        // (PlayerActivity gerçek yayınlar gibi HTTP veri kaynağı kullanır).
+        val bytes = instrumentation.context.assets.open("media/tv1.ts").use { it.readBytes() }
+        LoopbackServer(bytes).use { server ->
+            val player = Intent(context, PlayerActivity::class.java)
+                .putExtra(PlayerActivity.EXTRA_STREAM_URL, "http://127.0.0.1:${server.port}/tv1.ts")
+                .putExtra(PlayerActivity.EXTRA_TITLE, "Haber Merkez")
+                .putExtra(PlayerActivity.EXTRA_MEDIA_TYPE, "iptv")
+            ActivityScenario.launch<PlayerActivity>(player).use { scenario ->
+                SystemClock.sleep(5_000)
+                scenario.onActivity { activity ->
+                    // Kullanıcının ekrana dokunmasıyla açılan kontroller.
+                    activity.findViewById<View>(R.id.topBar).visibility = View.VISIBLE
+                    activity.findViewById<View>(R.id.controlBar).visibility = View.VISIBLE
+                }
+                screen("05-phone-player")
             }
-            screen("05-phone-player")
+        }
+
+        // Oynatma hatası durumu: erişilemeyen yerel adres (kapalı port).
+        val broken = Intent(context, PlayerActivity::class.java)
+            .putExtra(PlayerActivity.EXTRA_STREAM_URL, "http://127.0.0.1:9/yok.ts")
+            .putExtra(PlayerActivity.EXTRA_TITLE, "Spor Arena")
+            .putExtra(PlayerActivity.EXTRA_MEDIA_TYPE, "iptv")
+        ActivityScenario.launch<PlayerActivity>(broken).use {
+            SystemClock.sleep(6_000)
+            screen("06-phone-player-error")
+        }
+    }
+
+    /** Tek dosyayı (video/mp2t) tekrar tekrar sunan küçük HTTP sunucusu. */
+    private class LoopbackServer(private val body: ByteArray) : java.io.Closeable {
+        private val socket = java.net.ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))
+        val port: Int = socket.localPort
+        private val thread = Thread {
+            while (!socket.isClosed) {
+                val client = try { socket.accept() } catch (_: Exception) { break }
+                Thread {
+                    client.use { c ->
+                        try {
+                            val reader = c.getInputStream().bufferedReader()
+                            while (true) { val line = reader.readLine() ?: break; if (line.isEmpty()) break }
+                            val out = c.getOutputStream()
+                            out.write(("HTTP/1.1 200 OK\r\nContent-Type: video/mp2t\r\n" +
+                                "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n").toByteArray())
+                            out.write(body)
+                            out.flush()
+                        } catch (_: Exception) {
+                        }
+                    }
+                }.start()
+            }
+        }.apply { isDaemon = true; start() }
+
+        override fun close() {
+            socket.close()
         }
     }
 

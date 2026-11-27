@@ -274,7 +274,7 @@ class CarChannelBrowser(
                                 setTextColor(CarUiKit.INK_MUTED)
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
                                 maxLines = 1
-                                setCompoundDrawablesRelative(
+                                setCompoundDrawables(
                                     CarUiKit.icon(context, R.drawable.ic_ok_live, CarUiKit.LIVE_RED)?.apply {
                                         setBounds(0, 0, dp(12), dp(12))
                                     },

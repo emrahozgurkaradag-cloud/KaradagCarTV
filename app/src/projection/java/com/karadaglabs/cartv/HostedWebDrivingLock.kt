@@ -33,7 +33,7 @@ class HostedWebDrivingLock(
         gravity = Gravity.CENTER
         setBackgroundColor(CarUiKit.ANTHRACITE)
         setPadding(CarUiKit.dp(activity, 24), 0, CarUiKit.dp(activity, 24), 0)
-        setCompoundDrawablesRelative(
+        setCompoundDrawables(
             null,
             CarUiKit.icon(activity, R.drawable.ic_ok_lock, CarUiKit.ORANGE)?.apply {
                 setBounds(0, 0, CarUiKit.dp(activity, 56), CarUiKit.dp(activity, 56))

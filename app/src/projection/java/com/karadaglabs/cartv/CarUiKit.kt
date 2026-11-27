@@ -95,7 +95,7 @@ object CarUiKit {
                 context
             )
             if (iconRes != null) {
-                setCompoundDrawablesRelativeWithIntrinsicBounds(
+                setCompoundDrawablesWithIntrinsicBounds(
                     icon(context, iconRes, if (selected) ANTHRACITE else ORANGE), null, null, null
                 )
                 compoundDrawablePadding = dp(context, 8)

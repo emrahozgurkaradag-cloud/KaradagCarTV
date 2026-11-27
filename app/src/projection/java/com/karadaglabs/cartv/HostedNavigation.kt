@@ -125,7 +125,7 @@ object HostedNavigation {
                 setTextColor(fg)
                 minHeight = dp(if (compact) 60 else 72)
                 setPadding(dp(10), dp(6), dp(10), dp(6))
-                setCompoundDrawablesRelativeWithIntrinsicBounds(
+                setCompoundDrawablesWithIntrinsicBounds(
                     CarUiKit.icon(activity, iconFor(destination), if (selected) CarUiKit.ANTHRACITE else CarUiKit.ORANGE),
                     null, null, null
                 )
