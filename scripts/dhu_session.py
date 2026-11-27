@@ -237,8 +237,12 @@ def session(tag, first):
     # Kanal: OCR ile kartı bul, yoksa medya tuşu (sonraki kanal = PLAYING).
     time.sleep(6)
     img = d.shot("list")
-    hit = d.find(img, r"DHU|Test|Yay")
+    # Kanal kartı: "Seçili: DHU Test Yayini" başlığı da eşleşir; en alttaki
+    # (kart) eşleşme seçilir.
+    hits = [(t, x, y) for t, x, y in d.ocr(img) if re.search(r"DHU|Test|Yay", t)]
+    hit = max(hits, key=lambda h: h[2]) if hits else None
     if hit:
+        log(f"kanal kartı '{hit[0]}' -> dokunma {hit[1]},{hit[2]}")
         d.tap(hit[1], hit[2])
     else:
         d.send("keycode media_next")
