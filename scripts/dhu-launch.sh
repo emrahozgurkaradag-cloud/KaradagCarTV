@@ -139,6 +139,11 @@ if [ -n "$new" ] && { [ "$new" = "$GOOGLE_GEARHEAD" ] || grep -qi "$GOOGLE_GEARH
     for pm_ in $("$AAPT2" dump permissions "$base" | grep -oE "uses-permission: name='[^']+'" | sed -E "s/.*name='([^']+)'/\1/"); do
       adb shell pm grant $GH "$pm_" >/dev/null 2>&1 || true
     done
+    # Sistem taramasında ABI türetilmiyor (primaryCpuAbi=null -> yerel
+    # kitaplıklar yüklenmez). Aynı imzalı paketi sistem uygulamasının
+    # güncellemesi olarak kur: rol/ayrıcalık korunur, ABI normal türetilir.
+    adb install-multiple -r -d -g "${sel[@]}" 2>&1 | tail -1 | sed 's/^/[dhu-launch] sistem güncellemesi: /'
+    log "ABI: $(adb shell dumpsys package $GH | tr -d '\r' | grep -E 'primaryCpuAbi|codePath' | head -3 | xargs)"
     log "ayrıcalıklı izin: $(adb shell dumpsys package $GH | tr -d '\r' | grep -m1 'REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION' | xargs)"
   else
     printf '%s\n' "${sel[@]}" | sed 's/^/  kurulacak: /'
