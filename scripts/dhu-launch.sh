@@ -118,6 +118,12 @@ adb shell dumpsys package $GH | tr -d '\r' > "$OUT/gearhead-dumpsys.txt"
 log "cihazdaki split'ler: $(grep -E 'splits=|codePath=' "$OUT/gearhead-dumpsys.txt" | head -3 | xargs)"
 log "devre dışı bileşen sayısı: $(sed -n '/disabledComponents:/,/enabledComponents:/p' "$OUT/gearhead-dumpsys.txt" | grep -c '\.')"
 grep -n "FirstActivityImpl" "$OUT/gearhead-dumpsys.txt" | head -5 | sed 's/^/[dhu-launch] dumpsys: /'
+# AA 18 manifestinde FirstActivityImpl android:enabled=false gelir; gerçek
+# telefonda AA bunu GMS-uyum kurulumu sonrası kendisi etkinleştirir. Bu
+# emülatörde etkinleşmediği için (bağlantıda ActivityNotFoundException) test
+# düzeneği AA'nın KENDİ bileşenini root ile etkinleştirir. Uygulamamıza,
+# park kilidine veya güvenlik denetimlerine dokunmaz; yalnız emülatör adımı.
+adb shell pm enable "$GH/com.google.android.apps.auto.carservice.gmscorecompat.FirstActivityImpl" 2>&1 | tr -d '\r' | sed 's/^/[dhu-launch] pm enable FirstActivityImpl: /'
 adb shell cmd package resolve-activity --components -a com.google.android.gms.carsetup.START_DUPLEX 2>&1 | tr -d '\r' | head -3 | sed 's/^/[dhu-launch] START_DUPLEX çözümü: /'
 
 # --- 2. KaradagCarTV projection (Play yükleyicisi olarak işaretli: test) --
