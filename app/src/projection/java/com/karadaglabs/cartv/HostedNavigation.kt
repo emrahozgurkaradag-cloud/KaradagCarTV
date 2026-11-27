@@ -115,8 +115,10 @@ object HostedNavigation {
             val selected = destination == current
             val fg = if (selected) CarUiKit.ANTHRACITE else CarUiKit.INK
             val tile = TextView(activity).apply {
-                text = destination.label
+                // Kısa etiket: 800x480 head-unit'te tek satıra sığsın.
+                text = if (destination == ProjectionDestination.RADIO) "Radyo" else destination.label
                 contentDescription = destination.label
+                ellipsize = android.text.TextUtils.TruncateAt.END
                 isSelected = selected
                 gravity = Gravity.CENTER
                 maxLines = 1
