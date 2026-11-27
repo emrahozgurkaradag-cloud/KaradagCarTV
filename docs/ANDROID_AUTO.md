@@ -201,15 +201,47 @@ Google'ın resmî **Desktop Head Unit 2.0** aracı (başsız, SDL dummy sürüc�
 
 Sonuç: Bu CI ortamında Android Auto'nun bizim uygulamayı kendisinin başlatması **gösterilemedi**. Engel bizim kodumuz değil; emülatördeki Android Auto `-preinstall` paketinin Play'den güncellenmeden projeksiyona izin vermemesi. Android Auto 4.3 (API 29) ayarlarında geliştirici menüsü (Head Unit Server) arayüzde çıkmıyor.
 
+### 7.3 Android Auto 18.1 ile uçtan uca DHU zinciri (API 34 emülatörü)
+
+İş akışı: `.github/workflows/android-auto-dhu-launch.yml` (`scripts/dhu-launch.sh`, `scripts/dhu_session.py`). Son başarılı çalışma: 45994044154 (`dda0b3b`). Gerçek araç DEĞİLDİR.
+
+Telefon tarafı: Google imzalı Android Auto **18.1.664444-release** (APKPure; imza rotasyon geçmişinde Google gearhead release sertifikası `fdb00c43…` doğrulandı).
+
+| Adım | Sonuç (s1 / s2 = yeniden bağlantı) |
+|---|---|
+| DHU ↔ telefon oturumu | PASS / PASS |
+| Android Auto ızgarasında uygulama ("ÖK TV" = `CarVideoService`, "ÖK Yansıtma" = `CarMirrorService`) | PASS / PASS |
+| `CarVideoService` bağlandı, host kodu yüklendi (`DynamicApiFactory`) | PASS / PASS |
+| `CarVideoActivity` açıldı (pencere: `CarActivityHostImpl` PhoneWindow) | PASS / PASS |
+| Surface oluştu (800×400 araç ekranı, SurfaceView 800×328) | PASS / PASS |
+| Media3 `setVideoSurfaceHolder` bağlandı | PASS / PASS |
+| İlk kare (1280×720 H.264 test yayını) | PASS (42 sn) / PASS |
+| Araç ekranı görüntüsünde video (doymuş piksel oranı 0.71) | PASS / PASS |
+| `restrict all` → `driving_status_restricted`, görüntü kapalı | PASS / PASS |
+| `restrict none` → `confirming_park` (2 sn) → `parked`, video geri geldi | PASS (11 sn) / PASS (15 sn) |
+| Bağlantı kesilince çökme yok | PASS / PASS |
+
+Emülatöre özgü test düzeneği adımları (gerçek telefonda gerekmez, yalnızca Android Auto'yu etkiler; uygulama koduna dokunmaz):
+
+1. Emülatör imajındaki AOSP test anahtarlı Android Auto taslağı (`1975b2f1…`) yazılabilir sistemden kaldırılır; AA 18.1 ayrıcalıklı sistem uygulaması (`/product/priv-app`) olarak yerleştirilir ve aynı imzalı paketle güncellenir. Neden: `SYSTEM_AUTOMOTIVE_PROJECTION` rolü/CDM izni (`REQUEST_COMPANION_PROFILE_AUTOMOTIVE_PROJECTION`) yalnızca sistem uygulamasına verilir; kullanıcı kurulumunda `:car` süreci CDM'de çöker. Güncelleme adımı yerel kitaplıkların (arm64, ARM çevirisi) yüklenmesi için gerekir.
+2. AA manifestinde `android:enabled=false` gelen `gmscorecompat.FirstActivityImpl` root ile etkinleştirilir (aksi hâlde bağlantıda `ActivityNotFoundException`).
+3. AA'nın bildirim dinleyicisine erişim verilir (ilk kurulum gereksinimi).
+
+Uygulama tarafında bu görevde yapılan tek değişiklik: iki giriş de "Karadag ..." olarak kısaltıldığı için ayırt edilemiyordu; `CarVideoService` "ÖK TV", `CarMirrorService` "ÖK Yansıtma" etiketini aldı (`app/src/projection/res/values/strings_car_launcher.xml`, birim testi `carLauncherEntriesHaveDistinctShortLabels`).
+
+Açık gözlemler (oynatmayı engellemiyor, kod değiştirilmedi): `CarVideoFocus` isteği AA 18.1'de `NoClassDefFoundError` ile reddediliyor; `getLatestSensorEvent` bazı sensörlerde `Wrong signature` döndürüyor, park kilidi kararı dinleyicilerle doğru çalışıyor.
+
 ## 8. Bilinen kısıtlamalar
 
 * Projection yolu Google'ın resmî API'si değildir. Play incelemesinden geçmesi ve Android Auto güncellemelerinde çalışmaya devam etmesi garanti değildir.
-* Android Auto DHU testi CI'da yapılmadı. DHU, telefondaki Android Auto uygulamasının (gearhead) geliştirici ayarlarından elle açılan "head unit server" moduna ve `adb forward tcp:5277` ile masaüstü DHU ikili dosyasına (grafik arayüzlü) bağlanır. [Doğrulandı: CI] `google_apis` emülatör imajlarında (API 29/34) `com.google.android.projection.gearhead` paketi bulunuyor; sürümü `device-checks.sh` ile raporlanır. Ancak geliştirici modu ve head unit server arayüzden açılır, başsız CI'da otomatikleştirilmedi. Bu yüzden bir Android Auto oturumu kurulmadı ve `CarVideoActivity` bir host içinde açılmadı.
+* Android Auto DHU testi emülatörde yapıldı (§7.3); DHU gerçek aracın birebir karşılığı değildir ve emülatöre özgü düzenek adımları gerektirir.
 * Bazı araçlar parkta da sürüş kısıtı bildiriyorsa görüntü hiç açılmaz (bilinçli güvenli taraf).
 * DASH desteklenmez. DRM'li yayınlar test edilmedi.
 * Release APK'ları imza secret'ları tanımlanmadıkça imzasızdır ve Play'e yüklenemez.
 
 ## 9. Gerçek araçta henüz doğrulanmamış davranışlar
+
+1, 2 ve 7. maddeler Android Auto 18.1 DHU'sunda doğrulandı (§7.3); gerçek araçta hâlâ doğrulanmadı.
 
 1. Projection APK'sının Android Auto başlatıcısında görünmesi (Play iç test kurulumuyla).
 2. `CarVideoActivity` penceresinin açılması ve `SurfaceView` görüntüsünün araç ekranına ulaşması.
