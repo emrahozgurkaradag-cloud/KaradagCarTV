@@ -186,11 +186,16 @@ def session(tag, first):
             log(f"araç ekranında '{hit[0]}' bulundu -> dokunma")
             d.tap(hit[1], hit[2]); time.sleep(6)
             continue
+        w, h = size_of(img)
+        # AA ana ekranı (görev çubuğu) görünüyorsa: sol alttaki uygulama
+        # ızgarası düğmesi; ızgarada "Karadag Car TV" etiketi OCR ile bulunur.
+        if d.find(img, r"^(Maps|Music|YouTube|Tap|location|Assistant|Settings|Phone|Calendar|News)$"):
+            log("AA ana ekranı: uygulama ızgarası açılıyor")
+            d.tap(w * 55 // 1000, h * 917 // 1000); time.sleep(5); continue
         btn = d.find(img, r"^(Continue|Get|started|Accept|OK|Got|Done|Allow|Agree|Close|Dismiss)$")
         if btn:
             d.tap(btn[1], btn[2]); time.sleep(4); continue
         # Uygulama ızgarasını aç: rayın alt/üst köşeleri ve "keycode home".
-        w, h = size_of(img)
         cands = [(w * 5 // 100, h * 92 // 100), (w * 5 // 100, h * 8 // 100), (w // 2, h * 95 // 100)]
         x, y = cands[i % len(cands)]
         if i % 4 == 0:
