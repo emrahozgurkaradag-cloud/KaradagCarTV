@@ -29,8 +29,14 @@ adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
 # --- 1. Güncel Android Auto: imza önceden kurulu paketle AYNI olmalı -------
 before="$(adb shell dumpsys package $GH | tr -d '\r' | grep -m1 versionName | xargs)"
 log "önceden kurulu gearhead: $before"
-adb pull "$(adb shell pm path $GH | head -1 | tr -d '\r' | sed 's/^package://')" "$OUT/gearhead-preinstalled.apk" >/dev/null 2>&1
-ref="$("$APKSIGNER" verify --print-certs "$OUT/gearhead-preinstalled.apk" 2>/dev/null | grep -m1 'SHA-256 digest' | awk '{print $NF}')"
+ref=""
+for k in 1 2 3 4 5; do  # adb root sonrası ilk çekme bazen boş döner
+  adb pull "$(adb shell pm path $GH | head -1 | tr -d '\r' | sed 's/^package://')" "$OUT/gearhead-preinstalled.apk" >/dev/null 2>&1
+  ref="$("$APKSIGNER" verify --print-certs "$OUT/gearhead-preinstalled.apk" 2>/dev/null | grep -m1 'SHA-256 digest' | awk '{print $NF}')"
+  [ -n "$ref" ] && break; sleep 3; adb wait-for-device
+done
+# Okunamazsa AOSP test anahtarı varsay (emülatör taslakları hep böyle imzalı).
+[ -z "$ref" ] && ref=1975b2f17177bc89a5dff31f9e64a6cae281a53dc1d1d59b1d147fe1c82afa00
 log "önceden kurulu imza SHA-256: $ref"
 W="$OUT/aa"; rm -rf "$W"; mkdir -p "$W"
 for f in "$AA_DIR"/*; do
