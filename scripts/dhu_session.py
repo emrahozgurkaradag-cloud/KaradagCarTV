@@ -189,6 +189,10 @@ def session(tag, first):
         w, h = size_of(img)
         # AA ana ekranı (görev çubuğu) görünüyorsa: sol alttaki uygulama
         # ızgarası düğmesi; ızgarada "Karadag Car TV" etiketi OCR ile bulunur.
+        if d.find(img, r"^Exit$") and d.find(img, r"^(Calendar|Settings|Phone)$"):
+            # Uygulama ızgarası açık ama "ÖK TV" görünmüyor: aşağı kaydır (sol ok).
+            log("uygulama ızgarası: aşağı kaydırılıyor")
+            d.tap(w * 54 // 1000, h * 76 // 100); time.sleep(3); continue
         if d.find(img, r"^(Maps|Music|YouTube|Tap|location|Assistant|Settings|Phone|Calendar|News)$"):
             log("AA ana ekranı: uygulama ızgarası açılıyor")
             d.tap(w * 55 // 1000, h * 917 // 1000); time.sleep(5); continue
